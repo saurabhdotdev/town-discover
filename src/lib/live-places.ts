@@ -143,7 +143,7 @@ export async function fetchLivePlaces(
         body: `data=${encodeURIComponent(query)}`,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "User-Agent": "TownDiscover/1.0 contact:town-discover.vercel.app",
+          "User-Agent": "Sheher/1.0 contact:town-discover.vercel.app",
         },
         signal,
       });

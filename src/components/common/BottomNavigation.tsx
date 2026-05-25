@@ -37,7 +37,7 @@ export const BottomNavigation = () => {
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-cyan-400 via-teal-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-500/20">
               <Sparkles size={18} />
             </span>
-            <span className="text-sm font-black uppercase tracking-[0.18em]">Town Discover</span>
+            <span className="text-sm font-black uppercase tracking-[0.18em]">Sheher</span>
           </Link>
 
           <div className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] p-1">

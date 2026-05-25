@@ -7,7 +7,7 @@ import { CrowdSummary, Place } from "@/types";
 import { DiscoveryCard } from "./DiscoveryCard";
 import { DiscoverySectionSkeleton } from "@/components/common/Skeleton";
 
-const crowdSummaryUpdatedEvent = "town-discover:crowd-summary-updated";
+const crowdSummaryUpdatedEvent = "sheher:crowd-summary-updated";
 
 interface DiscoverySectionProps {
   title: string;

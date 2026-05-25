@@ -34,7 +34,7 @@ const crowdStyles: Record<CrowdLevel, string> = {
   very_crowded: "bg-rose-500 text-white",
 };
 
-const crowdSummaryUpdatedEvent = "town-discover:crowd-summary-updated";
+const crowdSummaryUpdatedEvent = "sheher:crowd-summary-updated";
 
 const formatReportTime = (value: string) => {
   const reportedAt = new Date(value).getTime();

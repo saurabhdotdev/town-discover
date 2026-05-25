@@ -5,8 +5,8 @@ import { useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
-const storageKey = "town-discover-theme";
-const themeChangeEvent = "town-discover-theme-change";
+const storageKey = "sheher-theme";
+const themeChangeEvent = "sheher-theme-change";
 
 const getTheme = (): Theme => {
   if (typeof document === "undefined") return "dark";
