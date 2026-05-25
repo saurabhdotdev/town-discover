@@ -22,10 +22,20 @@ export interface Place extends Location {
   priceRange?: string;
   phone?: string;
   website?: string;
+  influencerFeatures?: InfluencerFeature[];
   hours?: {
     open: string;
     close: string;
   };
+}
+
+export interface InfluencerFeature {
+  creatorName: string;
+  handle: string;
+  rating: number;
+  platform: "instagram" | "youtube";
+  videoUrl: string;
+  quote: string;
 }
 
 export interface UserLocation {

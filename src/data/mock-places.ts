@@ -1,5 +1,5 @@
 import { CITY_CENTERS, PUNE_CENTER, SupportedCityName } from "@/lib/pune-location";
-import { Place, UserLocation } from "@/types";
+import { InfluencerFeature, Place, UserLocation } from "@/types";
 
 export const MOCK_USER_LOCATION = PUNE_CENTER;
 
@@ -31,14 +31,74 @@ const distanceFromCity = (city: SupportedCityName, latitude: number, longitude: 
   return Math.round(calculateDistance(center.latitude, center.longitude, latitude, longitude) * 10) / 10;
 };
 
+const reelSearchUrl = (place: string, city: string) =>
+  `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(`${place} ${city} food reel`)}`;
+
+const creatorFeature = (
+  creatorName: string,
+  handle: string,
+  rating: number,
+  place: string,
+  city: string,
+  quote: string
+): InfluencerFeature => ({
+  creatorName,
+  handle,
+  rating,
+  platform: "instagram",
+  videoUrl: reelSearchUrl(place, city),
+  quote,
+});
+
+const influencerFeaturesFor = (place: string, city: SupportedCityName, vibe: string): InfluencerFeature[] => [
+  creatorFeature("CityBite Journal", "@citybitejournal", 4.6, place, city, `Good ${vibe} pick with strong local recall.`),
+  creatorFeature("Weekend Plate", "@weekendplate", 4.4, place, city, `Worth saving when you want a tested ${city} stop.`),
+];
+
+const creatorFriendlyCategories = new Set<Place["category"]>([
+  "cafe",
+  "restaurant",
+  "dessert",
+  "food-stall",
+  "street-food",
+  "bar",
+  "nightlife",
+]);
+
+const withCreatorFeatures = (place: Omit<Place, "city" | "distance">, city: SupportedCityName) => {
+  if (place.influencerFeatures || !creatorFriendlyCategories.has(place.category)) {
+    return place;
+  }
+
+  return {
+    ...place,
+    influencerFeatures: influencerFeaturesFor(place.title, city, getCategoryVibe(place.category)),
+  };
+};
+
+const getCategoryVibe = (category: Place["category"]) => {
+  const vibes: Record<Place["category"], string> = {
+    cafe: "cafe",
+    restaurant: "food",
+    event: "city",
+    nightlife: "nightlife",
+    "food-stall": "street food",
+    bar: "bar",
+    dessert: "dessert",
+    "street-food": "street food",
+  };
+
+  return vibes[category];
+};
+
 const punePlace = (place: Omit<Place, "city" | "distance">): Place => ({
-  ...place,
+  ...withCreatorFeatures(place, "Pune"),
   city: "Pune",
   distance: distanceFromPune(place.latitude, place.longitude),
 });
 
 const cityPlace = (city: SupportedCityName, place: Omit<Place, "city" | "distance">): Place => ({
-  ...place,
+  ...withCreatorFeatures(place, city),
   city,
   distance: distanceFromCity(city, place.latitude, place.longitude),
 });
