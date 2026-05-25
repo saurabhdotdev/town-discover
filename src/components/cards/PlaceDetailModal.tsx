@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Clock, ExternalLink, MapPin, Navigation, Star, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
-import { formatDistance, formatHours, getCategoryLabel, isOpenNow } from "@/lib/utils";
+import { formatDistance, formatHours, formatTime, getCategoryLabel, isOpenNow } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 interface PlaceDetailModalProps {
@@ -14,17 +14,17 @@ interface PlaceDetailModalProps {
 }
 
 const crowdOptions: { level: CrowdLevel; label: string; description: string }[] = [
-  { level: "low", label: "Low", description: "Easy entry" },
-  { level: "moderate", label: "Moderate", description: "Some people" },
-  { level: "busy", label: "Busy", description: "Expect wait" },
-  { level: "very_crowded", label: "Very crowded", description: "Packed now" },
+  { level: "low", label: "Quiet", description: "Easy entry" },
+  { level: "moderate", label: "Steady", description: "Some people" },
+  { level: "busy", label: "Busy", description: "Short wait likely" },
+  { level: "very_crowded", label: "Packed", description: "Expect a wait" },
 ];
 
 const crowdLabels: Record<CrowdLevel, string> = {
-  low: "Not crowded",
-  moderate: "Moderate",
-  busy: "Crowded",
-  very_crowded: "Very crowded",
+  low: "Quiet now",
+  moderate: "Steady crowd",
+  busy: "Busy now",
+  very_crowded: "Packed now",
 };
 
 const crowdStyles: Record<CrowdLevel, string> = {
@@ -47,6 +47,24 @@ const formatReportTime = (value: string) => {
   if (diffHours < 24) return `${diffHours} hr ago`;
 
   return new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+};
+
+const getRatingSource = (place: Place) => {
+  if (place.id.startsWith("osm-")) {
+    return "Estimated from live OpenStreetMap listing signals";
+  }
+
+  return "From curated place data and public review counts";
+};
+
+const getStatusText = (place: Place, open: boolean) => {
+  if (!place.hours) return "Hours not listed";
+  return open ? `Open until ${formatTime(place.hours.close)}` : `Opens at ${formatTime(place.hours.open)}`;
+};
+
+const getCrowdDetail = (summary: CrowdSummary) => {
+  const reportText = summary.reportCount === 1 ? "1 recent report" : `${summary.reportCount} recent reports`;
+  return `Based on ${reportText}`;
 };
 
 export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClose }) => {
@@ -130,7 +148,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
       }
       setCrowdNote("");
       setCrowdStatus("saved");
-      setCrowdMessage("Crowd report shared. Average updated.");
+      setCrowdMessage("Thanks. Live crowd status updated.");
     } catch (error) {
       setCrowdStatus("error");
       setCrowdMessage(error instanceof Error ? error.message : "Unable to save crowd report.");
@@ -188,6 +206,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               <p className="font-black text-[var(--foreground)]">
                 {place.rating} <span className="font-medium text-[var(--muted)]">({place.reviewCount})</span>
               </p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[var(--muted)]">{getRatingSource(place)}</p>
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
@@ -204,6 +223,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               <p className={open ? "font-black text-emerald-300" : "font-black text-rose-300"}>
                 {open ? "Open now" : "Closed"}
               </p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[var(--muted)]">{getStatusText(place, open)}</p>
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
@@ -216,11 +236,14 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                     {crowdLabels[currentSummary.crowdLevel]}
                   </span>
                   <p className="text-xs font-semibold text-[var(--muted)]">
-                    Avg of {currentSummary.reportCount} active {currentSummary.reportCount === 1 ? "report" : "reports"}
+                    {getCrowdDetail(currentSummary)}
                   </p>
                 </div>
               ) : (
-                <p className="font-black text-[var(--foreground)]">No live report</p>
+                <div>
+                  <p className="font-black text-[var(--foreground)]">No live crowd update</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-[var(--muted)]">Be the first to report today.</p>
+                </div>
               )}
             </div>
           </div>
@@ -231,8 +254,8 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               <p className="mt-1 font-semibold text-[var(--muted-strong)]">{formatHours(place.hours)}</p>
               <p className="mt-3 text-sm text-[var(--muted)]">
                 {hasCrowdSignal && currentSummary?.latestReportedAt
-                  ? `Crowd average expires after 45 minutes. Updated ${formatReportTime(currentSummary.latestReportedAt)}.`
-                  : "Crowd reports expire after 45 minutes, so only current signals are shown."}
+                  ? `Live crowd status uses reports from the last 45 minutes. Last updated ${formatReportTime(currentSummary.latestReportedAt)}.`
+                  : "Opening hours come from the place listing when available. Live crowd updates appear here after someone reports."}
               </p>
             </div>
 
