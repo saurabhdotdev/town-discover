@@ -1,36 +1,163 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sheher - Premium Hyperlocal City Discovery Platform
 
-## Getting Started
+**Mission**: Help users feel the pulse of their city through immediate discovery of what's happening, where the city feels alive, and spontaneous experiences.
 
-First, run the development server:
+## Project Structure
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+/
+├── frontend/          # Next.js frontend application
+├── backend/           # Node.js/Express API server
+├── shared/            # Shared types and utilities
+├── package.json       # Monorepo root configuration
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Quick Start
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Prerequisites
+- Node.js 18+
+- npm or yarn
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Development
 
-## Learn More
+**Frontend**:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Frontend runs on: http://localhost:3000
 
-To learn more about Next.js, take a look at the following resources:
+**Backend** (future):
+```bash
+cd backend
+npm install
+npm run dev
+```
+Backend runs on: http://localhost:5000
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Current (MVP)
+- ✨ Premium, cinematic UI
+- 🎯 Trending places discovery
+- 🔥 Happening tonight experiences
+- 💎 Hidden gems
+- 🍔 Food street culture
+- 🎵 Cultural & community events
+- 🎮 Niche communities (gaming, photography, cycling, etc.)
+- 🎨 Smooth animations and transitions
 
-## Deploy on Vercel
+### Planned
+- 📍 Real-time geolocation-based discovery
+- 💾 User accounts and saved places
+- 💬 Community vibes/comments
+- 🔍 Advanced search and filters
+- 🗺️ Interactive map integration
+- 📱 Mobile app (React Native)
+- 🤖 AI recommendations
+- 🔔 Real-time notifications
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Design Philosophy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Visual
+- **Cinematic** - Movie-like immersion
+- **Premium** - Netflix/Airbnb-inspired
+- **Dark Mode** - Modern, elegant
+- **Smooth** - Framer Motion animations
+- **Immersive** - Large visuals, atmospheric
+
+### Experience
+- **Emotional** - Make users excited to explore
+- **Discovery-First** - No forced onboarding
+- **Gen Z** - Modern, energetic, authentic
+- **Atmospheric** - Feel the city's energy
+- **Accessible** - Works without location permissions
+
+### Anti-Patterns (What We Avoid)
+- Enterprise dashboards
+- Government app aesthetics
+- Generic CRUD interfaces
+- Cluttered information
+- Forced user flows
+- Heavy forms
+- Boring cards
+
+## Tech Stack
+
+### Frontend
+- **Next.js 16** - App Router
+- **React 19** - UI Library
+- **TypeScript** - Type Safety
+- **Tailwind CSS** - Styling
+- **Framer Motion** - Animations
+- **Leaflet + OpenStreetMap** - Maps (future)
+- **shadcn/ui** - Component library
+
+### Backend
+- **Node.js** - Runtime
+- **Express.js** - Web Framework
+- **PostgreSQL + PostGIS** - Database with geospatial
+- **TypeScript** - Type Safety
+- **Supabase** - Initial hosting (future)
+
+### Architecture
+- **Monorepo** - Single project, multiple packages
+- **Microservices Ready** - Can scale to separate services
+- **API-First** - Frontend independent from backend
+
+## Data Model
+
+### Places
+- Cafes, restaurants, bars, events, nightlife venues
+- Food streets, hidden gems, cultural spaces
+- Community venues, niche gathering spots
+- Geolocation, ratings, hours, images, tags
+- Trending score, vibe description
+
+### Categories
+- Food & Dining
+- Cafes
+- Nightlife & Entertainment
+- Cultural & Art
+- Community & Events
+- Niche Scenes
+- Experience Types
+
+### Users (Future)
+- Profile with location preferences
+- Saved places collection
+- Contribution/vibe comments
+- Community following
+
+## MVP Focus
+
+**Phase 1 - Current**:
+- Premium UI/UX
+- Beautiful discovery feed
+- Mock data (Pune)
+- Smooth animations
+- Hero section with city vibes
+
+**Phase 2 - Next**:
+- Real backend API
+- User authentication
+- Location-based queries
+- Save/bookmark functionality
+- Comments system
+
+**Phase 3 - Scale**:
+- More cities
+- Social features
+- Notifications
+- Advanced filters
+- Mobile app
+
+## Contribution
+
+This is a premium discovery experience. Maintain the cinematic, immersive aesthetic in all changes.
+
+## License
+
+MIT
