@@ -1,0 +1,327 @@
+"use client";
+
+import { motion } from "framer-motion";
+import Image from "next/image";
+import { Clock, ExternalLink, MapPin, Navigation, Star, Users, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CrowdLevel, CrowdSummary, Place } from "@/types";
+import { formatDistance, formatHours, getCategoryLabel, isOpenNow } from "@/lib/utils";
+import { useAuth } from "@/components/auth/AuthProvider";
+
+interface PlaceDetailModalProps {
+  place: Place | null;
+  onClose: () => void;
+}
+
+const crowdOptions: { level: CrowdLevel; label: string; description: string }[] = [
+  { level: "low", label: "Low", description: "Easy entry" },
+  { level: "moderate", label: "Moderate", description: "Some people" },
+  { level: "busy", label: "Busy", description: "Expect wait" },
+  { level: "very_crowded", label: "Very crowded", description: "Packed now" },
+];
+
+const crowdLabels: Record<CrowdLevel, string> = {
+  low: "Not crowded",
+  moderate: "Moderate",
+  busy: "Crowded",
+  very_crowded: "Very crowded",
+};
+
+const crowdStyles: Record<CrowdLevel, string> = {
+  low: "bg-emerald-300 text-slate-950",
+  moderate: "bg-cyan-300 text-slate-950",
+  busy: "bg-amber-300 text-slate-950",
+  very_crowded: "bg-rose-500 text-white",
+};
+
+const crowdSummaryUpdatedEvent = "town-discover:crowd-summary-updated";
+
+const formatReportTime = (value: string) => {
+  const reportedAt = new Date(value).getTime();
+  const diffMinutes = Math.max(0, Math.round((Date.now() - reportedAt) / 60000));
+
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+
+  return new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+};
+
+export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClose }) => {
+  const { user, setAuthRequiredMessage } = useAuth();
+  const [selectedCrowdLevel, setSelectedCrowdLevel] = useState<CrowdLevel>("moderate");
+  const [crowdNote, setCrowdNote] = useState("");
+  const [crowdSummary, setCrowdSummary] = useState<CrowdSummary | null>(null);
+  const [crowdStatus, setCrowdStatus] = useState<"idle" | "loading" | "saving" | "saved" | "error">("idle");
+  const [crowdMessage, setCrowdMessage] = useState("");
+
+  useEffect(() => {
+    if (!place) return;
+
+    const controller = new AbortController();
+
+    fetch(`/api/crowd-reports?placeId=${encodeURIComponent(place.id)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Unable to load crowd report.");
+        setCrowdSummary(data.summary ?? null);
+        if (data.summary) {
+          window.dispatchEvent(new CustomEvent<CrowdSummary>(crowdSummaryUpdatedEvent, { detail: data.summary }));
+        }
+        if (data.summary?.crowdLevel) {
+          setSelectedCrowdLevel(data.summary.crowdLevel);
+        }
+        setCrowdStatus("idle");
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setCrowdSummary(null);
+        setCrowdStatus("error");
+        setCrowdMessage(error instanceof Error ? error.message : "Unable to load crowd report.");
+      });
+
+    return () => controller.abort();
+  }, [place]);
+
+  if (!place) return null;
+
+  const open = isOpenNow(place.hours);
+  const directionsUrl = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`;
+  const currentSummary = crowdSummary?.placeId === place.id ? crowdSummary : null;
+  const hasCrowdSignal = Boolean(currentSummary?.crowdLevel && currentSummary.reportCount > 0);
+
+  const submitCrowdReport = async () => {
+    if (!user) {
+      const message = "Please log in to report live crowd updates.";
+      setCrowdStatus("error");
+      setCrowdMessage(message);
+      setAuthRequiredMessage(message);
+      window.location.href = "/profile";
+      return;
+    }
+
+    setCrowdStatus("saving");
+    setCrowdMessage("");
+
+    try {
+      const response = await fetch("/api/crowd-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          placeId: place.id,
+          crowdLevel: selectedCrowdLevel,
+          note: crowdNote,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to save crowd report.");
+      }
+
+      setCrowdSummary(data.summary ?? null);
+      if (data.summary) {
+        window.dispatchEvent(new CustomEvent<CrowdSummary>(crowdSummaryUpdatedEvent, { detail: data.summary }));
+      }
+      setCrowdNote("");
+      setCrowdStatus("saved");
+      setCrowdMessage("Crowd report shared. Average updated.");
+    } catch (error) {
+      setCrowdStatus("error");
+      setCrowdMessage(error instanceof Error ? error.message : "Unable to save crowd report.");
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/68 p-0 backdrop-blur-sm md:items-center md:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${place.title} details`}
+    >
+      <motion.div
+        initial={{ y: 48, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 48, opacity: 0, scale: 0.98 }}
+        transition={{ type: "spring", damping: 32, stiffness: 320 }}
+        onClick={(event) => event.stopPropagation()}
+        className="max-h-[90vh] w-full overflow-y-auto rounded-t-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:max-w-2xl md:rounded-lg"
+      >
+        <div className="relative h-64 overflow-hidden bg-slate-900">
+          <Image src={place.image} alt={`${place.title} in ${place.locality}`} fill sizes="(max-width: 768px) 100vw, 672px" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#10151d] via-[#10151d]/24 to-black/20" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close place details"
+            className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70"
+          >
+            <X size={20} />
+          </button>
+          <div className="absolute bottom-4 left-4 right-4">
+            <span className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-slate-950">
+              {getCategoryLabel(place.category)}
+            </span>
+            <h2 className="text-3xl font-black tracking-tight text-white">{place.title}</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-300">{place.locality}</p>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-5 md:p-6">
+          <p className="text-base leading-7 text-[var(--muted-strong)]">{place.description}</p>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <Star size={14} />
+                Rating
+              </div>
+              <p className="font-black text-[var(--foreground)]">
+                {place.rating} <span className="font-medium text-[var(--muted)]">({place.reviewCount})</span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <MapPin size={14} />
+                Distance
+              </div>
+              <p className="font-black text-[var(--foreground)]">{formatDistance(place.distance)}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <Clock size={14} />
+                Status
+              </div>
+              <p className={open ? "font-black text-emerald-300" : "font-black text-rose-300"}>
+                {open ? "Open now" : "Closed"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <Users size={14} />
+                Crowd
+              </div>
+              {hasCrowdSignal && currentSummary?.crowdLevel ? (
+                <div className="space-y-1">
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${crowdStyles[currentSummary.crowdLevel]}`}>
+                    {crowdLabels[currentSummary.crowdLevel]}
+                  </span>
+                  <p className="text-xs font-semibold text-[var(--muted)]">
+                    Avg of {currentSummary.reportCount} active {currentSummary.reportCount === 1 ? "report" : "reports"}
+                  </p>
+                </div>
+              ) : (
+                <p className="font-black text-[var(--foreground)]">No live report</p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Today</p>
+              <p className="mt-1 font-semibold text-[var(--muted-strong)]">{formatHours(place.hours)}</p>
+              <p className="mt-3 text-sm text-[var(--muted)]">
+                {hasCrowdSignal && currentSummary?.latestReportedAt
+                  ? `Crowd average expires after 45 minutes. Updated ${formatReportTime(currentSummary.latestReportedAt)}.`
+                  : "Crowd reports expire after 45 minutes, so only current signals are shown."}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+              <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <Users size={14} />
+                Report Crowd
+              </p>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {crowdOptions.map((option) => {
+                  const active = selectedCrowdLevel === option.level;
+                  return (
+                    <button
+                      key={option.level}
+                      type="button"
+                      onClick={() => setSelectedCrowdLevel(option.level)}
+                      className={`rounded-lg border px-3 py-2 text-left transition ${
+                        active
+                          ? "border-teal-300 bg-teal-300/15"
+                          : "border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel-strong)]"
+                      }`}
+                    >
+                      <span className="block text-sm font-black text-[var(--foreground)]">{option.label}</span>
+                      <span className="mt-0.5 block text-xs font-semibold text-[var(--muted)]">{option.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <textarea
+                value={crowdNote}
+                onChange={(event) => setCrowdNote(event.target.value)}
+                maxLength={180}
+                placeholder="Optional note, like queue at entry"
+                className="mt-3 min-h-20 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm font-semibold text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-teal-300"
+              />
+
+              <button
+                type="button"
+                onClick={submitCrowdReport}
+                disabled={crowdStatus === "saving"}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Users size={18} />
+                {crowdStatus === "saving" ? "Sharing..." : user ? "Submit Report" : "Log In To Report"}
+              </button>
+
+              {crowdMessage && (
+                <p className={`mt-2 text-sm font-semibold ${crowdStatus === "error" ? "text-rose-400" : "text-emerald-400"}`}>
+                  {crowdMessage}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {place.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-sm font-semibold text-[var(--muted-strong)]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <a
+              href={directionsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+            >
+              <Navigation size={18} />
+              Directions
+            </a>
+            <a
+              href={`https://www.google.com/search?q=${encodeURIComponent(`${place.title} ${place.city}`)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel)]"
+            >
+              <ExternalLink size={18} />
+              Search Web
+            </a>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
