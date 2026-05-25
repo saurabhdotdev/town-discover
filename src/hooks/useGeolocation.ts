@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getNearestSupportedCity, isWithinSupportedCity, PUNE_CENTER, SupportedCityName } from "@/lib/pune-location";
 import { UserLocation } from "@/types";
 
@@ -15,14 +15,16 @@ export const useGeolocation = () => {
   const [source, setSource] = useState<LocationSource>("fallback");
   const [city, setCity] = useState<SupportedCityName>("Pune");
 
-  useEffect(() => {
-    const applyFallbackLocation = (message: string) => {
-      setLocation(PUNE_CENTER);
-      setSource("fallback");
-      setCity("Pune");
-      setError(message);
-      setLoading(false);
-    };
+  const applyFallbackLocation = useCallback((message: string) => {
+    setLocation(PUNE_CENTER);
+    setSource("fallback");
+    setCity("Pune");
+    setError(message);
+    setLoading(false);
+  }, []);
+
+  const requestLocation = useCallback(() => {
+    setLoading(true);
 
     if (!navigator.geolocation) {
       applyFallbackLocation("Geolocation is not supported by this browser. Showing supported city places.");
@@ -48,8 +50,13 @@ export const useGeolocation = () => {
         setError(null);
         setLoading(false);
       },
-      () => {
-        applyFallbackLocation("Location access is unavailable. Showing central Pune first.");
+      (positionError) => {
+        const message =
+          positionError.code === positionError.PERMISSION_DENIED
+            ? "Location permission is blocked. Allow location in your browser settings, then tap Use my location."
+            : "Location access is unavailable right now. Showing central Pune first.";
+
+        applyFallbackLocation(message);
       },
       {
         enableHighAccuracy: true,
@@ -57,6 +64,27 @@ export const useGeolocation = () => {
         maximumAge: 60000,
       }
     );
+  }, [applyFallbackLocation]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") {
+      setLocation(PUNE_CENTER);
+      setSource("fallback");
+      setCity("Pune");
+      setError("Location is unavailable while the app is loading. Showing supported city places.");
+      setLoading(false);
+      return;
+    }
+
+    requestLocation();
+  }, [requestLocation]);
+
+  const useCityFallback = useCallback((nextCity: SupportedCityName) => {
+    setLocation(null);
+    setSource("fallback");
+    setCity(nextCity);
+    setError(null);
+    setLoading(false);
   }, []);
 
   return {
@@ -66,6 +94,8 @@ export const useGeolocation = () => {
     isFallback: source === "fallback",
     source,
     city,
+    requestLocation,
+    useCityFallback,
   };
 };
 

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Camera, Clock, Download, ExternalLink, MapPin, Navigation, PlayCircle, Share2, Star, Users, X } from "lucide-react";
+import { Clock, Download, ExternalLink, MapPin, Navigation, Share2, Star, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
 import { formatDistance, formatHours, formatTime, getCategoryLabel, isOpenNow } from "@/lib/utils";
@@ -418,55 +418,6 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                 </p>
               )}
             </div>
-          </div>
-
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
-                  <Camera size={14} />
-                  Creator features
-                </p>
-                <h3 className="mt-1 font-black text-[var(--foreground)]">Featured by local creators</h3>
-              </div>
-              <span className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-bold text-[var(--muted)]">
-                {place.influencerFeatures?.length ?? 0} saved
-              </span>
-            </div>
-
-            {place.influencerFeatures?.length ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {place.influencerFeatures.map((feature) => (
-                  <a
-                    key={`${feature.handle}-${feature.videoUrl}`}
-                    href={feature.videoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 transition hover:bg-[var(--panel-strong)]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-black text-[var(--foreground)]">{feature.creatorName}</p>
-                        <p className="text-sm font-semibold text-[var(--muted)]">{feature.handle}</p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--primary)] px-2.5 py-1 text-xs font-black text-[var(--primary-foreground)]">
-                        <Star size={12} />
-                        {feature.rating}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-[var(--muted-strong)]">{feature.quote}</p>
-                    <span className="mt-3 inline-flex items-center gap-2 text-sm font-black text-[var(--fresh)]">
-                      <PlayCircle size={16} />
-                      Open video search
-                    </span>
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel)] p-4 text-sm font-semibold text-[var(--muted)]">
-                No verified creator videos saved yet. Use Search Web below to find fresh reels for this listing.
-              </div>
-            )}
           </div>
 
           <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">

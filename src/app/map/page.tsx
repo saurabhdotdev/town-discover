@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
+import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MapView } from "@/components/map/MapView";
 import { useLivePlaces } from "@/hooks/useLivePlaces";
 import { useGeolocation } from "@/hooks/useGeolocation";
@@ -18,7 +19,14 @@ import { CITY_CENTERS, SupportedCityName } from "@/lib/pune-location";
 export default function MapPage() {
   const [selectedCity, setSelectedCity] = useState<SupportedCityName>("Pune");
   const [hasChosenCity, setHasChosenCity] = useState(false);
-  const { location, source: locationSource, city: detectedCity } = useGeolocation();
+  const {
+    location,
+    loading: locationLoading,
+    error: locationError,
+    source: locationSource,
+    city: detectedCity,
+    requestLocation,
+  } = useGeolocation();
   const activeCity = !hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity;
   const activeLocation =
     locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
@@ -61,6 +69,15 @@ export default function MapPage() {
               setSelectedCity(city);
               setFocusedPlace(null);
               setDetailsPlace(null);
+            }}
+          />
+          <LocationPermissionCard
+            source={locationSource}
+            loading={locationLoading}
+            error={locationError}
+            onRequest={() => {
+              setHasChosenCity(false);
+              requestLocation();
             }}
           />
         </div>
