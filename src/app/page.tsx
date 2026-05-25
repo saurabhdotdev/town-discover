@@ -19,6 +19,7 @@ import Image from "next/image";
 import { DiscoverySection } from "@/components/cards/DiscoverySection";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
+import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { getFallbackPlacesForCity, getPlacesWithDistance } from "@/data/mock-places";
 import { useLivePlaces } from "@/hooks/useLivePlaces";
 import { useGeolocation } from "@/hooks/useGeolocation";
@@ -45,7 +46,14 @@ export default function Home() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [hasChosenCity, setHasChosenCity] = useState(false);
   const { savedPlaceIds, toggleSave } = useSavedPlaces();
-  const { location, source: locationSource, city: detectedCity } = useGeolocation();
+  const {
+    location,
+    loading: locationLoading,
+    error: locationError,
+    source: locationSource,
+    city: detectedCity,
+    requestLocation,
+  } = useGeolocation();
   const activeCity = getCityFromQuery(query) ?? (!hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity);
   const activeLocation =
     locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
@@ -125,6 +133,15 @@ export default function Home() {
                 setSelectedCity(city);
                 setQuery("");
                 setActiveFilter("all");
+              }}
+            />
+            <LocationPermissionCard
+              source={locationSource}
+              loading={locationLoading}
+              error={locationError}
+              onRequest={() => {
+                setHasChosenCity(false);
+                requestLocation();
               }}
             />
             <label className="relative block">

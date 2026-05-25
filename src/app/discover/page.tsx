@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
+import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { DiscoverySection } from "@/components/cards/DiscoverySection";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { MapView } from "@/components/map/MapView";
@@ -40,7 +41,14 @@ const categories: { id: CategoryFilter; label: string; icon: React.ReactNode }[]
 ];
 
 export default function DiscoverPage() {
-  const { location, loading: locationLoading, error: locationError, source: locationSource, city: detectedCity } = useGeolocation();
+  const {
+    location,
+    loading: locationLoading,
+    error: locationError,
+    source: locationSource,
+    city: detectedCity,
+    requestLocation,
+  } = useGeolocation();
   const [selectedCity, setSelectedCity] = useState<SupportedCityName>("Pune");
   const [hasChosenCity, setHasChosenCity] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -165,6 +173,15 @@ export default function DiscoverPage() {
               setActiveCategory("all");
             }}
           />
+          <LocationPermissionCard
+            source={locationSource}
+            loading={locationLoading}
+            error={locationError}
+            onRequest={() => {
+              setHasChosenCity(false);
+              requestLocation();
+            }}
+          />
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={19} />
@@ -222,12 +239,6 @@ export default function DiscoverPage() {
             })}
           </div>
         </div>
-
-        {locationError && (
-          <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">
-            {locationError}
-          </div>
-        )}
 
         {livePlacesError && (
           <div className="mt-3 rounded-lg border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm font-semibold text-rose-100">
