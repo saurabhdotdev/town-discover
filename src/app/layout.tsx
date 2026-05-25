@@ -4,7 +4,7 @@ import { BottomNavigation } from "@/components/common/BottomNavigation";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "Town Discover | Maharashtra City Discovery",
+  title: "Sheher | Maharashtra City Discovery",
   description:
     "Discover events, cafes, food spots, bars, and trending places across Pune, Mumbai, Kolhapur, and Nashik.",
   icons: {
@@ -31,7 +31,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(() => {
   try {
-    const saved = localStorage.getItem("town-discover-theme");
+    const saved = localStorage.getItem("sheher-theme") || localStorage.getItem("town-discover-theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const theme = saved || (prefersDark ? "dark" : "light");
     document.documentElement.classList.toggle("dark", theme === "dark");
