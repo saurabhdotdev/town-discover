@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Clock, ExternalLink, MapPin, Navigation, Star, Users, X } from "lucide-react";
+import { Camera, Clock, Download, ExternalLink, MapPin, Navigation, PlayCircle, Share2, Star, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
 import { formatDistance, formatHours, formatTime, getCategoryLabel, isOpenNow } from "@/lib/utils";
@@ -74,6 +74,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const [crowdSummary, setCrowdSummary] = useState<CrowdSummary | null>(null);
   const [crowdStatus, setCrowdStatus] = useState<"idle" | "loading" | "saving" | "saved" | "error">("idle");
   const [crowdMessage, setCrowdMessage] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
 
   useEffect(() => {
     if (!place) return;
@@ -112,6 +113,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const directionsUrl = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`;
   const currentSummary = crowdSummary?.placeId === place.id ? crowdSummary : null;
   const hasCrowdSignal = Boolean(currentSummary?.crowdLevel && currentSummary.reportCount > 0);
+  const shareText = `Check out ${place.title} in ${place.locality}, ${place.city} on Sheher. Rating ${place.rating}/5, ${formatDistance(place.distance)} away.`;
 
   const submitCrowdReport = async () => {
     if (!user) {
@@ -153,6 +155,112 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
       setCrowdStatus("error");
       setCrowdMessage(error instanceof Error ? error.message : "Unable to save crowd report.");
     }
+  };
+
+  const drawWrappedText = (context: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) => {
+    const words = text.split(" ");
+    let line = "";
+    let currentY = y;
+
+    words.forEach((word) => {
+      const testLine = line ? `${line} ${word}` : word;
+      if (context.measureText(testLine).width > maxWidth && line) {
+        context.fillText(line, x, currentY);
+        line = word;
+        currentY += lineHeight;
+        return;
+      }
+
+      line = testLine;
+    });
+
+    if (line) {
+      context.fillText(line, x, currentY);
+    }
+  };
+
+  const createShareCardBlob = async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1350;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Unable to create share card.");
+
+    const gradient = context.createLinearGradient(0, 0, 1080, 1350);
+    gradient.addColorStop(0, "#061c23");
+    gradient.addColorStop(0.48, "#10151d");
+    gradient.addColorStop(1, "#f6d54a");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 1080, 1350);
+
+    context.fillStyle = "rgba(255,255,255,0.08)";
+    context.fillRect(72, 72, 936, 1206);
+
+    context.fillStyle = "#5ff2df";
+    context.font = "900 44px Arial";
+    context.fillText("SHEHER PICK", 112, 160);
+
+    context.fillStyle = "#ffffff";
+    context.font = "900 88px Arial";
+    drawWrappedText(context, place.title, 112, 310, 820, 96);
+
+    context.fillStyle = "#cbd5e1";
+    context.font = "700 42px Arial";
+    context.fillText(`${place.locality}, ${place.city}`, 112, 530);
+
+    context.fillStyle = "#ffffff";
+    context.font = "900 54px Arial";
+    context.fillText(`${place.rating}/5`, 112, 690);
+    context.fillText(formatDistance(place.distance), 430, 690);
+    context.fillText(open ? "Open now" : "Check hours", 112, 790);
+
+    context.fillStyle = "#cbd5e1";
+    context.font = "700 34px Arial";
+    drawWrappedText(context, place.description, 112, 910, 820, 48);
+
+    context.fillStyle = "#10151d";
+    context.fillRect(112, 1160, 856, 76);
+    context.fillStyle = "#ffffff";
+    context.font = "900 34px Arial";
+    context.fillText("Find it on Sheher", 152, 1210);
+
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Unable to export share card."));
+      }, "image/png");
+    });
+  };
+
+  const shareVisualCard = async () => {
+    setShareMessage("");
+
+    try {
+      const blob = await createShareCardBlob();
+      const file = new File([blob], `${place.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-sheher-card.png`, {
+        type: "image/png",
+      });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: `${place.title} on Sheher`, text: shareText, files: [file] });
+        setShareMessage("Share card opened.");
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name;
+      link.click();
+      URL.revokeObjectURL(url);
+      setShareMessage("Share card downloaded.");
+    } catch (error) {
+      setShareMessage(error instanceof Error ? error.message : "Unable to create share card.");
+    }
+  };
+
+  const shareOnWhatsApp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank", "noreferrer");
   };
 
   return (
@@ -310,6 +418,81 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                  <Camera size={14} />
+                  Creator features
+                </p>
+                <h3 className="mt-1 font-black text-[var(--foreground)]">Featured by local creators</h3>
+              </div>
+              <span className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-bold text-[var(--muted)]">
+                {place.influencerFeatures?.length ?? 0} saved
+              </span>
+            </div>
+
+            {place.influencerFeatures?.length ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {place.influencerFeatures.map((feature) => (
+                  <a
+                    key={`${feature.handle}-${feature.videoUrl}`}
+                    href={feature.videoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 transition hover:bg-[var(--panel-strong)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-black text-[var(--foreground)]">{feature.creatorName}</p>
+                        <p className="text-sm font-semibold text-[var(--muted)]">{feature.handle}</p>
+                      </div>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--primary)] px-2.5 py-1 text-xs font-black text-[var(--primary-foreground)]">
+                        <Star size={12} />
+                        {feature.rating}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-[var(--muted-strong)]">{feature.quote}</p>
+                    <span className="mt-3 inline-flex items-center gap-2 text-sm font-black text-[var(--fresh)]">
+                      <PlayCircle size={16} />
+                      Open video search
+                    </span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel)] p-4 text-sm font-semibold text-[var(--muted)]">
+                No verified creator videos saved yet. Use Search Web below to find fresh reels for this listing.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+              <Share2 size={14} />
+              Share this place
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={shareVisualCard}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+              >
+                <Download size={18} />
+                Share Visual Card
+              </button>
+              <button
+                type="button"
+                onClick={shareOnWhatsApp}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)]"
+              >
+                <Share2 size={18} />
+                WhatsApp
+              </button>
+            </div>
+            {shareMessage && <p className="mt-2 text-sm font-semibold text-emerald-300">{shareMessage}</p>}
           </div>
 
           <div className="flex flex-wrap gap-2">
