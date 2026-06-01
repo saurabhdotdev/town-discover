@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
 
 interface NavItem {
   href: string;
@@ -84,6 +85,7 @@ export const BottomNavigation = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <ThemeToggle />
             <Link
               href="/discover"
@@ -118,7 +120,8 @@ export const BottomNavigation = () => {
           <span className="text-xs font-black uppercase tracking-[0.18em] text-[var(--foreground)]">Sheher</span>
         </Link>
 
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
+          <NotificationBell compact />
           <ThemeToggle compact />
         </div>
       </div>

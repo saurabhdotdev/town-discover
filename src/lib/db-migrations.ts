@@ -229,6 +229,26 @@ CREATE INDEX IF NOT EXISTS crowd_reports_place_user_reported_at_idx
 ON crowd_reports (place_id, user_id, reported_at DESC);
 `,
   },
+  {
+    id: "202606010002_trip_plans",
+    sql: `
+CREATE TABLE IF NOT EXISTS trip_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  distance_km INT,
+  duration_minutes INT,
+  route_path JSONB NOT NULL DEFAULT '[]'::jsonb,
+  stops JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS trip_plans_user_id_created_at_idx
+ON trip_plans (user_id, created_at DESC);
+`,
+  },
 ];
 
 let migrationPromise: Promise<void> | null = null;
