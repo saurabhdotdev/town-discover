@@ -1,9 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import Image from "next/image";
 import { LocateFixed, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "./BrandMark";
 
 interface HeaderProps {
   title: string;
@@ -41,13 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
           <div className="flex min-w-0 items-center gap-3">
-            <Image
-              src="/sheher_logo_aesthetic_1779784387355.png"
-              alt="Sheher"
-              width={44}
-              height={44}
-              className="h-10 w-10 shrink-0 rounded-lg object-contain sm:h-11 sm:w-11"
-            />
+            <BrandMark size="lg" showWordmark={false} />
             <h1 className="truncate text-xl font-black tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">
               {title}
             </h1>
