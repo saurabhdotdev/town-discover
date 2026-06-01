@@ -3,6 +3,7 @@ import { promisify } from "util";
 import { NextRequest } from "next/server";
 import { Pool } from "pg";
 import { AuthUser, UserRole } from "@/types";
+import { requireTrustedOrigin } from "@/lib/request-security";
 
 export const authCookieName = "town_discover_session";
 
@@ -264,7 +265,7 @@ export const createSession = async (pool: Pool, userId: string) => {
 export const getSessionCookieOptions = (expires?: Date) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "strict" as const,
   path: "/",
   maxAge: expires ? undefined : sessionMaxAgeSeconds,
   expires,
@@ -273,7 +274,7 @@ export const getSessionCookieOptions = (expires?: Date) => ({
 export const getExpiredSessionCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "strict" as const,
   path: "/",
   maxAge: 0,
 });
@@ -308,6 +309,11 @@ export const getCurrentUser = async (pool: Pool, request: NextRequest): Promise<
 };
 
 export const requireCurrentUser = async (pool: Pool, request: NextRequest) => {
+  const originResponse = requireTrustedOrigin(request);
+  if (originResponse) {
+    return { user: null, response: originResponse };
+  }
+
   const user = await getCurrentUser(pool, request);
   if (!user) {
     return { user: null, response: Response.json({ error: "Please log in first." }, { status: 401 }) };

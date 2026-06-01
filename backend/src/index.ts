@@ -11,6 +11,7 @@ import path from "path";
 import db from "./db";
 import { authenticateUser, requireUser } from "./middleware/auth";
 import { apiLimiter, reportPostLimiter } from "./middleware/rateLimiter";
+import { getAllowedOrigins, requireTrustedOrigin } from "./middleware/security";
 import { validateRequest } from "./middleware/validate";
 import { errorHandler } from "./middleware/errors";
 import {
@@ -24,27 +25,38 @@ dotenv.config(); // Fallback to backend .env
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
+const allowedOrigins = getAllowedOrigins();
+const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+  if (!origin) {
+    callback(null, process.env.NODE_ENV !== "production");
+    return;
+  }
+
+  callback(null, allowedOrigins.has(origin));
+};
 
 // Create HTTP Server for Socket.io
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: corsOrigin,
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
 // Middleware
+app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: corsOrigin,
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "64kb" }));
 app.use(cookieParser());
+app.use("/api/", requireTrustedOrigin);
 
 // Rate Limiter
 app.use("/api/", apiLimiter);
