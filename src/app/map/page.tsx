@@ -19,7 +19,7 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => m
   ssr: false,
   loading: () => <MapSkeleton />
 });
-import { Clock, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2 } from "lucide-react";
 import { cn, formatDistance, getCategoryLabel, isOpenNow } from "@/lib/utils";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
@@ -27,8 +27,22 @@ import { CITY_CENTERS } from "@/lib/pune-location";
 import { SuggestPlaceModal } from "@/components/map/SuggestPlaceModal";
 import { geocodePlace, generateStopsAlongRoute, ROUTE_PRESETS } from "@/lib/client/trip-utils";
 import { calculateDistance } from "@/lib/geo";
+import { useAuth } from "@/components/auth/AuthProvider";
+
+interface SavedTripPlan {
+  id: string;
+  name: string;
+  source: string;
+  destination: string;
+  distanceKm: number | null;
+  durationMinutes: number | null;
+  routePath: { latitude: number; longitude: number }[];
+  stops: Place[];
+  createdAt: string;
+}
 
 export default function MapPage() {
+  const { user, setAuthRequiredMessage } = useAuth();
   const { selectedCity, hasChosenCity, chooseCity, preferDetectedCity } = useCitySelection();
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -68,6 +82,11 @@ export default function MapPage() {
   const [tripLoading, setTripLoading] = useState<boolean>(false);
   const [tripError, setTripError] = useState<string | null>(null);
   const [tripStats, setTripStats] = useState<{ distance: number; duration: number } | null>(null);
+  const [tripPlanName, setTripPlanName] = useState<string>("");
+  const [savedTripPlans, setSavedTripPlans] = useState<SavedTripPlan[]>([]);
+  const [activeTripPlanId, setActiveTripPlanId] = useState<string | null>(null);
+  const [tripSaveStatus, setTripSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [tripSaveMessage, setTripSaveMessage] = useState("");
 
   // Cruise Simulation States
   const [simulationActive, setSimulationActive] = useState<boolean>(false);
@@ -116,10 +135,125 @@ export default function MapPage() {
 
       const stops = generateStopsAlongRoute(startCoord.name, endCoord.name, coords);
       setTripStops(stops);
+      setTripPlanName(`${startCoord.name} to ${endCoord.name}`);
+      setActiveTripPlanId(null);
+      setTripSaveStatus("idle");
+      setTripSaveMessage("");
     } catch (err: any) {
       setTripError(err.message || "An unexpected error occurred during route calculation.");
     } finally {
       setTripLoading(false);
+    }
+  };
+
+  const applySavedTripPlan = (plan: SavedTripPlan) => {
+    setMode("trip");
+    setTripSource(plan.source);
+    setTripDest(plan.destination);
+    setTripPlanName(plan.name);
+    setTripRoutePath(plan.routePath);
+    setTripStops(plan.stops);
+    setTripStats(
+      plan.distanceKm != null && plan.durationMinutes != null
+        ? { distance: plan.distanceKm, duration: plan.durationMinutes }
+        : null
+    );
+    setActiveTripPlanId(plan.id);
+    setFocusedPlace(null);
+    setSimulationActive(false);
+    setSimulationIndex(0);
+    setMobileView("map");
+  };
+
+  const loadSavedTripPlans = async () => {
+    if (!user) {
+      setSavedTripPlans([]);
+      return;
+    }
+
+    const response = await fetch("/api/trip-plans", { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) setSavedTripPlans(data.plans ?? []);
+  };
+
+  useEffect(() => {
+    loadSavedTripPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const planId = new URLSearchParams(window.location.search).get("tripPlan");
+    if (!planId) return;
+
+    fetch(`/api/trip-plans?id=${encodeURIComponent(planId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (response.ok && data.plan) applySavedTripPlan(data.plan);
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveTripPlan = async () => {
+    if (!user) {
+      const message = "Please log in to save trip plans.";
+      setAuthRequiredMessage(message);
+      window.location.href = "/profile";
+      return;
+    }
+
+    if (!tripRoutePath || !tripStats) {
+      setTripSaveStatus("error");
+      setTripSaveMessage("Plan a route before saving.");
+      return;
+    }
+
+    setTripSaveStatus("saving");
+    setTripSaveMessage("");
+
+    try {
+      const response = await fetch("/api/trip-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: tripPlanName.trim() || `${tripSource} to ${tripDest}`,
+          source: tripSource,
+          destination: tripDest,
+          distanceKm: tripStats.distance,
+          durationMinutes: tripStats.duration,
+          routePath: tripRoutePath,
+          stops: tripStops.slice(0, 60),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Unable to save trip plan.");
+
+      setTripSaveStatus("saved");
+      setTripSaveMessage("Trip plan saved. Share link is ready.");
+      setActiveTripPlanId(data.plan.id);
+      await loadSavedTripPlans();
+    } catch (error: any) {
+      setTripSaveStatus("error");
+      setTripSaveMessage(error.message ?? "Unable to save trip plan.");
+    }
+  };
+
+  const shareTripPlan = async () => {
+    const link = `${window.location.origin}/map${activeTripPlanId ? `?tripPlan=${activeTripPlanId}` : ""}`;
+    try {
+      if (navigator.share && activeTripPlanId) {
+        await navigator.share({
+          title: tripPlanName || "Sheher trip plan",
+          text: `Check this route: ${tripSource} to ${tripDest}`,
+          url: link,
+        });
+      } else {
+        await navigator.clipboard.writeText(link);
+        setTripSaveMessage(activeTripPlanId ? "Share link copied." : "Map link copied. Save the trip first for a reusable route link.");
+      }
+    } catch {
+      setTripSaveMessage("Share cancelled.");
     }
   };
 
@@ -371,7 +505,7 @@ export default function MapPage() {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.42 }}
-          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:h-[calc(100vh-11rem)] ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[60vh] min-h-[320px] sm:h-[58vh]"}`}
+          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:h-[calc(100vh-11rem)] ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
         >
           <button
             type="button"
@@ -458,10 +592,60 @@ export default function MapPage() {
               </button>
             </div>
           )}
+
+          {mobileView === "map" && !focusedPlace && (
+            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl lg:hidden">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-teal-300">
+                    {mode === "trip" ? "Route stops" : "Nearby places"}
+                  </p>
+                  <p className="truncate text-sm font-semibold text-[var(--muted)]">
+                    {mode === "trip"
+                      ? `${filteredTripStops.length} stops on ${tripSource} to ${tripDest}`
+                      : `${sortedPlaces.length} places around ${activeCity}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileView("list")}
+                  className="shrink-0 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-black text-[var(--primary-foreground)]"
+                >
+                  Full list
+                </button>
+              </div>
+
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                {(mode === "trip" ? filteredTripStops : sortedPlaces).slice(0, 8).map((place) => (
+                  <button
+                    key={place.id}
+                    type="button"
+                    onClick={() => {
+                      setFocusedPlace(place);
+                      setMapCenter({ latitude: place.latitude, longitude: place.longitude });
+                    }}
+                    className="w-52 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 text-left"
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
+                      {getCategoryLabel(place.category, place.tags)}
+                    </p>
+                    <h3 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h3>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-xs font-bold text-[var(--muted-strong)]">
+                      <span className="truncate">{place.locality}</span>
+                      <span className="inline-flex items-center gap-1 text-amber-300">
+                        <Star size={12} className="fill-amber-300" />
+                        {place.rating}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Mobile Map/List toggle FAB */}
-        <div className="fixed bottom-4 left-4 z-[600] lg:hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)" }}>
+        <div className="fixed left-4 z-[600] lg:hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 5.5rem)" }}>
           <button
             type="button"
             onClick={() => setMobileView(mobileView === "map" ? "list" : "map")}
@@ -635,6 +819,44 @@ export default function MapPage() {
                 >
                   {tripLoading ? "Calculating Route..." : "🗺️ Get Route & Stops"}
                 </button>
+
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-[var(--muted)]">
+                    Trip name
+                  </label>
+                  <input
+                    type="text"
+                    value={tripPlanName}
+                    onChange={(event) => setTripPlanName(event.target.value)}
+                    placeholder={`${tripSource} to ${tripDest}`}
+                    className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none focus:border-cyan-400"
+                  />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={saveTripPlan}
+                      disabled={tripSaveStatus === "saving" || !tripRoutePath}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-black text-[var(--primary-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Save size={14} />
+                      {tripSaveStatus === "saving" ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={shareTripPlan}
+                      disabled={!tripRoutePath}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs font-black text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {activeTripPlanId ? <Share2 size={14} /> : <Copy size={14} />}
+                      Share
+                    </button>
+                  </div>
+                  {tripSaveMessage && (
+                    <p className={`mt-2 text-xs font-semibold ${tripSaveStatus === "error" ? "text-rose-300" : "text-emerald-300"}`}>
+                      {tripSaveMessage}
+                    </p>
+                  )}
+                </div>
 
                 {tripError && (
                   <div className="flex items-center gap-2 text-xs font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg">
@@ -841,6 +1063,45 @@ export default function MapPage() {
                         );
                       })
                     )}
+                  </div>
+                </div>
+              )}
+
+              {savedTripPlans.length > 0 && (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-black text-[var(--foreground)]">Saved Trips</h2>
+                      <p className="text-xs font-semibold text-[var(--muted)]">Reload a route or share it later.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={loadSavedTripPlans}
+                      className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-black text-[var(--muted-strong)]"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {savedTripPlans.slice(0, 4).map((plan) => (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => applySavedTripPlan(plan)}
+                        className={cn(
+                          "w-full rounded-lg border p-3 text-left transition hover:bg-[var(--panel-soft)]",
+                          activeTripPlanId === plan.id ? "border-cyan-400/60 bg-cyan-400/10" : "border-[var(--border)] bg-[var(--panel-soft)]"
+                        )}
+                      >
+                        <p className="line-clamp-1 text-sm font-black text-[var(--foreground)]">{plan.name}</p>
+                        <p className="mt-1 line-clamp-1 text-xs font-semibold text-[var(--muted)]">
+                          {plan.source} to {plan.destination}
+                        </p>
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-300">
+                          {plan.distanceKm ?? "-"} km - {plan.stops.length} stops
+                        </p>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
