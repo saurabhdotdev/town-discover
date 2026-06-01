@@ -10,11 +10,15 @@ import {
   pruneExpiredSessions,
   verifyPassword,
 } from "@/lib/auth";
+import { requireTrustedOrigin } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const originResponse = requireTrustedOrigin(request);
+  if (originResponse) return originResponse;
+
   const pool = getPool();
   if (!pool) {
     return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
