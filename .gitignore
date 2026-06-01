@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -19,6 +20,7 @@
 
 # production
 /build
+**/dist/
 
 # misc
 .DS_Store
@@ -47,3 +49,4 @@ next-env.d.ts
 /\{
 /place.category
 /place.id
+scratch*.html

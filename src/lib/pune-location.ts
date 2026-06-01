@@ -1,6 +1,6 @@
 import { UserLocation } from "@/types";
 
-export type SupportedCityName = "Pune" | "Mumbai" | "Kolhapur" | "Nashik";
+export type SupportedCityName = "Pune" | "Mumbai" | "Kolhapur" | "Nashik" | "Bangalore" | "Chennai" | "Delhi" | "CherryHill";
 
 export const PUNE_CENTER: UserLocation = {
   latitude: 18.5204,
@@ -13,9 +13,13 @@ export const CITY_CENTERS: Record<SupportedCityName, UserLocation> = {
   Mumbai: { latitude: 19.076, longitude: 72.8777, accuracy: 50 },
   Kolhapur: { latitude: 16.705, longitude: 74.2433, accuracy: 50 },
   Nashik: { latitude: 19.9975, longitude: 73.7898, accuracy: 50 },
+  Bangalore: { latitude: 12.9716, longitude: 77.5946, accuracy: 50 },
+  Chennai: { latitude: 13.0827, longitude: 80.2707, accuracy: 50 },
+  CherryHill: { latitude: 40.0155, longitude: -74.9310, accuracy: 50 },
+  Delhi: { latitude: 28.6139, longitude: 77.2090, accuracy: 50 },
 };
 
-const CITY_BOUNDS: Record<
+export const CITY_BOUNDS: Record<
   SupportedCityName,
   {
     minLatitude: number;
@@ -48,6 +52,25 @@ const CITY_BOUNDS: Record<
     minLongitude: 73.66,
     maxLongitude: 73.92,
   },
+  Bangalore: {
+    minLatitude: 12.75,
+    maxLatitude: 13.20,
+    minLongitude: 77.35,
+    maxLongitude: 77.85,
+  },
+  Chennai: {
+    minLatitude: 12.85,
+    maxLatitude: 13.30,
+    minLongitude: 80.05,
+    maxLongitude: 80.40,
+  },
+  Delhi: {
+    minLatitude: 28.35,
+    maxLatitude: 28.90,
+    minLongitude: 76.80,
+    maxLongitude: 77.55,
+  },
+  CherryHill: { minLatitude: 39.90, maxLatitude: 40.15, minLongitude: -75.10, maxLongitude: -74.80 },
 };
 
 export const SUPPORTED_CITY_NAMES = Object.keys(CITY_CENTERS) as SupportedCityName[];
@@ -57,6 +80,10 @@ const CITY_ALIASES: Record<SupportedCityName, string[]> = {
   Mumbai: ["mumbai", "bombay"],
   Kolhapur: ["kolhapur"],
   Nashik: ["nashik", "nasik"],
+  Bangalore: ["bangalore", "bengaluru", "blr"],
+  Chennai: ["chennai", "madras"],
+  Delhi: ["delhi", "new delhi", "ncr", "noida", "gurgaon"],
+  CherryHill: ["cherryhill", "cherry hill"],
 };
 
 export const getCityFromQuery = (query: string): SupportedCityName | null => {

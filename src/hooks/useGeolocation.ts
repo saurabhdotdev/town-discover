@@ -6,7 +6,7 @@ import { UserLocation } from "@/types";
 
 type LocationSource = "browser" | "fallback";
 
-const supportedCitiesMessage = "Showing Pune, Mumbai, Kolhapur, and Nashik places right now.";
+const supportedCitiesMessage = "Showing Pune, Mumbai, Kolhapur, Nashik, Bangalore, Chennai, and Delhi places right now.";
 
 export const useGeolocation = () => {
   const [location, setLocation] = useState<UserLocation | null>(null);
@@ -68,15 +68,19 @@ export const useGeolocation = () => {
 
   useEffect(() => {
     if (typeof navigator === "undefined") {
-      setLocation(PUNE_CENTER);
-      setSource("fallback");
-      setCity("Pune");
-      setError("Location is unavailable while the app is loading. Showing supported city places.");
-      setLoading(false);
+      setTimeout(() => {
+        setLocation(PUNE_CENTER);
+        setSource("fallback");
+        setCity("Pune");
+        setError("Location is unavailable while the app is loading. Showing supported city places.");
+        setLoading(false);
+      }, 0);
       return;
     }
 
-    requestLocation();
+    setTimeout(() => {
+      requestLocation();
+    }, 0);
   }, [requestLocation]);
 
   const useCityFallback = useCallback((nextCity: SupportedCityName) => {

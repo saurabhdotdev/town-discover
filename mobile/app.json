@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Sheher",
+    "slug": "sheher-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "sheher",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sheher.mobile"
+    },
+    "android": {
+      "package": "com.sheher.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    },
+    "plugins": ["expo-router", "expo-location"]
+  }
+}

@@ -16,11 +16,17 @@ import {
   Store,
   UtensilsCrossed,
   Users,
+  Train,
+  Globe,
+  Dog,
 } from "lucide-react";
 import { CrowdLevel, CrowdSummary, Place, PlaceCategory } from "@/types";
-import { formatDistance, formatHours, getCategoryAccent, getCategoryLabel, isOpenNow } from "@/lib/utils";
+import { getCategoryFallbackImage } from "@/lib/place-images";
+import { SupportedCityName } from "@/lib/pune-location";
+import { formatDistance, formatHours, getCategoryAccent, getCategoryLabel, isOpenNow, API_URL } from "@/lib/utils";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
 
 interface DiscoveryCardProps {
   place: Place;
@@ -56,6 +62,11 @@ const crowdStyles: Record<CrowdLevel, string> = {
   very_crowded: "bg-rose-500 text-white",
 };
 
+const isUsefulLocality = (locality: string) => {
+  const normalized = locality.trim().toLowerCase();
+  return Boolean(normalized && normalized !== "nearby" && normalized !== "unknown");
+};
+
 export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
   place,
   index = 0,
@@ -65,17 +76,78 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
   crowdSummary,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageSrc, setImageSrc] = useState(place.image);
+  const [localCrowdSummary, setLocalCrowdSummary] = useState<CrowdSummary | undefined>(crowdSummary);
+
+  useEffect(() => {
+    setTimeout(() => {
+      setLocalCrowdSummary(crowdSummary);
+    }, 0);
+  }, [crowdSummary]);
+
+  useEffect(() => {
+    const socket = io(API_URL, {
+      withCredentials: true,
+    });
+
+    socket.emit("join-place", place.id);
+
+    socket.on("crowd-update", (data: { placeId: string; summary: CrowdSummary }) => {
+      if (data.placeId === place.id) {
+        setLocalCrowdSummary(data.summary);
+      }
+    });
+
+    return () => {
+      socket.emit("leave-place", place.id);
+      socket.disconnect();
+    };
+  }, [place.id]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      setImageSrc(place.image);
+      setImageLoaded(false);
+    }, 0);
+
+    const params = new URLSearchParams({
+      placeId: place.id,
+      title: place.title,
+      city: place.city,
+      category: place.category,
+    });
+
+    fetch(`/api/places/image?${params.toString()}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { image?: string } | null) => {
+        if (data?.image) {
+          const imageUrl = data.image;
+          setImageSrc((prev) => {
+            if (prev !== imageUrl) {
+              setImageLoaded(false);
+              return imageUrl;
+            }
+            return prev;
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, [place.category, place.city, place.id, place.image, place.title]);
+
   const open = isOpenNow(place.hours);
-  const hasCrowdSignal = Boolean(crowdSummary?.crowdLevel && crowdSummary.reportCount > 0);
+  const hasHours = Boolean(place.hours);
+  const hasCrowdSignal = Boolean(localCrowdSummary?.crowdLevel && localCrowdSummary.reportCount > 0);
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
     const shareData = {
       title: place.title,
-      text: `${place.title} in ${place.locality} - ${place.description}`,
+      text: `${place.title} in ${place.locality}, ${place.city} - ${place.description}`,
       url: window.location.href,
     };
+    const outletLocation = isUsefulLocality(place.locality) ? `${place.locality}, ${place.city}` : place.city;
+    const exactSearchQuery = `${place.title} ${outletLocation} ${getCategoryLabel(place.category)} outlet`;
 
     try {
       if (navigator.share) {
@@ -86,7 +158,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
       await navigator.clipboard?.writeText(`${shareData.text} ${shareData.url}`);
     } catch {
       window.open(
-        `https://www.google.com/search?q=${encodeURIComponent(`${place.title} ${place.city}`)}`,
+        `https://www.google.com/search?q=${encodeURIComponent(exactSearchQuery)}`,
         "_blank",
         "noopener,noreferrer"
       );
@@ -122,14 +194,23 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
       >
         <div className="relative h-44 overflow-hidden bg-slate-900 sm:h-52">
           <Image
-            src={place.image}
+            src={imageSrc}
             alt={`${place.title} in ${place.locality}`}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className={`object-cover transition duration-700 group-hover:scale-105 ${
-              imageLoaded ? "opacity-100" : "opacity-0"
-            }`}
+            loading="lazy"
+            placeholder="blur"
+            blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAmEB9xG7d6sAAAAASUVORK5CYII="
+            className={`object-cover transition duration-700 group-hover:scale-105 ${imageLoaded ? "opacity-100" : "opacity-0"
+              }`}
             onLoad={() => setImageLoaded(true)}
+            onError={() => {
+              const fallback = getCategoryFallbackImage(place.city as SupportedCityName, place.category, place.title);
+              if (imageSrc !== fallback) {
+                setImageSrc(fallback);
+                setImageLoaded(false);
+              }
+            }}
           />
           {!imageLoaded && <div className="absolute inset-0 animate-pulse bg-slate-800" />}
 
@@ -150,10 +231,10 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                 Trending
               </span>
             )}
-            {hasCrowdSignal && crowdSummary?.crowdLevel && (
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-black shadow-lg sm:px-2.5 sm:text-xs ${crowdStyles[crowdSummary.crowdLevel]}`}>
+            {hasCrowdSignal && localCrowdSummary?.crowdLevel && (
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-black shadow-lg sm:px-2.5 sm:text-xs ${crowdStyles[localCrowdSummary.crowdLevel]}`}>
                 <Users size={14} />
-                {crowdLabels[crowdSummary.crowdLevel]}
+                {crowdLabels[localCrowdSummary.crowdLevel]}
               </span>
             )}
           </div>
@@ -184,8 +265,8 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                 <Clock size={13} />
                 Hours
               </div>
-              <div className={open ? "text-emerald-300" : "text-rose-300"}>
-                {open ? "Open now" : "Closed"}
+              <div className={hasHours ? (open ? "text-emerald-300" : "text-rose-300") : "text-[var(--muted)]"}>
+                {!hasHours ? "Hours unknown" : open ? "Open now" : "Closed"}
               </div>
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-2">
@@ -193,9 +274,9 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                 <Users size={13} />
                 Crowd
               </div>
-              {hasCrowdSignal && crowdSummary?.crowdLevel ? (
+              {hasCrowdSignal && localCrowdSummary?.crowdLevel ? (
                 <div className="text-[var(--foreground)]" title="Average active crowd reports">
-                  {crowdLabels[crowdSummary.crowdLevel]} - avg of {crowdSummary.reportCount}
+                  {crowdLabels[localCrowdSummary.crowdLevel]} - avg of {localCrowdSummary.reportCount}
                 </div>
               ) : (
                 <div className="text-[var(--muted)]">No live report</div>
@@ -209,44 +290,83 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
             {place.tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-1 text-xs font-semibold text-[var(--muted-strong)]"
+                className="rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-1 text-xs font-semibold flex items-center gap-1 text-[var(--muted-strong)]"
               >
+                {tag === "metro-access" ? <Train size={12} /> : null}
+                {tag === "foreigner-friendly" ? <Globe size={12} /> : null}
+                {tag === "pet-friendly" ? <Dog size={12} /> : null}
                 {tag}
               </span>
             ))}
           </div>
 
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2 pt-1">
+          <div className="flex flex-col gap-2 pt-1">
+            {/* Primary action - full width */}
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 onClick?.();
               }}
-              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2.5 text-sm font-black text-[var(--primary-foreground)] transition hover:opacity-90 active:scale-95"
             >
               Details
               <ExternalLink size={15} />
             </button>
-            <button
-              type="button"
-              aria-label={`Share ${place.title}`}
-              onClick={handleShare}
-              className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)]"
-            >
-              <Share2 size={16} />
-            </button>
-            <button
-              type="button"
-              aria-label={isSaved ? `Remove ${place.title} from saved places` : `Save ${place.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSave?.(place);
-              }}
-              className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)]"
-            >
-              <Bookmark size={16} className={isSaved ? "fill-amber-300 text-amber-300" : ""} />
-            </button>
+            {/* Secondary actions row */}
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(place.title + ' ' + place.city)}`;
+                  window.open(url, '_blank');
+                }}
+                title="Search on YouTube"
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
+                  <polygon points="10 15 15 12 10 9" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const tag = encodeURIComponent(place.title.replace(/\s+/g, ''));
+                  const url = `https://www.instagram.com/explore/tags/${tag}`;
+                  window.open(url, '_blank');
+                }}
+                title="Search on Instagram"
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label={`Share ${place.title}`}
+                onClick={handleShare}
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+              >
+                <Share2 size={16} />
+              </button>
+              <button
+                type="button"
+                aria-label={isSaved ? `Remove ${place.title} from saved places` : `Save ${place.title}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSave?.(place);
+                }}
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+              >
+                <Bookmark size={16} className={isSaved ? "fill-amber-300 text-amber-300" : ""} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

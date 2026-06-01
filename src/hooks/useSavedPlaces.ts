@@ -7,9 +7,13 @@ import { Place } from "@/types";
 export const useSavedPlaces = () => {
   const { user, setAuthRequiredMessage } = useAuth();
   const [savedPlaceIds, setSavedPlaceIds] = useState<Set<string>>(new Set());
+  const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
+  const [loadingPlaces, setLoadingPlaces] = useState<boolean>(false);
 
   useEffect(() => {
     if (!user) {
+      setSavedPlaceIds(new Set());
+      setSavedPlaces([]);
       return;
     }
 
@@ -22,11 +26,36 @@ export const useSavedPlaces = () => {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Unable to load saved places.");
-        setSavedPlaceIds(new Set(data.placeIds ?? []));
+        const ids = data.placeIds ?? [];
+        setSavedPlaceIds(new Set(ids));
+
+        if (ids.length > 0) {
+          setLoadingPlaces(true);
+          fetch(`/api/places/resolve?ids=${encodeURIComponent(ids.join(","))}`, {
+            signal: controller.signal,
+          })
+            .then(async (res) => {
+              const resData = await res.json();
+              if (res.ok && !controller.signal.aborted) {
+                setSavedPlaces(resData.places ?? []);
+              }
+              if (!controller.signal.aborted) {
+                setLoadingPlaces(false);
+              }
+            })
+            .catch(() => {
+              if (!controller.signal.aborted) {
+                setLoadingPlaces(false);
+              }
+            });
+        } else {
+          setSavedPlaces([]);
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setSavedPlaceIds(new Set());
+          setSavedPlaces([]);
         }
       });
 
@@ -43,6 +72,8 @@ export const useSavedPlaces = () => {
       }
 
       const isSaved = savedPlaceIds.has(place.id);
+      
+      // Optimistic updates
       setSavedPlaceIds((current) => {
         const next = new Set(current);
         if (isSaved) {
@@ -51,6 +82,14 @@ export const useSavedPlaces = () => {
           next.add(place.id);
         }
         return next;
+      });
+
+      setSavedPlaces((current) => {
+        if (isSaved) {
+          return current.filter((p) => p.id !== place.id);
+        } else {
+          return [...current, place];
+        }
       });
 
       try {
@@ -64,6 +103,7 @@ export const useSavedPlaces = () => {
           throw new Error("Unable to update saved place.");
         }
       } catch {
+        // Rollback on failure
         setSavedPlaceIds((current) => {
           const next = new Set(current);
           if (isSaved) {
@@ -73,10 +113,23 @@ export const useSavedPlaces = () => {
           }
           return next;
         });
+
+        setSavedPlaces((current) => {
+          if (isSaved) {
+            return [...current, place];
+          } else {
+            return current.filter((p) => p.id !== place.id);
+          }
+        });
       }
     },
     [savedPlaceIds, setAuthRequiredMessage, user]
   );
 
-  return { savedPlaceIds: user ? savedPlaceIds : new Set<string>(), toggleSave };
+  return {
+    savedPlaceIds: user ? savedPlaceIds : new Set<string>(),
+    savedPlaces: user ? savedPlaces : [],
+    loadingPlaces,
+    toggleSave,
+  };
 };

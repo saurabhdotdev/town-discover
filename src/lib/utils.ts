@@ -1,7 +1,7 @@
 import { PlaceCategory } from "@/types";
 
 // API Configuration
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export const cn = (...classes: (string | undefined | null | false)[]): string => {
   return classes
@@ -12,7 +12,9 @@ export const cn = (...classes: (string | undefined | null | false)[]): string =>
 };
 
 export const formatDistance = (distance: number): string => {
-  if (distance < 0.1) return "Right here";
+  if (distance < 0.001) return "<1 m";
+  if (distance < 0.05) return "Right here";
+  if (distance < 0.1) return `${Math.round(distance * 1000)} m`;
   return `${Math.round(distance * 10) / 10} km`;
 };
 
@@ -29,11 +31,10 @@ const toMinutes = (time24: string): number => {
   return Number.parseInt(hours, 10) * 60 + Number.parseInt(minutes, 10);
 };
 
-export const isOpenNow = (hours: { open: string; close: string } | undefined): boolean => {
-  if (!hours) return true;
+export const isOpenNow = (hours: { open: string; close: string } | undefined, at = new Date()): boolean => {
+  if (!hours) return false;
 
-  const now = new Date();
-  const current = now.getHours() * 60 + now.getMinutes();
+  const current = at.getHours() * 60 + at.getMinutes();
   const open = toMinutes(hours.open);
   const close = toMinutes(hours.close);
 
@@ -56,7 +57,22 @@ export const getInitials = (name: string): string => {
     .slice(0, 2);
 };
 
-export const getCategoryLabel = (category: PlaceCategory): string => {
+export const getCategoryLabel = (category: PlaceCategory, tags?: string[]): string => {
+  if (tags?.includes("ev-station")) {
+    return "⚡ EV Charging";
+  }
+  if (tags?.includes("toilet") || tags?.includes("restroom")) {
+    return "🚻 Restroom";
+  }
+  if (tags?.includes("viewpoint") || tags?.includes("scenic")) {
+    return "📸 Scenic Stop";
+  }
+  if (tags?.includes("hotel") || tags?.includes("stay")) {
+    return "🏨 Hotel/Stay";
+  }
+  if (tags?.includes("night-drive")) {
+    return "Night Drive";
+  }
   const labels: Record<PlaceCategory, string> = {
     cafe: "Cafe",
     restaurant: "Restaurant",
