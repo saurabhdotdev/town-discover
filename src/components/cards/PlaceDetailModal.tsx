@@ -630,9 +630,9 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
         exit={{ y: 48, opacity: 0, scale: 0.98 }}
         transition={{ type: "spring", damping: 32, stiffness: 320 }}
         onClick={(event) => event.stopPropagation()}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:max-w-2xl md:rounded-lg"
+        className="max-h-[calc(100dvh-1rem)] w-full overflow-y-auto rounded-t-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:max-h-[90vh] md:max-w-2xl md:rounded-lg"
       >
-        <div className="relative h-64 overflow-hidden bg-slate-900">
+        <div className="relative h-56 overflow-hidden bg-slate-900 sm:h-64">
           <Image
             src={imageSrc || activePlace.image}
             alt={`${activePlace.title} in ${activePlace.locality}`}
@@ -670,13 +670,13 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
             <span className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-slate-950">
               {getCategoryLabel(activePlace.category, activePlace.tags)}
             </span>
-            <h2 className="text-3xl font-black tracking-tight text-white">{activePlace.title}</h2>
+            <h2 className="line-clamp-2 text-2xl font-black tracking-tight text-white sm:text-3xl">{activePlace.title}</h2>
             <p className="mt-1 text-sm font-semibold text-slate-300">{activePlace.locality}</p>
           </div>
         </div>
 
-        <div className="space-y-5 p-5 md:p-6">
-          <p className="text-base leading-7 text-[var(--muted-strong)]">{activePlace.description}</p>
+        <div className="space-y-4 p-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] md:space-y-5 md:p-6">
+          <p className="text-sm leading-6 text-[var(--muted-strong)] sm:text-base sm:leading-7">{activePlace.description}</p>
 
           {isCluster && (nearbyPlaces.length > 0 || loadingNearby) && (
             <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4 shadow-xl">

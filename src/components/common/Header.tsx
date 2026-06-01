@@ -40,7 +40,18 @@ export const Header: React.FC<HeaderProps> = ({
               {eyebrow}
             </div>
           )}
-          <Image src="/sheher_logo_aesthetic_1779784387355.png" alt="Sheher" width={48} height={48} className="inline-block" />
+          <div className="flex min-w-0 items-center gap-3">
+            <Image
+              src="/sheher_logo_aesthetic_1779784387355.png"
+              alt="Sheher"
+              width={44}
+              height={44}
+              className="h-10 w-10 shrink-0 rounded-lg object-contain sm:h-11 sm:w-11"
+            />
+            <h1 className="truncate text-xl font-black tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">
+              {title}
+            </h1>
+          </div>
           {subtitle && <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-5 text-[var(--muted)] md:text-base md:leading-6">{subtitle}</p>}
         </div>
 

@@ -95,12 +95,12 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
       whileInView={{ opacity: 1 }}
       transition={{ duration: 0.45 }}
       viewport={{ once: true, margin: "0px 0px -80px 0px" }}
-      className="space-y-4 py-5 md:space-y-5 md:py-8"
+      className="space-y-3 py-4 md:space-y-5 md:py-8"
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0 space-y-1">
-          <h2 className="text-xl font-black tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">{title}</h2>
-          {description && <p className="max-w-2xl text-sm leading-6 text-[var(--muted)] md:text-base">{description}</p>}
+          <h2 className="text-lg font-black tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">{title}</h2>
+          {description && <p className="max-w-2xl text-sm leading-5 text-[var(--muted)] md:text-base md:leading-6">{description}</p>}
         </div>
         <span className="w-fit rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted)] sm:text-xs sm:tracking-[0.16em]">
           {places.length} places
@@ -126,7 +126,7 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
               className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory pb-3"
             >
               {places.map((place, index) => (
-                <div key={place.id} className="w-[280px] sm:w-[320px] shrink-0 snap-start">
+                <div key={place.id} className="w-[82vw] max-w-[320px] shrink-0 snap-start sm:w-[320px]">
                   <DiscoveryCard
                     place={place}
                     index={index}

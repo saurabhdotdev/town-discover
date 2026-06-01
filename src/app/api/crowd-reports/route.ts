@@ -11,47 +11,18 @@ const activeWindowSql = "NOW() - INTERVAL '45 minutes'";
 const cooldownWindowSql = "NOW() - INTERVAL '10 minutes'";
 const cooldownMinutes = 10;
 
-const setupSql = `
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE TABLE IF NOT EXISTS crowd_reports (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  place_id TEXT NOT NULL,
-  crowd_level TEXT NOT NULL CHECK (
-    crowd_level IN ('low', 'moderate', 'busy', 'very_crowded')
-  ),
-  note TEXT,
-  reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS crowd_reports_place_id_reported_at_idx
-ON crowd_reports (place_id, reported_at DESC);
-`;
-
-let setupPromise: Promise<void> | null = null;
-
 const ensureSetup = async () => {
   const pool = getPool();
   if (!pool) {
     throw new Error("DATABASE_URL is not configured.");
   }
 
-  setupPromise ??= pool.query(setupSql).then(() => undefined);
-  await setupPromise;
+  await ensureAuthSetup(pool);
   return pool;
 };
 
 const pruneExpiredReports = async (pool: Awaited<ReturnType<typeof ensureSetup>>) => {
   await pool.query(`DELETE FROM crowd_reports WHERE reported_at < ${activeWindowSql}`);
-};
-
-const ensureCrowdUserColumn = async (pool: Awaited<ReturnType<typeof ensureSetup>>) => {
-  await ensureAuthSetup(pool);
-  await pool.query("ALTER TABLE crowd_reports ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL");
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS crowd_reports_place_user_reported_at_idx
-    ON crowd_reports (place_id, user_id, reported_at DESC)
-  `);
 };
 
 const summariesSql = (whereClause: string) => `
@@ -202,7 +173,6 @@ export async function POST(request: NextRequest) {
     }
 
     const pool = await ensureSetup();
-    await ensureCrowdUserColumn(pool);
     const auth = await requireCurrentUser(pool, request);
     if (!auth.user) return auth.response;
 

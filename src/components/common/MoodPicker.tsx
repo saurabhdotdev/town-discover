@@ -20,7 +20,7 @@ export const MoodPicker: React.FC<MoodPickerProps> = ({ value, onChange, classNa
             <Sparkles size={14} />
             What&apos;s your mood?
           </p>
-          <h2 className="mt-1 text-lg font-black text-[var(--foreground)] sm:text-xl">
+          <h2 className="mt-1 text-base font-black leading-snug text-[var(--foreground)] sm:text-xl">
             Tell us how you feel — we&apos;ll pick places for you
           </h2>
         </div>
@@ -44,7 +44,7 @@ export const MoodPicker: React.FC<MoodPickerProps> = ({ value, onChange, classNa
               type="button"
               onClick={() => onChange(active ? null : mood.id)}
               aria-pressed={active}
-              className={`inline-flex shrink-0 flex-col items-start gap-0.5 rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[7.5rem] sm:px-4 ${active
+              className={`inline-flex min-w-[6.5rem] shrink-0 flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition sm:min-w-[7.5rem] sm:px-4 ${active
                   ? "border-teal-300/60 bg-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-teal-900/20"
                   : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted-strong)] hover:border-teal-300/30 hover:bg-[var(--panel-soft)]"
                 }`}

@@ -9,6 +9,7 @@ import path from "path";
 
 // Import local components
 import db from "./db";
+import { runDatabaseMigrations } from "./migrations";
 import { authenticateUser, requireUser } from "./middleware/auth";
 import { apiLimiter, reportPostLimiter } from "./middleware/rateLimiter";
 import { getAllowedOrigins, requireTrustedOrigin } from "./middleware/security";
@@ -321,17 +322,23 @@ io.on("connection", (socket) => {
 app.use(errorHandler);
 
 // Start Server
-const server = httpServer.listen(PORT, () => {
+let server: ReturnType<typeof httpServer.listen> | null = null;
+
+const startServer = async () => {
+  await runDatabaseMigrations(db.pool);
+
+  server = httpServer.listen(PORT, () => {
   console.log(`🚀 Sheher API Server running on port ${PORT}`);
   console.log(`📡 Real-time Socket.io active`);
-});
+  });
+};
 
 // Graceful Shutdown Logic
 const shutdown = async (signal: string) => {
   console.log(`\n📡 Received ${signal}. Beginning graceful shutdown...`);
   
   // Close HTTP and Socket.io server
-  server.close(() => {
+  server?.close(() => {
     console.log("📡 HTTP server closed.");
   });
 
@@ -344,3 +351,9 @@ const shutdown = async (signal: string) => {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+startServer().catch(async (error) => {
+  console.error("Failed to start Sheher API Server:", error);
+  await db.close();
+  process.exit(1);
+});
