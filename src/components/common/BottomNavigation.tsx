@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, Compass, Home, Map, Menu, Search, Sparkles, Trophy, User, Users, X } from "lucide-react";
+import { CalendarDays, Compass, Home, Map, Menu, Search, Trophy, User, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
+import { BrandMark } from "./BrandMark";
 
 interface NavItem {
   href: string;
@@ -51,10 +52,7 @@ export const BottomNavigation = () => {
       >
         <div className="mx-auto flex h-full max-w-screen-xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-3 text-[var(--foreground)]">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-cyan-400 via-teal-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-500/20">
-              <Sparkles size={18} />
-            </span>
-            <span className="text-sm font-black uppercase tracking-[0.18em]">Sheher</span>
+            <BrandMark size="md" />
           </Link>
 
           <div className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] p-1">
@@ -114,10 +112,7 @@ export const BottomNavigation = () => {
         </button>
 
         <Link href="/" className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2 text-[var(--foreground)]">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-cyan-400 via-teal-400 to-amber-300 text-slate-950 shadow-md shadow-cyan-500/20">
-            <Sparkles size={16} />
-          </span>
-          <span className="text-xs font-black uppercase tracking-[0.18em] text-[var(--foreground)]">Sheher</span>
+          <BrandMark size="sm" />
         </Link>
 
         <div className="flex items-center gap-2">
@@ -153,9 +148,7 @@ export const BottomNavigation = () => {
             >
               <div className="flex items-center justify-between gap-3">
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex min-w-0 items-center gap-3 text-[var(--foreground)]">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-cyan-400 via-teal-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-500/20">
-                    <Sparkles size={18} />
-                  </span>
+                  <BrandMark size="lg" showWordmark={false} />
                   <div className="min-w-0">
                     <p className="text-sm font-black uppercase tracking-[0.18em]">Sheher</p>
                     <p className="truncate text-xs font-semibold text-[var(--muted)]">City discovery</p>
