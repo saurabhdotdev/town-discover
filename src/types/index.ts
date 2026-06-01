@@ -1,4 +1,5 @@
 export type PlaceCategory = "cafe" | "restaurant" | "event" | "nightlife" | "food-stall" | "bar" | "dessert" | "street-food";
+export type { SupportedCityName } from '@/lib/pune-location';
 
 export interface Location {
   latitude: number;
@@ -27,6 +28,7 @@ export interface Place extends Location {
     open: string;
     close: string;
   };
+  routeWaypoints?: Location[];
 }
 
 export interface InfluencerFeature {

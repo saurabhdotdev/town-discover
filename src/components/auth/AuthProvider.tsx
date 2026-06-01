@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AuthUser } from "@/types";
+import { useBadges } from "@/hooks/useBadges";
+import { BadgeToast } from "@/components/profile/BadgeToast";
 
 type AuthMode = "login" | "signup";
 
@@ -21,6 +23,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [authRequiredMessage, setAuthRequiredMessage] = useState("");
+  const { newBadgeId, dismissBadge } = useBadges(!!user);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -94,7 +97,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [authRequiredMessage, loading, logout, refreshUser, submitAuth, user]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <BadgeToast badgeId={newBadgeId} onDismiss={dismissBadge} />
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {

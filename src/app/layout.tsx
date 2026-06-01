@@ -2,11 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { BottomNavigation } from "@/components/common/BottomNavigation";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { AiAssistant } from "@/components/common/AiAssistant";
 
 export const metadata: Metadata = {
-  title: "Sheher | Maharashtra City Discovery",
+  title: "Sheher | Indian City Discovery",
   description:
-    "Discover events, cafes, food spots, bars, and trending places across Pune, Mumbai, Kolhapur, and Nashik.",
+    "Discover events, cafes, food spots, bars, and trending places across Pune, Mumbai, Kolhapur, Nashik, Bangalore, Chennai, and Delhi.",
   icons: {
     icon: "/favicon.ico",
   },
@@ -17,6 +18,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   themeColor: "#080b0f",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -40,10 +42,11 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]">
+      <body className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <AuthProvider>
-          <main className="flex-1 pb-20 md:pb-0 md:pt-16">{children}</main>
+          <main className="flex-1 pt-14 pb-6 md:pb-0 md:pt-16">{children}</main>
           <BottomNavigation />
+          <AiAssistant />
         </AuthProvider>
       </body>
     </html>
