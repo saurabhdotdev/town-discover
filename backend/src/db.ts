@@ -17,6 +17,7 @@ export const db = {
     return pool.query<T>(text, params);
   },
   connect: () => pool.connect(),
+  pool,
   close: async () => {
     console.log("📡 Shutting down database connection pool...");
     await pool.end();

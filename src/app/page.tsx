@@ -206,7 +206,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col justify-center gap-5 pt-10 md:gap-6 md:pt-0"
+          className="flex flex-col justify-center gap-5 pt-3 md:gap-6 md:pt-0"
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -326,7 +326,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setSelectedPlace(featuredPlace)}
-              className="group relative min-h-[320px] w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] text-left shadow-2xl sm:min-h-[430px] md:min-h-[560px]"
+              className="group relative min-h-[280px] w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] text-left shadow-2xl sm:min-h-[430px] md:min-h-[560px]"
             >
               <Image
                 src={featuredPlace.image}
@@ -347,7 +347,7 @@ export default function Home() {
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{featuredPlace.title}</h2>
+                  <h2 className="line-clamp-2 text-2xl font-black tracking-tight text-white sm:text-3xl">{featuredPlace.title}</h2>
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300">{featuredPlace.description}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm font-bold text-white">

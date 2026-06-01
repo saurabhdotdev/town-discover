@@ -359,7 +359,7 @@ export default function DiscoverPage() {
       <div className="mx-auto max-w-screen-xl px-3 py-4 sm:px-4 md:px-6 md:py-6">
         {/* Weekly Spotlight Slideshow */}
         {spotlightSpots.length > 0 && !hasFilters && (
-          <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-strong)] mb-6 group/spotlight shadow-2xl">
+          <section className="relative mb-5 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:mb-6">
             <div className="absolute inset-0 z-0 h-full w-full">
               <img
                 src={spotlightSpots[spotlightIndex].image}
@@ -369,7 +369,7 @@ export default function DiscoverPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-[var(--spotlight-overlay-from)] via-[var(--spotlight-overlay-via)] to-transparent" />
             </div>
 
-            <div className="relative z-10 p-6 sm:p-8 md:p-12 flex flex-col md:flex-row md:items-end justify-between gap-6 min-h-[300px] md:min-h-[380px]">
+            <div className="relative z-10 flex min-h-[240px] flex-col justify-between gap-5 p-4 sm:p-8 md:min-h-[380px] md:flex-row md:items-end md:p-12">
               <div className="space-y-3 max-w-2xl">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex rounded-full bg-teal-400 text-slate-950 px-3 py-0.5 text-[10px] font-black uppercase tracking-[0.15em]">
@@ -383,7 +383,7 @@ export default function DiscoverPage() {
                   </span>
                 </div>
 
-                <h3 className="text-2xl sm:text-3xl md:text-4xl font-black text-[var(--foreground)] leading-tight">
+                <h3 className="text-2xl font-black leading-tight text-[var(--foreground)] sm:text-3xl md:text-4xl">
                   {spotlightSpots[spotlightIndex].title}
                 </h3>
                 <p className="text-[var(--muted-strong)] text-xs sm:text-sm font-semibold leading-relaxed line-clamp-3">
@@ -398,10 +398,10 @@ export default function DiscoverPage() {
                 </div>
               </div>
 
-              <div className="shrink-0 flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3">
                 <button
                   onClick={() => setSelectedPlace(spotlightSpots[spotlightIndex])}
-                  className="rounded-xl bg-teal-500 hover:bg-teal-400 px-5 py-3 text-xs font-black text-white transition hover:scale-[1.02] shadow-lg shadow-teal-500/10 cursor-pointer"
+                  className="w-full rounded-lg bg-teal-500 px-5 py-3 text-xs font-black text-white shadow-lg shadow-teal-500/10 transition hover:bg-teal-400 sm:w-auto"
                 >
                   Explore Details
                 </button>

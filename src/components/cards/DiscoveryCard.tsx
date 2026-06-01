@@ -190,9 +190,9 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}
         onClick={onClick}
-        className="group flex h-full min-h-[360px] cursor-pointer flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] shadow-2xl shadow-black/10 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:border-[var(--muted)] hover:bg-[var(--panel-strong)] sm:min-h-[420px]"
+        className="group flex h-full min-h-[330px] cursor-pointer flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] shadow-xl shadow-black/10 backdrop-blur-md transition duration-300 hover:border-[var(--muted)] hover:bg-[var(--panel-strong)] sm:min-h-[420px] sm:hover:-translate-y-1"
       >
-        <div className="relative h-44 overflow-hidden bg-slate-900 sm:h-52">
+        <div className="relative h-40 overflow-hidden bg-slate-900 sm:h-52">
           <Image
             src={imageSrc}
             alt={`${place.title} in ${place.locality}`}
@@ -248,7 +248,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
 
         <div className="flex flex-1 flex-col gap-2.5 p-3 sm:gap-3 sm:p-4">
           <div className="min-w-0">
-            <h3 className="line-clamp-1 text-lg font-black leading-tight text-[var(--foreground)]">{place.title}</h3>
+            <h3 className="line-clamp-2 text-base font-black leading-tight text-[var(--foreground)] sm:text-lg">{place.title}</h3>
             <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--muted)]">
               <MapPin size={14} className="shrink-0 text-cyan-300" />
               <span className="truncate">
@@ -284,7 +284,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
             </div>
           </div>
 
-          <p className="line-clamp-1 text-xs text-[var(--muted)]">{formatHours(place.hours)}</p>
+          <p className="hidden text-xs text-[var(--muted)] sm:line-clamp-1">{formatHours(place.hours)}</p>
 
           <div className="mt-auto flex flex-wrap gap-1.5">
             {place.tags.slice(0, 3).map((tag) => (

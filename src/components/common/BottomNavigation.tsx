@@ -24,6 +24,10 @@ const navItems: NavItem[] = [
   { href: "/profile", label: "Profile", icon: <User size={21} /> },
 ];
 
+const mobileTabItems = navItems.filter((item) =>
+  ["/", "/discover", "/events", "/map", "/profile"].includes(item.href)
+);
+
 export const BottomNavigation = () => {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -208,6 +212,38 @@ export const BottomNavigation = () => {
           </>
         )}
       </AnimatePresence>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--nav)] px-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)] pt-1.5 backdrop-blur-xl md:hidden"
+        aria-label="Primary tabs"
+      >
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+          {mobileTabItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] font-black transition",
+                  isActive ? "text-[var(--foreground)]" : "text-[var(--muted)]"
+                )}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="mobileBottomActiveNav"
+                    className="absolute inset-0 rounded-lg bg-[var(--panel-soft)]"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <span className="relative">{item.icon}</span>
+                <span className="relative truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </>
   );
 };
