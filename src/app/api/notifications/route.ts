@@ -11,6 +11,13 @@ const patchSchema = z.object({
   all: z.boolean().optional(),
 });
 
+const createSchema = z.object({
+  type: z.string().trim().min(2).max(60).default("event_reminder"),
+  title: z.string().trim().min(2).max(120),
+  message: z.string().trim().min(2).max(320),
+  link: z.string().trim().max(500).optional(),
+});
+
 // GET /api/notifications - Get current user notifications
 export async function GET(request: NextRequest) {
   try {
@@ -43,6 +50,47 @@ export async function GET(request: NextRequest) {
     return Response.json({ notifications }, { status: 200 });
   } catch (e: any) {
     console.error("Error in GET /api/notifications:", e);
+    return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
+  }
+}
+
+// POST /api/notifications - Create a notification for the current user
+export async function POST(request: NextRequest) {
+  try {
+    const pool = getPool();
+    if (!pool) {
+      return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
+    }
+    await ensureAuthSetup(pool);
+    const auth = await requireCurrentUser(pool, request);
+    if (!auth.user) return auth.response;
+
+    const body = await request.json();
+    const parseResult = createSchema.safeParse(body);
+    if (!parseResult.success) {
+      return Response.json({ error: "Invalid request data", details: parseResult.error.format() }, { status: 400 });
+    }
+
+    const { type, title, message, link } = parseResult.data;
+    const { rows } = await pool.query(
+      `
+      INSERT INTO user_notifications (user_id, type, title, message, link)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING
+        id,
+        type,
+        title,
+        message,
+        link,
+        is_read AS "isRead",
+        created_at AS "createdAt"
+      `,
+      [auth.user.id, type, title, message, link || null]
+    );
+
+    return Response.json({ notification: rows[0] }, { status: 201 });
+  } catch (e: any) {
+    console.error("Error in POST /api/notifications:", e);
     return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
   }
 }

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  BellRing,
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  CheckCircle,
   Clock,
   ExternalLink,
   Flame,
@@ -19,10 +21,13 @@ import {
   Utensils,
   Zap,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { useCitySelection } from "@/hooks/useCitySelection";
 import type { LiveEvent } from "@/app/api/events/live/route";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { SUPPORTED_CITY_NAMES, SupportedCityName } from "@/lib/pune-location";
 
 // ---------- Category config ----------
 
@@ -168,7 +173,19 @@ function formatEventLocation(event: LiveEvent): string {
 
 // ---------- Hero card (large featured event) ----------
 
-function HeroEventCard({ event, onBookClick }: { event: LiveEvent; onBookClick: (event: LiveEvent) => void }) {
+function HeroEventCard({
+  event,
+  onBookClick,
+  onNotifyClick,
+  reminderSaved,
+  reminderLoading,
+}: {
+  event: LiveEvent;
+  onBookClick: (event: LiveEvent) => void;
+  onNotifyClick: (event: LiveEvent) => void;
+  reminderSaved: boolean;
+  reminderLoading: boolean;
+}) {
   const gradient = CATEGORY_GRADIENTS[event.category] ?? "from-teal-600/30 to-transparent border-teal-500/30";
   const location = formatEventLocation(event);
   return (
@@ -237,6 +254,18 @@ function HeroEventCard({ event, onBookClick }: { event: LiveEvent; onBookClick: 
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              onNotifyClick(event);
+            }}
+            disabled={reminderLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60"
+          >
+            {reminderSaved ? <CheckCircle size={16} className="text-emerald-300" /> : <BellRing size={16} className="text-amber-300" />}
+            {reminderLoading ? "Saving..." : reminderSaved ? "Reminder Set" : "Notify Me"}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
               onBookClick(event);
             }}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] hover:shadow-teal-500/30"
@@ -252,7 +281,21 @@ function HeroEventCard({ event, onBookClick }: { event: LiveEvent; onBookClick: 
 
 // ---------- Event card ----------
 
-function EventCard({ event, index, onBookClick }: { event: LiveEvent; index: number; onBookClick: (event: LiveEvent) => void }) {
+function EventCard({
+  event,
+  index,
+  onBookClick,
+  onNotifyClick,
+  reminderSaved,
+  reminderLoading,
+}: {
+  event: LiveEvent;
+  index: number;
+  onBookClick: (event: LiveEvent) => void;
+  onNotifyClick: (event: LiveEvent) => void;
+  reminderSaved: boolean;
+  reminderLoading: boolean;
+}) {
   const gradient = CATEGORY_GRADIENTS[event.category] ?? "";
   const badge = CATEGORY_BADGE[event.category] ?? "bg-white/10 text-white border-white/20";
   const location = formatEventLocation(event);
@@ -337,15 +380,27 @@ function EventCard({ event, index, onBookClick }: { event: LiveEvent; index: num
               <span className="text-sm font-black text-[var(--foreground)]">{formatPrice(event.price)}</span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => onBookClick(event)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-cyan-600 px-3 py-1.5 text-xs font-black text-white transition hover:scale-105 hover:shadow-md hover:shadow-teal-500/20"
-          >
-            <Ticket size={12} />
-            Book
-            <ExternalLink size={10} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onNotifyClick(event)}
+              disabled={reminderLoading}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60"
+              aria-label={reminderSaved ? "Reminder saved" : "Notify me about this event"}
+              title={reminderSaved ? "Reminder saved" : "Notify me"}
+            >
+              {reminderSaved ? <CheckCircle size={14} className="text-emerald-300" /> : <BellRing size={14} className="text-amber-300" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => onBookClick(event)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-cyan-600 px-3 py-1.5 text-xs font-black text-white transition hover:scale-105 hover:shadow-md hover:shadow-teal-500/20"
+            >
+              <Ticket size={12} />
+              Book
+              <ExternalLink size={10} />
+            </button>
+          </div>
         </div>
       </div>
     </motion.article>
@@ -381,6 +436,8 @@ function EventSkeleton({ index }: { index: number }) {
 
 export default function EventsPage() {
   const { selectedCity, chooseCity } = useCitySelection();
+  const router = useRouter();
+  const { user, setAuthRequiredMessage } = useAuth();
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -389,11 +446,26 @@ export default function EventsPage() {
   const [activeDistrict, setActiveDistrict] = useState<string>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [reminderIds, setReminderIds] = useState<Set<string>>(() => new Set());
+  const [reminderLoadingId, setReminderLoadingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   const districts = useMemo(() => {
     const list = Array.from(new Set(events.map((e) => e.locality))).filter(Boolean);
     return list.sort();
   }, [events]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cityFromUrl = new URLSearchParams(window.location.search).get("city");
+    if (
+      cityFromUrl &&
+      SUPPORTED_CITY_NAMES.includes(cityFromUrl as SupportedCityName) &&
+      cityFromUrl !== selectedCity
+    ) {
+      chooseCity(cityFromUrl as SupportedCityName);
+    }
+  }, [chooseCity, selectedCity]);
 
   const fetchEvents = useCallback(async (city: string, refresh = false) => {
     setLoading(true);
@@ -420,6 +492,43 @@ export default function EventsPage() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchEvents(selectedCity, true);
+  };
+
+  const handleNotify = async (event: LiveEvent) => {
+    if (!user) {
+      setAuthRequiredMessage("Log in to save event reminders and see them in your notifications.");
+      router.push("/profile");
+      return;
+    }
+
+    if (reminderIds.has(event.id)) {
+      setNotice(`Reminder already set for ${event.title}.`);
+      return;
+    }
+
+    setReminderLoadingId(event.id);
+    setNotice("");
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "event_reminder",
+          title: `Reminder: ${event.title}`,
+          message: `${formatEventDate(event.date)} at ${formatTime(event.time)} - ${formatEventLocation(event)}.`,
+          link: `/events?city=${encodeURIComponent(event.city)}`,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Unable to save reminder.");
+
+      setReminderIds((current) => new Set(current).add(event.id));
+      setNotice(`Reminder saved for ${event.title}. Check the bell for updates.`);
+    } catch (err: any) {
+      setNotice(err.message ?? "Unable to save reminder.");
+    } finally {
+      setReminderLoadingId(null);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -571,6 +680,13 @@ export default function EventsPage() {
           </div>
         )}
 
+        {notice && (
+          <div className="mb-6 flex items-start gap-2 rounded-lg border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100">
+            <BellRing size={16} className="mt-0.5 shrink-0 text-teal-200" />
+            <span>{notice}</span>
+          </div>
+        )}
+
         {/* Content */}
         {loading ? (
           <>
@@ -609,6 +725,9 @@ export default function EventsPage() {
                 <HeroEventCard
                   event={heroEvent}
                   onBookClick={(event) => window.open(buildBookMyShowUrl(event), "_blank")}
+                  onNotifyClick={handleNotify}
+                  reminderSaved={reminderIds.has(heroEvent.id)}
+                  reminderLoading={reminderLoadingId === heroEvent.id}
                 />
               )}
 
@@ -624,7 +743,15 @@ export default function EventsPage() {
               {/* Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {restEvents.map((event, i) => (
-                  <EventCard key={event.id} event={event} index={i} onBookClick={(evt) => window.open(buildBookMyShowUrl(evt), "_blank")} />
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    index={i}
+                    onBookClick={(evt) => window.open(buildBookMyShowUrl(evt), "_blank")}
+                    onNotifyClick={handleNotify}
+                    reminderSaved={reminderIds.has(event.id)}
+                    reminderLoading={reminderLoadingId === event.id}
+                  />
                 ))}
               </div>
 
