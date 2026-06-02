@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
+  ChevronRight,
   Coffee,
   Compass,
   Flame,
@@ -108,6 +109,14 @@ export default function Home() {
   const nearbyPlaces = useMemo(
     () => [...allPlaces].sort((a, b) => a.distance - b.distance).slice(0, 9),
     [allPlaces]
+  );
+  const iceCreamPlaces = useMemo(
+    () => allPlaces.filter((place) => place.category === "ice-cream"),
+    [allPlaces]
+  );
+  const iceCreamLocalities = useMemo(
+    () => Array.from(new Set(iceCreamPlaces.map((place) => place.locality))).slice(0, 4),
+    [iceCreamPlaces]
   );
 
   useEffect(() => {
@@ -438,14 +447,64 @@ export default function Home() {
               savedPlaceIds={savedPlaceIds}
             />
 
+            {iceCreamPlaces.length > 0 && (
+              <div className="my-4 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)]">
+                <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-center md:p-5">
+                  <div className="min-w-0">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-amber-200">
+                      <IceCreamCone size={14} />
+                      Dessert lane
+                    </div>
+                    <h2 className="mt-3 text-xl font-black tracking-tight text-[var(--foreground)] sm:text-2xl">
+                      Scoop runs worth leaving home for
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+                      A richer ice cream edit for {activeCity}, from kulfi and natural fruit flavors to gelato and late-night sundaes.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter("ice-cream")}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 text-sm font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+                  >
+                    Show only ice cream
+                    <ChevronRight size={17} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 border-t border-[var(--border)] sm:grid-cols-4">
+                  {[
+                    { label: "Scoop spots", value: iceCreamPlaces.length.toString() },
+                    { label: "Trending", value: iceCreamPlaces.filter((place) => place.isTrending).length.toString() },
+                    { label: "Areas", value: iceCreamLocalities.length.toString() },
+                    { label: "Closest", value: iceCreamPlaces[0] ? formatDistance(iceCreamPlaces[0].distance) : "Soon" },
+                  ].map((stat) => (
+                    <div key={stat.label} className="border-r border-[var(--border)] p-3 last:border-r-0 sm:p-4">
+                      <p className="text-lg font-black text-[var(--foreground)]">{stat.value}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {iceCreamLocalities.length > 0 && (
+                  <div className="flex flex-wrap gap-2 border-t border-[var(--border)] px-4 py-3 md:px-5">
+                    {iceCreamLocalities.map((locality) => (
+                      <span key={locality} className="rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-xs font-bold text-[var(--muted-strong)]">
+                        {locality}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <DiscoverySection
-              title="🍦 Ice Cream Specials"
-              description={`Beat the heat — top-rated ice cream parlors, kulfi spots, and gelato destinations in ${activeCity}.`}
-              places={allPlaces.filter((place) => place.category === "ice-cream").slice(0, 9)}
+              title="Ice Cream Specials"
+              description={`Gelato, kulfi, sundaes, and late-night scoop shops in ${activeCity}.`}
+              places={iceCreamPlaces.slice(0, 12)}
               loading={livePlacesLoading && !usingLivePlaces}
               onPlaceClick={setSelectedPlace}
               onSavePlace={toggleSave}
               savedPlaceIds={savedPlaceIds}
+              carousel
             />
           </>
         )}
