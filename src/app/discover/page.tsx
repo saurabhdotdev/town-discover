@@ -7,6 +7,7 @@ import {
   Car,
   Coffee,
   Compass,
+  IceCreamCone,
   LocateFixed,
   MapPin,
   Martini,
@@ -64,6 +65,7 @@ type SortMode = "recommended" | "distance" | "rating";
 const categories: { id: CategoryFilter; label: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All", icon: <Sparkles size={17} /> },
   { id: "night-drive", label: "Night Drives", icon: <Car size={17} /> },
+  { id: "ice-cream", label: "Ice Cream", icon: <IceCreamCone size={17} /> },
   { id: "cafe", label: "Cafes", icon: <Coffee size={17} /> },
   { id: "restaurant", label: "Restaurants", icon: <UtensilsCrossed size={17} /> },
   { id: "event", label: "Events", icon: <CalendarDays size={17} /> },
@@ -328,6 +330,11 @@ export default function DiscoverPage() {
       title: "Cafes and Desserts",
       description: "Coffee, sweet breaks, and work-friendly corners.",
       places: allPlaces.filter((place) => ["cafe", "dessert"].includes(place.category)).slice(0, 9),
+    },
+    {
+      title: "🍦 Ice Cream Specials",
+      description: "Scoops, sundaes, kulfi, and gelato — the best frozen treats in the city.",
+      places: allPlaces.filter((place) => place.category === "ice-cream").slice(0, 9),
     },
     {
       title: "Events Tonight",

@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getPool } from "@/lib/postgres";
+import { NextRequest } from "next/server";
+import { createApiHandler } from "@/lib/server/api-handler";
 import {
   authCookieName,
   createSession,
-  ensureAuthSetup,
   getSessionCookieOptions,
   isSuperAdminEmail,
   normalizeEmail,
@@ -11,25 +10,27 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { requireTrustedOrigin } from "@/lib/request-security";
+import { RATE_LIMIT_AUTH } from "@/lib/server/rate-limit";
+import { BadRequestError, UnauthorizedError } from "@/lib/server/api-errors";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
-  const originResponse = requireTrustedOrigin(request);
-  if (originResponse) return originResponse;
+export const POST = createApiHandler(
+  { auth: "none", rateLimit: RATE_LIMIT_AUTH, rateLimitKey: "POST:/api/auth/login" },
+  async (request: NextRequest, { pool }) => {
+    const originResponse = requireTrustedOrigin(request);
+    if (originResponse) return originResponse;
 
-  const pool = getPool();
-  if (!pool) {
-    return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-  }
-
-  try {
     const body = await request.json();
     const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
     const password = typeof body.password === "string" ? body.password : "";
 
-    await ensureAuthSetup(pool);
+    if (!email || !password) {
+      throw new BadRequestError("Email and password are required.");
+    }
+
     await pruneExpiredSessions(pool);
 
     const { rows } = await pool.query(
@@ -44,12 +45,12 @@ export async function POST(request: NextRequest) {
     const userWithPassword = rows[0];
 
     if (!userWithPassword) {
-      return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
+      throw new UnauthorizedError("Email or password is incorrect.");
     }
 
     const passwordMatches = await verifyPassword(password, userWithPassword.passwordSalt, userWithPassword.passwordHash);
     if (!passwordMatches) {
-      return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
+      throw new UnauthorizedError("Email or password is incorrect.");
     }
 
     const role = isSuperAdminEmail(userWithPassword.email) ? "super_admin" : userWithPassword.role;
@@ -68,10 +69,5 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set(authCookieName, session.token, getSessionCookieOptions(session.expiresAt));
     return response;
-  } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Unable to log in." },
-      { status: 503 }
-    );
   }
-}
+);

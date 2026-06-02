@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { getPool } from "@/lib/postgres";
-import { ensureAuthSetup, requireCurrentUser } from "@/lib/auth";
+import { createApiHandler } from "@/lib/server/api-handler";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
 import { z } from "zod";
+import { BadRequestError, NotFoundError } from "@/lib/server/api-errors";
 
 const rsvpSchema = z.object({
   hangoutId: z.string().uuid({ message: "Invalid hangout ID format" }),
@@ -12,20 +12,13 @@ const rsvpSchema = z.object({
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) {
-      return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-    }
-    await ensureAuthSetup(pool);
-    const auth = await requireCurrentUser(pool, request);
-    if (!auth.user) return auth.response;
-
+export const POST = createApiHandler(
+  { auth: "required" },
+  async (request: NextRequest, { pool, user }) => {
     const body = await request.json();
     const parseResult = rsvpSchema.safeParse(body);
     if (!parseResult.success) {
-      return Response.json({ error: "Invalid request data", details: parseResult.error.format() }, { status: 400 });
+      throw new BadRequestError("Invalid request data");
     }
     const { hangoutId, status } = parseResult.data;
 
@@ -35,7 +28,7 @@ export async function POST(request: NextRequest) {
       [hangoutId]
     );
     if (hangouts.length === 0) {
-      return Response.json({ error: "Hangout not found." }, { status: 404 });
+      throw new NotFoundError("Hangout not found.");
     }
     const hostId = hangouts[0].userId;
     const hangoutTitle = hangouts[0].title;
@@ -44,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Check if RSVP exists and fetch status
     const { rows: existingRsvps } = await pool.query(
       `SELECT status FROM hangout_rsvps WHERE hangout_id = $1 AND user_id = $2`,
-      [hangoutId, auth.user.id]
+      [hangoutId, user!.id]
     );
 
     const xpEventType = `rsvp_hangout:${hangoutId}`;
@@ -58,13 +51,13 @@ export async function POST(request: NextRequest) {
         // Toggle off: remove the RSVP entirely
         await pool.query(
           `DELETE FROM hangout_rsvps WHERE hangout_id = $1 AND user_id = $2`,
-          [hangoutId, auth.user.id]
+          [hangoutId, user!.id]
         );
 
         // Revoke the +10 XP for this hangout
         await pool.query(
           `DELETE FROM user_xp_events WHERE user_id = $1 AND event_type = $2`,
-          [auth.user.id, xpEventType]
+          [user!.id, xpEventType]
         );
 
         rsvped = false;
@@ -73,12 +66,12 @@ export async function POST(request: NextRequest) {
         // Update status of existing RSVP
         await pool.query(
           `UPDATE hangout_rsvps SET status = $3 WHERE hangout_id = $1 AND user_id = $2`,
-          [hangoutId, auth.user.id, status]
+          [hangoutId, user!.id, status]
         );
 
         // Notify the host about status update (if it's not the host updating their own RSVP)
-        if (hostId !== auth.user.id) {
-          const notifierName = auth.user.fullName || "Another explorer";
+        if (hostId !== user!.id) {
+          const notifierName = user!.fullName || "Another explorer";
           await pool.query(
             `INSERT INTO user_notifications (user_id, type, title, message, link)
              VALUES ($1, $2, $3, $4, $5)`,
@@ -99,12 +92,12 @@ export async function POST(request: NextRequest) {
       // Create new RSVP
       await pool.query(
         `INSERT INTO hangout_rsvps (hangout_id, user_id, status) VALUES ($1, $2, $3)`,
-        [hangoutId, auth.user.id, status]
+        [hangoutId, user!.id, status]
       );
 
       // Notify the host about the new RSVP (if it's not the host RSVPing to their own hangout)
-      if (hostId !== auth.user.id) {
-        const notifierName = auth.user.fullName || "Another explorer";
+      if (hostId !== user!.id) {
+        const notifierName = user!.fullName || "Another explorer";
         await pool.query(
           `INSERT INTO user_notifications (user_id, type, title, message, link)
            VALUES ($1, $2, $3, $4, $5)`,
@@ -121,12 +114,12 @@ export async function POST(request: NextRequest) {
       // Award XP
       const { rows: xpAwarded } = await pool.query(
         `SELECT 1 FROM user_xp_events WHERE user_id = $1 AND event_type = $2`,
-        [auth.user.id, xpEventType]
+        [user!.id, xpEventType]
       );
 
       if (xpAwarded.length === 0) {
-        await awardXP(pool, auth.user.id, xpEventType, 10);
-        newBadges = await checkAndGrantBadges(pool, auth.user.id);
+        await awardXP(pool, user!.id, xpEventType, 10);
+        newBadges = await checkAndGrantBadges(pool, user!.id);
       }
 
       rsvped = true;
@@ -139,8 +132,5 @@ export async function POST(request: NextRequest) {
       newBadges,
       message,
     }, { status: rsvped ? 201 : 200 });
-  } catch (e: any) {
-    console.error("Error in POST /api/hangouts/rsvp:", e);
-    return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
   }
-}
+);

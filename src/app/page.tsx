@@ -7,6 +7,7 @@ import {
   Coffee,
   Compass,
   Flame,
+  IceCreamCone,
   LocateFixed,
   Map,
   Search,
@@ -44,6 +45,7 @@ const filters: { id: HomeFilter; label: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All", icon: <Sparkles size={17} /> },
   { id: "trending", label: "Trending", icon: <Flame size={17} /> },
   { id: "open", label: "Open Now", icon: <LocateFixed size={17} /> },
+  { id: "ice-cream", label: "Ice Cream", icon: <IceCreamCone size={17} /> },
   { id: "cafe", label: "Cafes", icon: <Coffee size={17} /> },
   { id: "restaurant", label: "Food", icon: <UtensilsCrossed size={17} /> },
   { id: "event", label: "Events", icon: <CalendarDays size={17} /> },
@@ -430,6 +432,16 @@ export default function Home() {
               places={allPlaces.filter((place) =>
                 place.tags.some(tag => ["foreigner-friendly", "family-friendly", "pet-friendly", "heritage", "tourist-friendly", "cultural", "family"].includes(tag))
               ).slice(0, 8)}
+              loading={livePlacesLoading && !usingLivePlaces}
+              onPlaceClick={setSelectedPlace}
+              onSavePlace={toggleSave}
+              savedPlaceIds={savedPlaceIds}
+            />
+
+            <DiscoverySection
+              title="🍦 Ice Cream Specials"
+              description={`Beat the heat — top-rated ice cream parlors, kulfi spots, and gelato destinations in ${activeCity}.`}
+              places={allPlaces.filter((place) => place.category === "ice-cream").slice(0, 9)}
               loading={livePlacesLoading && !usingLivePlaces}
               onPlaceClick={setSelectedPlace}
               onSavePlace={toggleSave}

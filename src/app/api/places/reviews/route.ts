@@ -1,34 +1,28 @@
 import { NextRequest } from "next/server";
-import { getPool } from "@/lib/postgres";
-import { ensureAuthSetup, requireCurrentUser } from "@/lib/auth";
+import { createApiHandler } from "@/lib/server/api-handler";
 import { z } from "zod";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
+import { BadRequestError } from "@/lib/server/api-errors";
 
 const postSchema = z.object({
-  placeId: z.string().min(1, { message: "placeId cannot be empty" }).trim(),
+  placeId: z.string().min(1, { message: "placeId cannot be empty" }).max(200).trim(),
   rating: z.number().int().min(1).max(5),
-  text: z.string().min(1, { message: "Review text cannot be empty" }).trim(),
-  imageUrls: z.array(z.string()).optional(),
+  text: z.string().min(1, { message: "Review text cannot be empty" }).max(2000).trim(),
+  imageUrls: z.array(z.string().url().max(2048)).max(10).optional(),
 });
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) {
-      return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-    }
-    await ensureAuthSetup(pool);
-
+export const GET = createApiHandler(
+  { auth: "none" },
+  async (request: NextRequest, { pool }) => {
     const { searchParams } = new URL(request.url);
     const placeId = searchParams.get("placeId");
     if (!placeId) {
-      return Response.json({ error: "placeId query param required" }, { status: 400 });
+      throw new BadRequestError("placeId query param required");
     }
 
-    // Fetch reviews
     const { rows: reviews } = await pool.query(
       `
       SELECT
@@ -49,7 +43,6 @@ export async function GET(request: NextRequest) {
       [placeId]
     );
 
-    // Calculate aggregate summary
     const { rows: statsRows } = await pool.query(
       `
       SELECT
@@ -66,38 +59,25 @@ export async function GET(request: NextRequest) {
 
     return Response.json({
       reviews,
-      summary: {
-        averageRating,
-        reviewCount
-      }
+      summary: { averageRating, reviewCount },
     }, { status: 200 });
-  } catch (e: any) {
-    console.error("Error in GET /api/places/reviews:", e);
-    return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
   }
-}
+);
 
-export async function POST(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) {
-      return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-    }
-    await ensureAuthSetup(pool);
-    const auth = await requireCurrentUser(pool, request);
-    if (!auth.user) return auth.response;
-
+export const POST = createApiHandler(
+  { auth: "required", rateLimitKey: "POST:/api/places/reviews" },
+  async (request: NextRequest, { pool, user }) => {
     const body = await request.json();
     const parseResult = postSchema.safeParse(body);
     if (!parseResult.success) {
-      return Response.json({ error: "Invalid request body", details: parseResult.error.format() }, { status: 400 });
+      throw new BadRequestError("Invalid request body");
     }
     const { placeId, rating, text, imageUrls = [] } = parseResult.data;
 
     // Check if user already reviewed this place to determine if it is a new review
     const { rows: existing } = await pool.query(
       `SELECT id FROM place_reviews WHERE user_id = $1 AND place_id = $2`,
-      [auth.user.id, placeId]
+      [user!.id, placeId]
     );
     const isNew = existing.length === 0;
 
@@ -108,23 +88,16 @@ export async function POST(request: NextRequest) {
       ON CONFLICT (user_id, place_id)
       DO UPDATE SET rating = EXCLUDED.rating, text = EXCLUDED.text, image_urls = EXCLUDED.image_urls, created_at = NOW()
       `,
-      [auth.user.id, placeId, rating, text, imageUrls]
+      [user!.id, placeId, rating, text, imageUrls]
     );
 
     let newBadges: string[] = [];
     if (isNew) {
       // Award +15 XP for the review event
-      await awardXP(pool, auth.user.id, "write_review", 15);
-      newBadges = await checkAndGrantBadges(pool, auth.user.id);
+      await awardXP(pool, user!.id, "write_review", 15);
+      newBadges = await checkAndGrantBadges(pool, user!.id);
     }
 
-    return Response.json({
-      success: true,
-      isNew,
-      newBadges,
-    }, { status: 201 });
-  } catch (e: any) {
-    console.error("Error in POST /api/places/reviews:", e);
-    return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
+    return Response.json({ success: true, isNew, newBadges }, { status: 201 });
   }
-}
+);

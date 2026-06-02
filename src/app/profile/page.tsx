@@ -8,7 +8,7 @@ import { Header } from "@/components/common/Header";
 import { getPlacesWithDistance } from "@/data/mock-places";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { Place } from "@/types";
-import { formatDistance, getCategoryLabel, getInitials } from "@/lib/utils";
+import { formatDistance, formatPlaceArea, getCategoryLabel, getInitials } from "@/lib/utils";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
@@ -603,13 +603,14 @@ export default function ProfilePage() {
                       </p>
                       <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)]">{place.title}</h3>
                       <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)] leading-relaxed">{place.description}</p>
+                      <p className="mt-1.5 flex items-start gap-1 text-xs font-semibold leading-4 text-[var(--muted-strong)]">
+                        <MapPin size={12} className="mt-0.5 shrink-0 text-cyan-300" />
+                        <span className="line-clamp-2">{formatPlaceArea(place)}</span>
+                      </p>
                     </div>
 
                     <div className="mt-2 flex items-center gap-3 text-xs font-bold text-[var(--muted-strong)]">
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin size={13} className="text-cyan-300" />
-                        {formatDistance(place.distance)}
-                      </span>
+                      <span>{formatDistance(place.distance)} away</span>
                       <span className="inline-flex items-center gap-1">
                         <Star size={13} className="fill-yellow-300 text-yellow-300" />
                         {place.rating}
@@ -858,7 +859,7 @@ export default function ProfilePage() {
                             {s.priceRange}
                           </span>
                           <span className="text-xs text-[var(--muted)] font-bold">
-                            in {s.city} ({s.locality})
+                            in {formatPlaceArea(s)}
                           </span>
                         </div>
                         <h3 className="text-base font-black text-[var(--foreground)] leading-snug">{s.title}</h3>

@@ -21,6 +21,7 @@ const parseCategory = (value: string | null): PlaceCategory => {
     "food-stall",
     "bar",
     "dessert",
+    "ice-cream",
     "street-food",
   ];
   return categories.includes(value as PlaceCategory) ? (value as PlaceCategory) : "event";

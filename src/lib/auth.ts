@@ -93,11 +93,9 @@ export const pruneExpiredSessions = async (pool: Pool) => {
 };
 
 export const getCurrentUser = async (pool: Pool, request: NextRequest): Promise<AuthUser | null> => {
-  await ensureAuthSetup(pool);
   const token = request.cookies.get(authCookieName)?.value;
   if (!token) return null;
 
-  await pruneExpiredSessions(pool);
   const { rows } = await pool.query(
     `
     SELECT
