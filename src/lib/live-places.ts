@@ -1,6 +1,7 @@
 import { calculateDistance } from "@/lib/geo";
 import { resolvePlaceImage } from "@/lib/place-images";
 import { getNearestSupportedCity, getSupportedCityLocation, isWithinSupportedCity } from "@/lib/pune-location";
+import { formatPlaceArea, isUsefulArea } from "@/lib/utils";
 import { Place, PlaceCategory, UserLocation } from "@/types";
 
 type OverpassElement = {
@@ -36,7 +37,7 @@ const getCategoryFromTags = (tags: Record<string, string>): PlaceCategory => {
   if (amenity === "cafe") return "cafe";
   if (amenity === "bar" || amenity === "pub" || amenity === "biergarten") return "bar";
   if (amenity === "nightclub") return "nightlife";
-  if (amenity === "ice_cream") return "dessert";
+  if (amenity === "ice_cream") return "ice-cream";
   if (amenity === "fast_food" || amenity === "food_court") return "food-stall";
   if (amenity === "restaurant") return "restaurant";
   if (
@@ -76,13 +77,19 @@ const getCategoryFromTags = (tags: Record<string, string>): PlaceCategory => {
 };
 
 const getLocality = (tags: Record<string, string>): string => {
-  return (
+  const locality =
     tags["addr:suburb"] ||
     tags["addr:neighbourhood"] ||
-    tags["addr:city"] ||
+    tags["addr:quarter"] ||
+    tags["addr:city_district"] ||
+    tags["addr:borough"] ||
     tags["addr:street"] ||
-    "Nearby"
-  );
+    "";
+  const city = tags["addr:city"] || tags["addr:town"] || tags["addr:village"] || "";
+
+  if (!isUsefulArea(locality) && !isUsefulArea(city)) return "Nearby";
+
+  return formatPlaceArea({ locality, city });
 };
 
 const getTags = (tags: Record<string, string>, category: PlaceCategory): string[] => {
@@ -144,7 +151,12 @@ const DESC_TEMPLATES: Record<PlaceCategory, string[]> = {
   dessert: [
     "Treat yourself to fresh cakes, artisanal pastries, and sweet delicacies at this dessert corner in {locality}.",
     "A delightful sweet spot in {locality}, perfect for satisfying your late-night dessert cravings.",
-    "Indulge in sweet treats, ice creams, and local confectionery at this popular neighborhood shop in {locality}."
+    "Indulge in sweet treats and local confectionery at this popular neighborhood shop in {locality}."
+  ],
+  "ice-cream": [
+    "Cool off with rich, creamy scoops and fresh fruit flavors at this beloved ice cream parlor in {locality}.",
+    "A must-visit ice cream destination in {locality}, serving artisanal flavors, sundaes, and signature cones.",
+    "Beat the heat with handcrafted ice creams, gelatos, and frozen delights at this popular spot in {locality}."
   ],
   "street-food": [
     "A vibrant street food vendor in {locality}, serving up hot, delicious local specialties and savory snacks.",
@@ -587,5 +599,4 @@ export async function fetchLivePlacesByBounds(
 
   return places;
 }
-
 

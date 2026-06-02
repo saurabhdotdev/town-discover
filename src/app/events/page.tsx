@@ -158,10 +158,19 @@ function buildBookMyShowUrl(event: LiveEvent): string {
   return `https://in.bookmyshow.com/explore/events-${region}`;
 }
 
+function formatEventLocation(event: LiveEvent): string {
+  const parts = [event.venue, event.locality, event.city]
+    .map((part) => part?.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(parts)).join(", ");
+}
+
 // ---------- Hero card (large featured event) ----------
 
 function HeroEventCard({ event, onBookClick }: { event: LiveEvent; onBookClick: (event: LiveEvent) => void }) {
   const gradient = CATEGORY_GRADIENTS[event.category] ?? "from-teal-600/30 to-transparent border-teal-500/30";
+  const location = formatEventLocation(event);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -212,9 +221,9 @@ function HeroEventCard({ event, onBookClick }: { event: LiveEvent; onBookClick: 
               <Clock size={13} className="text-cyan-400" />
               {formatTime(event.time)}
             </span>
-            <span className="flex items-center gap-1.5">
-              <MapPin size={13} className="text-rose-400" />
-              {event.venue}, {event.locality}
+            <span className="flex items-start gap-1.5">
+              <MapPin size={13} className="mt-0.5 shrink-0 text-rose-400" />
+              <span className="line-clamp-2">{location}</span>
             </span>
           </div>
         </div>
@@ -246,6 +255,7 @@ function HeroEventCard({ event, onBookClick }: { event: LiveEvent; onBookClick: 
 function EventCard({ event, index, onBookClick }: { event: LiveEvent; index: number; onBookClick: (event: LiveEvent) => void }) {
   const gradient = CATEGORY_GRADIENTS[event.category] ?? "";
   const badge = CATEGORY_BADGE[event.category] ?? "bg-white/10 text-white border-white/20";
+  const location = formatEventLocation(event);
 
   return (
     <motion.article
@@ -300,9 +310,9 @@ function EventCard({ event, index, onBookClick }: { event: LiveEvent; index: num
               {formatTime(event.time)}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 truncate">
-            <MapPin size={12} className="shrink-0 text-rose-400" />
-            <span className="truncate">{event.venue}, {event.locality}</span>
+          <div className="flex items-start gap-1.5">
+            <MapPin size={12} className="mt-0.5 shrink-0 text-rose-400" />
+            <span className="line-clamp-2">{location}</span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">

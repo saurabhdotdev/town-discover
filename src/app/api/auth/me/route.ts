@@ -1,20 +1,14 @@
 import { NextRequest } from "next/server";
-import { getPool } from "@/lib/postgres";
+import { createApiHandler } from "@/lib/server/api-handler";
 import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
-  const pool = getPool();
-  if (!pool) {
-    return Response.json({ user: null });
-  }
-
-  try {
+export const GET = createApiHandler(
+  { auth: "none" },
+  async (request: NextRequest, { pool }) => {
     const user = await getCurrentUser(pool, request);
     return Response.json({ user });
-  } catch {
-    return Response.json({ user: null });
   }
-}
+);

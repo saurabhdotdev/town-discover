@@ -50,6 +50,7 @@ const serializePlan = (row: any) => ({
   routePath: row.routePath ?? [],
   stops: row.stops ?? [],
   createdAt: row.createdAt,
+  ...(row.creatorName != null ? { creatorName: row.creatorName } : {}),
 });
 
 export async function GET(request: NextRequest) {
@@ -64,17 +65,19 @@ export async function GET(request: NextRequest) {
       const { rows } = await pool.query(
         `
         SELECT
-          id,
-          name,
-          source,
-          destination,
-          distance_km AS "distanceKm",
-          duration_minutes AS "durationMinutes",
-          route_path AS "routePath",
-          stops,
-          created_at AS "createdAt"
-        FROM trip_plans
-        WHERE id = $1
+          tp.id,
+          tp.name,
+          tp.source,
+          tp.destination,
+          tp.distance_km AS "distanceKm",
+          tp.duration_minutes AS "durationMinutes",
+          tp.route_path AS "routePath",
+          tp.stops,
+          tp.created_at AS "createdAt",
+          u.full_name AS "creatorName"
+        FROM trip_plans tp
+        LEFT JOIN users u ON u.id = tp.user_id
+        WHERE tp.id = $1
         LIMIT 1
         `,
         [id]
@@ -177,7 +180,7 @@ export async function POST(request: NextRequest) {
       [
         auth.user.id,
         `${plan.name} is ready with ${plan.stops.length} suggested stops.`,
-        `/map?tripPlan=${rows[0].id}`,
+        `/trip/${rows[0].id}`,
       ]
     );
 

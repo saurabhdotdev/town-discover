@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Clock, Download, ExternalLink, MapPin, Navigation, Share2, Star, Train, Users, X, UtensilsCrossed, ChevronLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
-import { formatDistance, formatHours, formatTime, getCategoryLabel, isOpenNow, API_URL, getInitials } from "@/lib/utils";
+import { API_URL, formatDistance, formatHours, formatPlaceArea, formatTime, getCategoryLabel, getInitials, isOpenNow } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getCategoryFallbackImage } from "@/lib/place-images";
 import { SupportedCityName } from "@/lib/pune-location";
@@ -113,11 +113,6 @@ const drawRoundRect = (
 ) => {
   context.beginPath();
   context.roundRect(x, y, width, height, radius);
-};
-
-const isUsefulLocality = (locality: string) => {
-  const normalized = locality.trim().toLowerCase();
-  return Boolean(normalized && normalized !== "nearby" && normalized !== "unknown");
 };
 
 export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClose }) => {
@@ -417,7 +412,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const hasHours = Boolean(activePlace.hours);
   const directionsUrl = `https://www.google.com/maps/search/?api=1&query=${activePlace.latitude},${activePlace.longitude}`;
   const placeUrl = `${getSiteBaseUrl()}/discover?place=${encodeURIComponent(activePlace.id)}`;
-  const outletLocation = isUsefulLocality(activePlace.locality) ? `${activePlace.locality}, ${activePlace.city}` : activePlace.city;
+  const outletLocation = formatPlaceArea(activePlace);
   const searchQuery = `${activePlace.title} ${outletLocation} ${getCategoryLabel(activePlace.category, activePlace.tags)} outlet`;
   const searchWebUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
   const isFoodCategory = ["cafe", "restaurant", "food-stall", "street-food", "dessert"].includes(activePlace.category);
@@ -425,7 +420,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const swiggyUrl = `https://www.swiggy.com/search?query=${encodeURIComponent(activePlace.title + " " + (activePlace.locality || ""))}`;
   const currentSummary = crowdSummary?.placeId === activePlace.id ? crowdSummary : null;
   const hasCrowdSignal = Boolean(currentSummary?.crowdLevel && currentSummary.reportCount > 0);
-  const shareText = `Check out ${activePlace.title} in ${activePlace.locality}, ${activePlace.city} on Sheher. Rating ${activePlace.rating}/5, ${formatDistance(activePlace.distance)} away. ${placeUrl}`;
+  const shareText = `Check out ${activePlace.title} in ${outletLocation} on Sheher. Rating ${activePlace.rating}/5, ${formatDistance(activePlace.distance)} away. ${placeUrl}`;
 
   const submitCrowdReport = async () => {
     if (!user) {
@@ -527,7 +522,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
 
     context.fillStyle = "#c8f7ef";
     context.font = "800 34px Arial";
-    context.fillText(`${activePlace.locality}, ${activePlace.city}`, 72, 810);
+    context.fillText(outletLocation, 72, 810);
 
     drawRoundRect(context, 72, 878, 936, 174, 34);
     context.fillStyle = "rgba(255,255,255,0.1)";
@@ -671,7 +666,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               {getCategoryLabel(activePlace.category, activePlace.tags)}
             </span>
             <h2 className="line-clamp-2 text-2xl font-black tracking-tight text-white sm:text-3xl">{activePlace.title}</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-300">{activePlace.locality}</p>
+            <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-300">{outletLocation}</p>
           </div>
         </div>
 

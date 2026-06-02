@@ -20,7 +20,7 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => m
   loading: () => <MapSkeleton />
 });
 import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2 } from "lucide-react";
-import { cn, formatDistance, getCategoryLabel, isOpenNow } from "@/lib/utils";
+import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow } from "@/lib/utils";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { CITY_CENTERS } from "@/lib/pune-location";
@@ -240,7 +240,9 @@ export default function MapPage() {
   };
 
   const shareTripPlan = async () => {
-    const link = `${window.location.origin}/map${activeTripPlanId ? `?tripPlan=${activeTripPlanId}` : ""}`;
+    const link = activeTripPlanId
+      ? `${window.location.origin}/trip/${activeTripPlanId}`
+      : `${window.location.origin}/map`;
     try {
       if (navigator.share && activeTripPlanId) {
         await navigator.share({
@@ -396,6 +398,7 @@ export default function MapPage() {
       { value: "all", label: "All Spots" },
       ...(citySavedCount > 0 ? [{ value: "saved", label: "❤ Favorites" }] : []),
       { value: "night-drive", label: "Night Drives" },
+      { value: "ice-cream", label: "🍦 Ice Cream" },
       { value: "cafe", label: "Cafes" },
       { value: "restaurant", label: "Restaurants" },
       { value: "event", label: "Events" },
@@ -577,7 +580,7 @@ export default function MapPage() {
                     {getCategoryLabel(focusedPlace.category, focusedPlace.tags)}
                   </p>
                   <h2 className="mt-1 line-clamp-1 text-base font-black text-[var(--foreground)] sm:text-lg">{focusedPlace.title}</h2>
-                  <p className="mt-1 text-sm text-[var(--muted)]">{focusedPlace.locality}</p>
+                  <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--muted-strong)]">{formatPlaceArea(focusedPlace)}</p>
                 </div>
                 <button
                   type="button"
@@ -631,7 +634,7 @@ export default function MapPage() {
                     </p>
                     <h3 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h3>
                     <div className="mt-2 flex items-center justify-between gap-2 text-xs font-bold text-[var(--muted-strong)]">
-                      <span className="truncate">{place.locality}</span>
+                      <span className="line-clamp-1">{formatPlaceArea(place)}</span>
                       <span className="inline-flex items-center gap-1 text-amber-300">
                         <Star size={12} className="fill-amber-300" />
                         {place.rating}
@@ -742,7 +745,7 @@ export default function MapPage() {
                               {getCategoryLabel(place.category, place.tags)}
                             </p>
                             <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)]">{place.title}</h3>
-                            <p className="mt-1 line-clamp-1 text-sm text-[var(--muted)]">{place.locality}</p>
+                            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--muted-strong)]">{formatPlaceArea(place)}</p>
                           </div>
                           <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${hasHours ? (open ? "bg-emerald-300 text-slate-950" : "bg-rose-500 text-white") : "bg-slate-700 text-slate-200"}`}>
                             {!hasHours ? "Unknown" : open ? "Open" : "Closed"}
@@ -1028,7 +1031,7 @@ export default function MapPage() {
                                     {getCategoryLabel(stop.category, stop.tags)}
                                   </p>
                                   <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)] text-sm">{stop.title}</h3>
-                                  <p className="mt-1 line-clamp-1 text-xs text-[var(--muted)]">{stop.locality}</p>
+                                  <p className="mt-1 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">{formatPlaceArea(stop)}</p>
                                 </div>
                                 <span className="shrink-0 flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-300 border border-emerald-500/20">
                                   ★ {stop.rating}
@@ -1042,7 +1045,7 @@ export default function MapPage() {
                               <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-[var(--muted-strong)] border-t border-[var(--border)] pt-2.5">
                                 <span className="inline-flex items-center gap-1">
                                   <MapPin size={11} className="text-cyan-300" />
-                                  <span>{stop.locality.split(",")[0]}</span>
+                                  <span className="line-clamp-1">{formatPlaceArea(stop)}</span>
                                 </span>
                                 <span className="font-black text-cyan-400 uppercase tracking-wider">
                                   {stop.priceRange}

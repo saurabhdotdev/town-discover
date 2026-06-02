@@ -30,6 +30,7 @@ const categoryColor: Record<string, string> = {
   "food-stall": "#eab308",
   bar: "#fb7185",
   dessert: "#14b8a6",
+  "ice-cream": "#e879f9",
   "street-food": "#f97316",
 };
 
@@ -41,6 +42,7 @@ const categoryGlowColor: Record<string, string> = {
   "food-stall": "rgba(234, 179, 8, 0.5)",
   bar: "rgba(251, 113, 133, 0.5)",
   dessert: "rgba(20, 184, 166, 0.5)",
+  "ice-cream": "rgba(232, 121, 249, 0.5)",
   "street-food": "rgba(249, 115, 22, 0.5)",
 };
 
@@ -101,6 +103,13 @@ const categoryIconSVG: Record<string, string> = {
       <path d="M3 3h18v4H3z"/>
       <path d="M12 7v14"/>
       <path d="M7 11h10"/>
+    </svg>
+  `,
+  "ice-cream": `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m7 11 4.08 10.35a1 1 0 0 0 1.84 0L17 11"/>
+      <path d="M17 7A5 5 0 0 0 7 7"/>
+      <path d="M17 7a2 2 0 0 1 0 4H7a2 2 0 0 1 0-4"/>
     </svg>
   `,
   car: `

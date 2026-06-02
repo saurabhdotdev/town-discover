@@ -1,5 +1,31 @@
 import { Place, UserLocation } from "@/types";
 import { SupportedCityName } from "@/lib/pune-location";
+import { formatPlaceArea, isUsefulArea } from "@/lib/utils";
+
+const parseLocalityFromAddress = (address: string, city: string): string => {
+  const parts = address
+    .split(",")
+    .map((part) => part.replace(/\b\d{5,6}\b/g, "").trim())
+    .filter(Boolean)
+    .filter((part) => {
+      const normalized = part.toLowerCase();
+      return (
+        normalized !== "india" &&
+        !normalized.includes("maharashtra") &&
+        !normalized.includes("karnataka") &&
+        !normalized.includes("delhi") &&
+        !normalized.includes("tamil nadu") &&
+        !normalized.includes("uttar pradesh")
+      );
+    });
+
+  const locality =
+    parts.find((part) => part.toLowerCase() !== city.toLowerCase() && isUsefulArea(part)) ||
+    parts[0] ||
+    "";
+
+  return formatPlaceArea({ locality, city });
+};
 
 export async function fetchGooglePlaces(
   query: string,
@@ -63,7 +89,7 @@ export async function fetchGooglePlaces(
     }
 
     const address = p.formattedAddress || "";
-    const locality = address.split(",")[1]?.trim() || address.split(",")[0]?.trim() || "Nearby";
+    const locality = parseLocalityFromAddress(address, city);
 
     return {
       id: placeId,

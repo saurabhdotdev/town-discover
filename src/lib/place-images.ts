@@ -227,6 +227,12 @@ const CATEGORY_POOLS: Record<PlaceCategory, string[]> = {
     "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=640&q=80",
     "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=640&q=80"
   ],
+  "ice-cream": [
+    "https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&w=640&q=80",
+    "https://images.unsplash.com/photo-1570197788417-0e82375c9be7?auto=format&fit=crop&w=640&q=80",
+    "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=640&q=80",
+    "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=640&q=80"
+  ],
   "street-food": [
     "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=640&q=80",
     "https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=640&q=80",

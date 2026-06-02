@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { getPool } from "@/lib/postgres";
-import { ensureAuthSetup, requireCurrentUser } from "@/lib/auth";
+import { createApiHandler } from "@/lib/server/api-handler";
 import { z } from "zod";
+import { BadRequestError, NotFoundError } from "@/lib/server/api-errors";
 
 const flagSchema = z.object({
   hangoutId: z.string().uuid({ message: "Invalid hangout ID format" }),
@@ -10,20 +10,13 @@ const flagSchema = z.object({
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) {
-      return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-    }
-    await ensureAuthSetup(pool);
-    const auth = await requireCurrentUser(pool, request);
-    if (!auth.user) return auth.response;
-
+export const POST = createApiHandler(
+  { auth: "required" },
+  async (request: NextRequest, { pool, user }) => {
     const body = await request.json();
     const parseResult = flagSchema.safeParse(body);
     if (!parseResult.success) {
-      return Response.json({ error: "Invalid request data", details: parseResult.error.format() }, { status: 400 });
+      throw new BadRequestError("Invalid request data");
     }
     const { hangoutId } = parseResult.data;
 
@@ -33,7 +26,7 @@ export async function POST(request: NextRequest) {
       [hangoutId]
     );
     if (hangouts.length === 0) {
-      return Response.json({ error: "Hangout not found." }, { status: 404 });
+      throw new NotFoundError("Hangout not found.");
     }
 
     // Insert flag (primary key handles unique constraint)
@@ -41,7 +34,7 @@ export async function POST(request: NextRequest) {
       `INSERT INTO hangout_flags (hangout_id, user_id) 
        VALUES ($1, $2) 
        ON CONFLICT (hangout_id, user_id) DO NOTHING`,
-      [hangoutId, auth.user.id]
+      [hangoutId, user!.id]
     );
 
     return Response.json({
@@ -49,8 +42,5 @@ export async function POST(request: NextRequest) {
       flagged: true,
       message: "Hangout reported successfully.",
     }, { status: 200 });
-  } catch (e: any) {
-    console.error("Error in POST /api/hangouts/flag:", e);
-    return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
   }
-}
+);

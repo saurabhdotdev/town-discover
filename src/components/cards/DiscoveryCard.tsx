@@ -8,6 +8,7 @@ import {
   Coffee,
   ExternalLink,
   Flame,
+  IceCreamCone,
   MapPin,
   Martini,
   Share2,
@@ -23,7 +24,7 @@ import {
 import { CrowdLevel, CrowdSummary, Place, PlaceCategory } from "@/types";
 import { getCategoryFallbackImage } from "@/lib/place-images";
 import { SupportedCityName } from "@/lib/pune-location";
-import { formatDistance, formatHours, getCategoryAccent, getCategoryLabel, isOpenNow, API_URL } from "@/lib/utils";
+import { API_URL, formatDistance, formatHours, formatPlaceArea, getCategoryAccent, getCategoryLabel, isOpenNow } from "@/lib/utils";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
@@ -45,6 +46,7 @@ const categoryIcons: Record<PlaceCategory, React.ReactNode> = {
   "food-stall": <Store size={15} />,
   bar: <Martini size={15} />,
   dessert: <Sparkles size={15} />,
+  "ice-cream": <IceCreamCone size={15} />,
   "street-food": <Store size={15} />,
 };
 
@@ -60,11 +62,6 @@ const crowdStyles: Record<CrowdLevel, string> = {
   moderate: "bg-cyan-300 text-slate-950",
   busy: "bg-amber-300 text-slate-950",
   very_crowded: "bg-rose-500 text-white",
-};
-
-const isUsefulLocality = (locality: string) => {
-  const normalized = locality.trim().toLowerCase();
-  return Boolean(normalized && normalized !== "nearby" && normalized !== "unknown");
 };
 
 export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
@@ -137,17 +134,17 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
   const open = isOpenNow(place.hours);
   const hasHours = Boolean(place.hours);
   const hasCrowdSignal = Boolean(localCrowdSummary?.crowdLevel && localCrowdSummary.reportCount > 0);
+  const areaLabel = formatPlaceArea(place);
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
     const shareData = {
       title: place.title,
-      text: `${place.title} in ${place.locality}, ${place.city} - ${place.description}`,
+      text: `${place.title} in ${areaLabel} - ${place.description}`,
       url: window.location.href,
     };
-    const outletLocation = isUsefulLocality(place.locality) ? `${place.locality}, ${place.city}` : place.city;
-    const exactSearchQuery = `${place.title} ${outletLocation} ${getCategoryLabel(place.category)} outlet`;
+    const exactSearchQuery = `${place.title} ${areaLabel} ${getCategoryLabel(place.category)} outlet`;
 
     try {
       if (navigator.share) {
@@ -249,11 +246,14 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
         <div className="flex flex-1 flex-col gap-2.5 p-3 sm:gap-3 sm:p-4">
           <div className="min-w-0">
             <h3 className="line-clamp-2 text-base font-black leading-tight text-[var(--foreground)] sm:text-lg">{place.title}</h3>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--muted)]">
-              <MapPin size={14} className="shrink-0 text-cyan-300" />
-              <span className="truncate">
-                {place.locality} - {formatDistance(place.distance)}
+            <p className="mt-1 flex items-start gap-1.5 text-sm font-semibold leading-5 text-[var(--muted-strong)]">
+              <MapPin size={14} className="mt-0.5 shrink-0 text-cyan-300" />
+              <span className="line-clamp-2">
+                {areaLabel}
               </span>
+            </p>
+            <p className="mt-0.5 pl-5 text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted)]">
+              {formatDistance(place.distance)} away
             </p>
           </div>
 

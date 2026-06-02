@@ -88,6 +88,7 @@ const CATEGORY_MOOD: Record<PlaceCategory, Partial<MoodProfile>> = {
   "food-stall": { foodie: 0.8, budget: 0.65 },
   bar: { social: 0.8, romantic: 0.45, energetic: 0.55 },
   dessert: { chill: 0.5, foodie: 0.6, romantic: 0.35 },
+  "ice-cream": { chill: 0.65, foodie: 0.75, romantic: 0.4, social: 0.35 },
   "street-food": { foodie: 0.85, budget: 0.7, adventurous: 0.35 },
 };
 

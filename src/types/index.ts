@@ -1,4 +1,4 @@
-export type PlaceCategory = "cafe" | "restaurant" | "event" | "nightlife" | "food-stall" | "bar" | "dessert" | "street-food";
+export type PlaceCategory = "cafe" | "restaurant" | "event" | "nightlife" | "food-stall" | "bar" | "dessert" | "ice-cream" | "street-food";
 export type { SupportedCityName } from '@/lib/pune-location';
 
 export interface Location {

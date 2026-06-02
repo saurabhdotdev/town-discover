@@ -9,7 +9,8 @@ const categoryTerms: Record<PlaceCategory, string[]> = {
   nightlife: ["nightlife", "club", "party", "dance", "late night", "music"],
   "food-stall": ["food stall", "snack", "quick bite", "chaat", "street"],
   bar: ["bar", "pub", "drinks", "cocktail", "date", "rooftop", "late night"],
-  dessert: ["dessert", "sweet", "ice cream", "bakery", "cake"],
+  dessert: ["dessert", "sweet", "bakery", "cake", "pastry", "chocolate"],
+  "ice-cream": ["ice cream", "icecream", "gelato", "kulfi", "sundae", "scoop", "cone", "frozen", "softy", "sorbet"],
   "street-food": ["street food", "misal", "vada pav", "chaat", "snack", "quick bite"],
 };
 
