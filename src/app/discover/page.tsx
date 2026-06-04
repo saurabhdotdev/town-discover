@@ -18,7 +18,10 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  Plane,
+  ShoppingBag,
+  Bed
 } from "lucide-react";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
@@ -34,12 +37,14 @@ import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { MOCK_PLACES, getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { Place, PlaceCategory } from "@/types";
-import { getCategoryLabel, isVegetarianPlace } from "@/lib/utils";
+import { cn, getCategoryLabel, isVegetarianPlace } from "@/lib/utils";
 import { CITY_CENTERS, getCityFromQuery, stripCityFromQuery } from "@/lib/pune-location";
 import { useCitySelection } from "@/hooks/useCitySelection";
 import { useMoodSelection } from "@/hooks/useMoodSelection";
 import { getMoodLabel, getTopMoodRecommendations, inferMoodProfile, getMoodMatchScore } from "@/lib/mood-recommendations";
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
   ssr: false,
@@ -74,6 +79,170 @@ const categories: { id: CategoryFilter; label: string; icon: React.ReactNode }[]
   { id: "food-stall", label: "Street Food", icon: <Store size={17} /> },
 ];
 
+interface AirportRecommendation {
+  title: string;
+  description: string;
+  location: string;
+  isPremium?: boolean;
+  couponCode?: string;
+}
+
+interface AirportGuide {
+  name: string;
+  city: string;
+  terminal: string;
+  loungeDiscountPercent?: number;
+  layovers: {
+    quick: AirportRecommendation[];
+    medium: AirportRecommendation[];
+    long: AirportRecommendation[];
+  };
+  lounges: {
+    name: string;
+    location: string;
+    amenities: string[];
+    premiumBenefit: string;
+    couponCode?: string;
+  }[];
+}
+
+const AIRPORT_GUIDES: Record<string, AirportGuide> = {
+  PNQ: {
+    name: "Pune Airport (Lohegaon)",
+    city: "Pune",
+    terminal: "New Integrated Terminal",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "Chai Point Express", description: "Grab a piping hot traditional Elaichi Chai & bun maska in less than 3 minutes.", location: "Departure Gates, Area 2" },
+        { title: "Charge Hub & Workspace", description: "Ergonomic charging bays and standing desks with free high-speed airport Wi-Fi.", location: "Near Gate 4" },
+        { title: "Local Craft Souvenirs", description: "Quick window shopping for traditional brasswares and Puneri accessories.", location: "Retail Arcade" }
+      ],
+      medium: [
+        { title: "Earth Lounge Access", description: "Relax on comfortable leather recliners with a gourmet hot buffet spread.", location: "First Floor, Departure Area", isPremium: true, couponCode: "SHEHER_PNQ_EARTH" },
+        { title: "The Coffee Bean & Tea Leaf", description: "Sip an ice-blended coffee while reading book selections at the library shelf.", location: "Security Hold Area" },
+        { title: "Pavers England", description: "Browse and try premium hand-stitched leather footwear and traveling accessories.", location: "Retail Boulevard" }
+      ],
+      long: [
+        { title: "Aroma Wellness & Reflexology", description: "Indulge in a 30-minute express foot reflexology or back massage to de-stress.", location: "Near Gate 6", isPremium: true, couponCode: "SPA_SHEHER_30" },
+        { title: "Silent resting alcoves", description: "Rest in quiet relaxation chairs with dim lighting away from boarding announcements.", location: "Upper Level, opposite Gate 8" }
+      ]
+    },
+    lounges: [
+      {
+        name: "Earth Lounge",
+        location: "First Floor, near gate 3",
+        amenities: ["Gourmet Buffet", "Free High-Speed Wi-Fi", "Charging Stations", "Flight Monitors"],
+        premiumBenefit: "Free Entry + Dedicated Lounge Pass with Sheher Premium Pass",
+        couponCode: "SHEHER-PNQ-LOUNGE"
+      }
+    ]
+  },
+  BOM: {
+    name: "Chhatrapati Shivaji Maharaj International Airport (T2)",
+    city: "Mumbai",
+    terminal: "Terminal 2 - Luxury Hub",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "Jaya He Museum Walk", description: "India's largest public art program. Explore 5,500+ stunning historical artifacts spanning a 3km walkway.", location: "Departures Level 3 & 4" },
+        { title: "Third Wave Coffee Roasters", description: "Quick hand-brewed single-origin Pour Over coffee.", location: "Domestic Departures, Gate 45" },
+        { title: "Scentido Luxury Perfumery", description: "Try exotic niche perfumes from global designers.", location: "Duty Free Walkway" }
+      ],
+      medium: [
+        { title: "Adani Lounge (Luxury Class)", description: "Ultra-luxury airport lounge experience with five-star live cooking stations and custom cocktail mixers.", location: "Level 4, Departures", isPremium: true, couponCode: "SHEHER_BOM_ADANI" },
+        { title: "Lotus Spa by O2", description: "Luxury body massage therapies, dry steam baths, and hot stone reflexology.", location: "Level 3, near Gate 64", isPremium: true, couponCode: "SPA_BOM_O2" },
+        { title: "Forest Essentials Retail", description: "Indulge in pure Ayurvedic luxury skincare consultations and complimentary tester kits.", location: "Luxury Galleria" }
+      ],
+      long: [
+        { title: "Niranta Transit Hotel & Lounge", description: "Rent a cozy hourly sleeping room, take a refreshing hot shower, and enjoy a premium buffet.", location: "Landside, Terminal 2", isPremium: true, couponCode: "NIRANTA_SHEHER_20" },
+        { title: "Prana Spa & Salon Lounge", description: "Full beauty parlor, styling, hair treatments, and holistic massages.", location: "Departures Level 4" },
+        { title: "Luxury Duty-Free Exploration", description: "Browse exclusive Single Malts, gourmet chocolates, and high-end watches with personal shopper assistance.", location: "Duty-Free Core" }
+      ]
+    },
+    lounges: [
+      {
+        name: "Adani Lounge (Luxury Class)",
+        location: "Level 4, T2 (Post-Security)",
+        amenities: ["Live Chef Counters", "Premium Bar", "Shower Suites", "Massage Chairs", "Business Center"],
+        premiumBenefit: "Complimentary access for Sheher Pass holders (Valid once/quarter)",
+        couponCode: "SHEHER-BOM-ADANI-VIP"
+      }
+    ]
+  },
+  BLR: {
+    name: "Kempegowda International Airport (T2)",
+    city: "Bengaluru",
+    terminal: "Terminal 2 - Terminal in a Garden",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "T2 Forest Walkway", description: "Walk through the stunning indoor bamboo gardens, moss walls, and hanging plant bells.", location: "T2 Transit Core" },
+        { title: "Araku Coffee Experience", description: "Quick luxury organic espresso shot sourced from the Araku Valley.", location: "Departures Retail" },
+        { title: "Tech charging pods", description: "Ergonomic charging capsules equipped with high-speed ports.", location: "Gate 12" }
+      ],
+      medium: [
+        { title: "080 Lounge (Domestic/International)", description: "Premium Bengaluru-themed lounge featuring curated library rooms, cocktail bars, and chef counters.", location: "Level 2, Domestic Departures", isPremium: true, couponCode: "SHEHER_BLR_080" },
+        { title: "Windmills Craftworks Bar", description: "Sip micro-brewed craft beers on tap while waiting for boarding calls.", location: "T2 Pier F", isPremium: true, couponCode: "WINDMILLS_FREE_BREW" },
+        { title: "The Quad Mall Exploration", description: "Step just outside T1 to experience an outdoor plaza filled with live music, restaurants, and shopping stores.", location: "Arrivals Quad Plaza" }
+      ],
+      long: [
+        { title: "Snooze At My Space Pods", description: "Soundproof sleeping pods with individual climate controls and work desk settings.", location: "T2, Near Gate 21", isPremium: true, couponCode: "SNOOZE_BLR_SHEHER" },
+        { title: "O2 Spa Sanctuary", description: "Traditional Swedish therapy or deep tissue massages for complete relaxation.", location: "T2 Upper Level" }
+      ]
+    },
+    lounges: [
+      {
+        name: "080 Lounge (Garden City Premium)",
+        location: "T2 Departures, near Gate 15",
+        amenities: ["Curated Library Room", "Whiskey Bar", "Live Wok & Pasta Counters", "Private Resting Cabins"],
+        premiumBenefit: "Free access (subject to availability) + Priority Booking for Sheher Pass holders",
+        couponCode: "SHEHER-BLR-080"
+      }
+    ]
+  },
+  DEL: {
+    name: "Indira Gandhi International Airport (T3)",
+    city: "Delhi",
+    terminal: "Terminal 3 - Global Gateway",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "Starbucks Reserve Experience", description: "Taste exclusive reserve blends in a highly stylish lounge cafe.", location: "T3 Retail Hub" },
+        { title: "Charging Stations & Loungers", description: "Relax on reclining leather chairs with direct USB and AC outlets.", location: "Gates 27-36 Corridor" },
+        { title: "Hamleys Toy Store Experience", description: "Fun, color-filled live displays and gadget testing counters.", location: "T3 Departures" }
+      ],
+      medium: [
+        { title: "Encalm Lounge", description: "Massive lounge area with extensive culinary dishes, a live bar, and relaxing environments.", location: "Lounge Mezzanine Level", isPremium: true, couponCode: "SHEHER_DEL_ENCALM" },
+        { title: "Encalm Spa Wellness", description: "Revitalizing aromatherapy treatments and fast foot massages.", location: "Lounge Level, T3", isPremium: true, couponCode: "SPA_DEL_ENCALM" },
+        { title: "Delhi Bazaar Retail Walk", description: "Browse curated Indian spices, luxury teas, and hand-woven pashmina shawls.", location: "Duty Free Lane" }
+      ],
+      long: [
+        { title: "SAM Snooze Pods", description: "Comfortable air-conditioned micro-hotel pods rented hourly with TV and Wi-Fi.", location: "International Departures, T3", isPremium: true, couponCode: "SAM_SNOOZE_DELHI" },
+        { title: "Holiday Inn Express Transit Hotel", description: "Check in for an hourly room, get access to the fitness center and hot showers.", location: "Level 5, Departures T3", isPremium: true, couponCode: "HOLIDAY_IN_DELHI" }
+      ]
+    },
+    lounges: [
+      {
+        name: "Encalm Lounge (T3 Mezzanine)",
+        location: "Level 4, T3 Departures",
+        amenities: ["Extensive International Buffet", "Bar Station", "Dedicated Workstations", "Wi-Fi & Magazines"],
+        premiumBenefit: "100% Free Entry + Fast Track Lounge Check-In with Sheher Pass Card",
+        couponCode: "SHEHER-DEL-ENCALM-VIP"
+      }
+    ]
+  }
+};
+
+const getCityIATA = (cityName: string): string => {
+  const normalized = cityName.toLowerCase().trim();
+  if (normalized.includes("pune")) return "PNQ";
+  if (normalized.includes("mumbai") || normalized.includes("bombay")) return "BOM";
+  if (normalized.includes("bangalore") || normalized.includes("bengaluru")) return "BLR";
+  if (normalized.includes("delhi")) return "DEL";
+  return "";
+};
+
 export default function DiscoverPage() {
   const {
     location,
@@ -106,7 +275,17 @@ export default function DiscoverPage() {
   // Spotlight Banner State
   const [spotlightIndex, setSpotlightIndex] = useState(0);
 
+  // Router and Auth
+  const router = useRouter();
+  const { user } = useAuth();
+
+  // Sheher Airport Companion State
+  const [isAirportGuideOpen, setIsAirportGuideOpen] = useState(false);
+  const [selectedAirportCode, setSelectedAirportCode] = useState<string>("BOM");
+  const [layoverTimeBucket, setLayoverTimeBucket] = useState<"quick" | "medium" | "long">("quick");
+
   const activeCity = getCityFromQuery(query) ?? (!hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity);
+  const activeAirportCode = getCityIATA(activeCity);
   const queryLocation = CITY_CENTERS[activeCity];
   const distanceReference = locationSource === "browser" && location && activeCity === detectedCity ? location : queryLocation;
 
@@ -473,6 +652,43 @@ export default function DiscoverPage() {
           </section>
         )}
 
+        {/* Sheher Airport Companion Banner */}
+        {!hasFilters && activeAirportCode && AIRPORT_GUIDES[activeAirportCode] && (
+          <section className="mb-5 overflow-hidden rounded-lg border border-amber-500/30 bg-gradient-to-r from-slate-950 via-[#0b1c24] to-[#050b0d] p-5 shadow-xl md:mb-6 relative">
+            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+              <Plane size={120} className="rotate-45 text-amber-400 animate-pulse" style={{ animationDuration: '4s' }} />
+            </div>
+            <div className="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex rounded-full bg-amber-400/20 text-amber-300 px-2.5 py-0.5 text-[10px] font-black uppercase border border-amber-500/30 tracking-wider">
+                    ✈️ SHEHER AIRPORT COMPANION
+                  </span>
+                  <span className="inline-flex rounded-full bg-white/5 text-[var(--muted)] px-2 py-0.5 text-[9px] font-bold border border-white/10 uppercase tracking-widest">
+                    {activeAirportCode}
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-white leading-tight">
+                  Terminal Guide: {AIRPORT_GUIDES[activeAirportCode].name}
+                </h3>
+                <p className="text-xs font-semibold text-slate-400 max-w-2xl">
+                  Laying over or waiting for a flight at {AIRPORT_GUIDES[activeAirportCode].terminal}? Discover curated spots by time budget, relaxation areas, or claim premium lounge access coupons.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAirportCode(activeAirportCode);
+                  setIsAirportGuideOpen(true);
+                }}
+                className="shrink-0 rounded-lg bg-amber-400 px-5 py-3 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/10 transition hover:bg-amber-350 active:scale-95 cursor-pointer"
+              >
+                Explore Terminal {activeAirportCode} 🔍
+              </button>
+            </div>
+          </section>
+        )}
+
         <div className="app-surface rounded-lg p-3 md:p-4">
           <CitySwitcher
             value={activeCity}
@@ -799,6 +1015,189 @@ export default function DiscoverPage() {
           )}
         </div>
       </div>
+
+      {/* Airport layover companion guide modal */}
+      <AnimatePresence>
+        {isAirportGuideOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[900] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="relative w-full max-w-lg rounded-2xl border border-amber-500/30 bg-slate-950 p-6 shadow-2xl z-50 max-h-[90vh] overflow-y-auto no-scrollbar"
+            >
+              <button
+                type="button"
+                onClick={() => setIsAirportGuideOpen(false)}
+                className="absolute right-4 top-4 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+
+              {/* Modal Header */}
+              <div className="mb-5 flex items-center gap-3 border-b border-white/5 pb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                  <Plane size={24} className="rotate-45" />
+                </div>
+                <div className="text-left">
+                  <span className="text-[9px] font-black uppercase tracking-[0.25em] text-amber-400">SHEHER TERMINAL COMPANION</span>
+                  <h3 className="text-lg font-black text-white leading-tight">
+                    {AIRPORT_GUIDES[selectedAirportCode]?.name || `${selectedAirportCode} International Airport`}
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                    {AIRPORT_GUIDES[selectedAirportCode]?.terminal || "All Terminals"} · {AIRPORT_GUIDES[selectedAirportCode]?.city}
+                  </p>
+                </div>
+              </div>
+
+              {/* Time-Budget Selector Tabs */}
+              <div className="mb-5">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-2 text-left">
+                  Select your remaining layover time:
+                </span>
+                <div className="grid grid-cols-3 gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+                  {[
+                    { id: "quick", label: "< 1 Hour", desc: "Quick Grab" },
+                    { id: "medium", label: "1-3 Hours", desc: "Relax & Dine" },
+                    { id: "long", label: "3+ Hours", desc: "Sleep & Spa" }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setLayoverTimeBucket(tab.id as any)}
+                      className={cn(
+                        "flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-bold transition cursor-pointer",
+                        layoverTimeBucket === tab.id
+                          ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/10"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <span>{tab.label}</span>
+                      <span className="text-[8px] opacity-75 font-semibold mt-0.5">{tab.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommendations Content */}
+              <div className="space-y-4 mb-6">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block text-left">
+                  Curated Recommendations:
+                </span>
+                
+                {AIRPORT_GUIDES[selectedAirportCode]?.layovers[layoverTimeBucket]?.length > 0 ? (
+                  AIRPORT_GUIDES[selectedAirportCode].layovers[layoverTimeBucket].map((rec, idx) => (
+                    <div
+                      key={idx}
+                      className="flex gap-3 bg-white/5 p-4 rounded-xl border border-white/5 text-left items-start hover:border-amber-400/20 transition duration-150"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-amber-300 text-xs font-black">
+                        {idx === 0 ? <Coffee size={14} /> : idx === 1 ? <ShoppingBag size={14} /> : <Bed size={14} />}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-sm font-black text-white leading-snug">{rec.title}</h4>
+                          {rec.isPremium && (
+                            <span className="text-[8px] font-black tracking-wider uppercase bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30">
+                              Premium Benefit
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed font-medium">{rec.description}</p>
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                          <MapPin size={10} />
+                          <span>{rec.location}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 bg-white/5 rounded-xl border border-white/5">
+                    <p className="text-xs font-bold text-slate-400">No custom recommendations configured for this duration.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Premium Lounge Access Section */}
+              {AIRPORT_GUIDES[selectedAirportCode]?.lounges && (
+                <div className="border border-amber-500/20 bg-gradient-to-br from-slate-900 to-amber-950/20 rounded-xl p-4 text-left">
+                  <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={16} className="text-amber-400" />
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">Sheher Premium Lounge Access</span>
+                    </div>
+                    <span className="text-[8px] font-black tracking-widest text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      VIP LOUNGE
+                    </span>
+                  </div>
+
+                  {AIRPORT_GUIDES[selectedAirportCode].lounges.map((lounge, lIdx) => (
+                    <div key={lIdx} className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="text-sm font-black text-white">{lounge.name}</h4>
+                          <p className="text-[10px] text-slate-400 font-semibold">{lounge.location}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {lounge.amenities.slice(0, 4).map((amenity, aIdx) => (
+                          <span key={aIdx} className="text-[8px] font-black text-slate-300 bg-white/5 px-2 py-0.5 rounded border border-white/5 uppercase">
+                            ✓ {amenity}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Check if user is premium */}
+                      {user?.isPremiumPass ? (
+                        <div className="bg-amber-400 text-slate-950 rounded-lg p-3 text-center border border-amber-500 mt-2">
+                          <div className="text-[9px] font-black tracking-wider uppercase opacity-75">Your Exclusive Coupon Code</div>
+                          <div className="text-base font-black tracking-[0.1em] font-mono select-all my-0.5">
+                            {lounge.couponCode || "SHEHER-VIP"}
+                          </div>
+                          <p className="text-[9px] font-bold leading-tight mt-0.5">
+                            {lounge.premiumBenefit}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="relative rounded-lg p-3 border border-white/10 bg-slate-900/60 backdrop-blur-sm mt-2 text-center overflow-hidden">
+                          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] flex flex-col justify-center items-center p-2 text-center">
+                            <span className="text-[9px] font-black uppercase text-amber-400 tracking-wider">🔒 EXCLUSIVE BENEFIT</span>
+                            <p className="text-[10px] text-slate-300 font-bold leading-tight max-w-[280px] my-1">
+                              Upgrade to the **Sheher Pass** to unlock free lounge coupons and premium discounts.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAirportGuideOpen(false);
+                                router.push("/profile");
+                              }}
+                              className="mt-1 rounded bg-amber-400 px-2.5 py-1 text-[9px] font-black uppercase text-slate-950 hover:bg-amber-350 active:scale-95 transition cursor-pointer"
+                            >
+                              Get Sheher Pass 💳
+                            </button>
+                          </div>
+                          {/* Teaser placeholder for background blur */}
+                          <div className="filter blur-[3px] select-none opacity-40">
+                            <div className="text-[9px] font-black uppercase text-amber-300">COUPON CODE</div>
+                            <div className="text-base font-black font-mono">XXXX-XXXX-XXXX</div>
+                            <p className="text-[9px] font-bold">Details restricted to Sheher Pass holders</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <PlaceDetailModal place={selectedPlace} onClose={() => setSelectedPlace(null)} />
     </div>
