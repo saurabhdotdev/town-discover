@@ -12,7 +12,7 @@ interface MapProps {
   places: Place[];
   userLocation: UserLocation | null;
   selectedPlace?: Place | null;
-  onMarkerClick?: (place: Place) => void;
+  onMarkerClick?: (place: Place | null) => void;
   onCenterChange?: (center: { latitude: number; longitude: number }) => void;
   onBoundsChange?: (bounds: { south: number; west: number; north: number; east: number }) => void;
   className?: string;
@@ -212,6 +212,10 @@ export const MapView: React.FC<MapProps> = ({
         });
       });
 
+      nextMap.on("click", () => {
+        onMarkerClick?.(null);
+      });
+
       L.control.zoom({ position: "bottomright" }).addTo(nextMap);
 
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -311,6 +315,7 @@ export const MapView: React.FC<MapProps> = ({
 
       const marker = L.marker([place.latitude, place.longitude], {
         icon: markerIcon,
+        bubblingMouseEvents: false,
       })
         .addTo(map.current!)
         .bindPopup(`

@@ -24,6 +24,7 @@ import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
+import { LazyImage } from "@/components/common/LazyImage";
 import { DiscoverySection } from "@/components/cards/DiscoverySection";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import dynamic from "next/dynamic";
@@ -33,11 +34,11 @@ import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { MOCK_PLACES, getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { Place, PlaceCategory } from "@/types";
-import { getCategoryLabel } from "@/lib/utils";
+import { getCategoryLabel, isVegetarianPlace } from "@/lib/utils";
 import { CITY_CENTERS, getCityFromQuery, stripCityFromQuery } from "@/lib/pune-location";
 import { useCitySelection } from "@/hooks/useCitySelection";
 import { useMoodSelection } from "@/hooks/useMoodSelection";
-import { getMoodLabel, getTopMoodRecommendations } from "@/lib/mood-recommendations";
+import { getMoodLabel, getTopMoodRecommendations, inferMoodProfile, getMoodMatchScore } from "@/lib/mood-recommendations";
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
@@ -89,6 +90,7 @@ export default function DiscoverPage() {
   const debouncedQuery = useDebounce(query, 300);
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>("all");
   const [openOnly, setOpenOnly] = useState(false);
+  const [vegOnly, setVegOnly] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("recommended");
   const [page, setPage] = useState(1);
   const [now, setNow] = useState(() => new Date());
@@ -120,6 +122,7 @@ export default function DiscoverPage() {
   const [curatedPlaces, setCuratedPlaces] = useState<Place[]>([]);
   useEffect(() => {
     let cancelled = false;
+    setCuratedPlaces([]); // Clear stale curated places on city change
     getFallbackPlacesForCity(activeCity).then((places) => {
       if (!cancelled) setCuratedPlaces(places);
     });
@@ -128,16 +131,40 @@ export default function DiscoverPage() {
     };
   }, [activeCity]);
 
-  const allPlaces = useMemo(
+  const rawPlaces = useMemo(
     () =>
       getPlacesWithDistance(combineLiveAndCuratedPlaces(livePlaces, curatedPlaces), distanceReference),
     [distanceReference, curatedPlaces, livePlaces]
   );
 
+  const allPlaces = useMemo(() => {
+    if (vegOnly) {
+      return rawPlaces.filter(isVegetarianPlace);
+    }
+    return rawPlaces;
+  }, [rawPlaces, vegOnly]);
+
+  const vibeScores = useMemo(() => {
+    const scores: Record<string, number> = {};
+    if (!selectedMood) return scores;
+
+    const mood = inferMoodProfile({ explicitMood: selectedMood, now });
+    allPlaces.forEach((place) => {
+      const rawScore = getMoodMatchScore(place, mood, now);
+      const percentage = Math.round(
+        Math.min(99, Math.max(70, 70 + (rawScore * 25)))
+      );
+      scores[place.id] = percentage;
+    });
+
+    return scores;
+  }, [allPlaces, selectedMood, now]);
+
   const hasFilters =
     Boolean(query.trim()) ||
     activeCategory !== "all" ||
     openOnly ||
+    vegOnly ||
     sortMode !== "recommended" ||
     selectedRating > 0 ||
     selectedPrice !== "all" ||
@@ -320,10 +347,24 @@ export default function DiscoverPage() {
       places: [...allPlaces].sort((a, b) => a.distance - b.distance).slice(0, 9),
     },
     {
-      title: "Family, Pet & Traveler Favorites",
-      description: "Highly rated, welcoming spots perfect for international visitors, family outings, and pet companions.",
+      title: "Family Outings & Favorites",
+      description: "Highly rated, welcoming spots perfect for family gatherings, kids, and large groups.",
       places: allPlaces.filter((place) =>
-        place.tags.some(tag => ["foreigner-friendly", "family-friendly", "pet-friendly", "heritage", "tourist-friendly", "cultural", "family"].includes(tag))
+        place.tags.some(tag => ["family-friendly", "family"].includes(tag))
+      ).slice(0, 9),
+    },
+    {
+      title: "Pet-Friendly Hangouts",
+      description: "Welcoming cafes and open-air spots in the city that love your furry companions as much as you do.",
+      places: allPlaces.filter((place) =>
+        place.tags.some(tag => ["pet-friendly"].includes(tag))
+      ).slice(0, 9),
+    },
+    {
+      title: "Visitor & Foreigner Favorites",
+      description: "Top heritage points, cultural landmarks, and authentic experiences perfect for international travelers and tourists.",
+      places: allPlaces.filter((place) =>
+        place.tags.some(tag => ["foreigner-friendly", "tourist-friendly", "heritage", "cultural"].includes(tag))
       ).slice(0, 9),
     },
     {
@@ -368,10 +409,10 @@ export default function DiscoverPage() {
         {spotlightSpots.length > 0 && !hasFilters && (
           <section className="relative mb-5 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:mb-6">
             <div className="absolute inset-0 z-0 h-full w-full">
-              <img
+              <LazyImage
                 src={spotlightSpots[spotlightIndex].image}
                 alt={spotlightSpots[spotlightIndex].title}
-                className="h-full w-full object-cover opacity-25 blur-[1px] scale-105 transition-all duration-700"
+                className="opacity-25 blur-[1px] scale-105 transition-all duration-700"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[var(--spotlight-overlay-from)] via-[var(--spotlight-overlay-via)] to-transparent" />
             </div>
@@ -466,12 +507,12 @@ export default function DiscoverPage() {
             </label>
 
             {/* Controls — row on mobile too, but smaller */}
-            <div className="flex items-center gap-2">
+            <div className="no-scrollbar flex w-full items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 sm:overflow-visible sm:pb-0">
               {/* Sort Dropdown */}
               <select
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
-                className="h-10 flex-1 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 text-xs font-bold text-[var(--foreground)] outline-none transition focus:border-teal-300 sm:h-12 sm:flex-initial sm:w-auto sm:px-3 sm:text-sm"
+                className="h-10 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 text-xs font-bold text-[var(--foreground)] outline-none transition focus:border-teal-300 sm:h-12 sm:w-auto sm:px-3 sm:text-sm"
                 aria-label="Sort places"
               >
                 <option value="recommended">Recommended</option>
@@ -479,11 +520,25 @@ export default function DiscoverPage() {
                 <option value="rating">Top rated</option>
               </select>
 
+              {/* Pure Veg Button */}
+              <button
+                type="button"
+                onClick={() => setVegOnly((current) => !current)}
+                className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition whitespace-nowrap sm:h-12 sm:gap-2 sm:px-4 sm:text-sm border ${
+                  vegOnly
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-black"
+                    : "border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-600"}`} />
+                <span>Pure Veg</span>
+              </button>
+
               {/* Open Now Button */}
               <button
                 type="button"
                 onClick={() => setOpenOnly((current) => !current)}
-                className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition whitespace-nowrap sm:h-12 sm:gap-2 sm:px-4 sm:text-sm ${openOnly
+                className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition whitespace-nowrap sm:h-12 sm:gap-2 sm:px-4 sm:text-sm ${openOnly
                     ? "bg-emerald-300 text-slate-950"
                     : "border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
                   }`}
@@ -498,7 +553,7 @@ export default function DiscoverPage() {
               <button
                 type="button"
                 onClick={() => setShowAdvancedFilters((prev) => !prev)}
-                className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition whitespace-nowrap sm:h-12 sm:gap-2 sm:px-4 sm:text-sm ${showAdvancedFilters || selectedRating > 0 || selectedPrice !== "all" || selectedTags.size > 0
+                className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition whitespace-nowrap sm:h-12 sm:gap-2 sm:px-4 sm:text-sm ${showAdvancedFilters || selectedRating > 0 || selectedPrice !== "all" || selectedTags.size > 0
                     ? "bg-teal-400 text-slate-950"
                     : "border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
                   }`}
@@ -596,6 +651,36 @@ export default function DiscoverPage() {
             )}
           </AnimatePresence>
 
+          {/* Quick Tag Badges */}
+          <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
+            {([
+              { id: "pet-friendly", label: "🐾 Pet Friendly" },
+              { id: "family-friendly", label: "👨‍👩‍👧 Family Friendly" },
+              { id: "work-friendly", label: "💻 Work Friendly" },
+              { id: "heritage", label: "🏛️ Heritage & Culture" },
+              { id: "scenic", label: "🌅 Scenic Views" },
+              { id: "live-music", label: "🎵 Live Music" },
+              { id: "artisanal", label: "✨ Artisanal" },
+              { id: "late-night", label: "🌙 Late Night" },
+            ] as const).map((tag) => {
+              const active = selectedTags.has(tag.id);
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => toggleTagFilter(tag.id)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition border cursor-pointer ${
+                    active
+                      ? "bg-teal-400/20 border-teal-400/50 text-teal-300 font-black shadow-sm"
+                      : "border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                  }`}
+                >
+                  {tag.label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
             {categories.map((category) => {
               const active = activeCategory === category.id;
@@ -683,6 +768,7 @@ export default function DiscoverPage() {
                 onPlaceClick={setSelectedPlace}
                 onSavePlace={toggleSave}
                 savedPlaceIds={savedPlaceIds}
+                vibeScores={vibeScores}
               />
               {hasMore && (
                 <div className="mt-6 flex justify-center">
@@ -707,6 +793,7 @@ export default function DiscoverPage() {
                 onSavePlace={toggleSave}
                 savedPlaceIds={savedPlaceIds}
                 carousel={true}
+                vibeScores={vibeScores}
               />
             ))
           )}

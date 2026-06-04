@@ -35,9 +35,6 @@ export const useLivePlacesByBounds = (bounds: Bounds | null, city: string) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      setLoading(true);
-      setError(null);
-
       const params = new URLSearchParams({
         south: String(bounds.south),
         west: String(bounds.west),
@@ -46,8 +43,25 @@ export const useLivePlacesByBounds = (bounds: Bounds | null, city: string) => {
         city: city,
       });
 
+      const cacheKey = `sheher:places:bounds:${params.toString()}`;
+      const cachedData = typeof window !== "undefined" ? sessionStorage.getItem(cacheKey) : null;
+
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData) as PlacesResponse;
+          setPlaces(parsed.places ?? []);
+          setLoading(false);
+          setError(null);
+          return;
+        } catch {
+          // Fall back to fetching if JSON parsing fails
+        }
+      }
+
+      setLoading(true);
+      setError(null);
+
       fetch(`/api/places/osm?${params.toString()}`, {
-        cache: "no-store",
         signal: controller.signal,
       })
         .then(async (response) => {
@@ -60,6 +74,10 @@ export const useLivePlacesByBounds = (bounds: Bounds | null, city: string) => {
         .then((data) => {
           setPlaces(data.places ?? []);
           console.log(`[Sheher Map] Viewport loaded ${data.places?.length ?? 0} places. Source: ${data.source}`);
+
+          if (typeof window !== "undefined" && data.places && data.places.length > 0) {
+            sessionStorage.setItem(cacheKey, JSON.stringify(data));
+          }
 
           if (data.places.length === 0) {
             setError("No places found in this view. Try panning or zooming out.");
@@ -84,6 +102,7 @@ export const useLivePlacesByBounds = (bounds: Bounds | null, city: string) => {
       }
     };
   }, [bounds, city]);
+
 
   return { places, loading, error };
 };

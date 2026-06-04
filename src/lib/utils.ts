@@ -1,4 +1,4 @@
-import { PlaceCategory } from "@/types";
+import { PlaceCategory, Place } from "@/types";
 
 // API Configuration
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -200,4 +200,10 @@ export const getCategoryAccent = (category: PlaceCategory): string => {
   };
 
   return colors[category];
+};
+
+export const isVegetarianPlace = (place: Place): boolean => {
+  if (place.isVeg === true) return true;
+  const vegTags = ["vegetarian", "pure-veg", "veg", "vegan"];
+  return place.tags.some((tag) => vegTags.includes(tag.toLowerCase()));
 };

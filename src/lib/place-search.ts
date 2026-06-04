@@ -3,15 +3,15 @@ import { getMoodMatchScore, inferMoodProfile, MoodAxis } from "@/lib/mood-recomm
 import { getCategoryLabel, isOpenNow } from "@/lib/utils";
 
 const categoryTerms: Record<PlaceCategory, string[]> = {
-  cafe: ["cafe", "coffee", "chai", "brunch", "breakfast", "work", "wifi", "cozy"],
-  restaurant: ["restaurant", "food", "dinner", "lunch", "family", "meal", "veg", "non veg"],
+  cafe: ["cafe", "coffee", "chai", "brunch", "breakfast", "work", "wifi", "cozy", "tapri", "cutting chai"],
+  restaurant: ["restaurant", "food", "dinner", "lunch", "family", "meal", "veg", "non veg", "diner"],
   event: ["event", "things to do", "walk", "heritage", "museum", "temple", "garden", "park", "tourist"],
   nightlife: ["nightlife", "club", "party", "dance", "late night", "music"],
-  "food-stall": ["food stall", "snack", "quick bite", "chaat", "street"],
+  "food-stall": ["food stall", "snack", "quick bite", "chaat", "street", "samosa", "pakora", "pakode", "bhajiya", "kachori", "dabeli", "vada pav", "cutting chai"],
   bar: ["bar", "pub", "drinks", "cocktail", "date", "rooftop", "late night"],
   dessert: ["dessert", "sweet", "bakery", "cake", "pastry", "chocolate"],
   "ice-cream": ["ice cream", "icecream", "gelato", "kulfi", "sundae", "scoop", "cone", "frozen", "softy", "sorbet"],
-  "street-food": ["street food", "misal", "vada pav", "chaat", "snack", "quick bite"],
+  "street-food": ["street food", "misal", "vada pav", "chaat", "snack", "quick bite", "pakora", "pakode", "samosa", "samosas", "bhajiya", "kachori", "dabeli", "bhel", "panipuri", "pani puri", "cutting chai", "tapri", "typical indian", "comfort food", "chole bhature"],
 };
 
 const vibeTerms: Record<string, string[]> = {
@@ -19,9 +19,14 @@ const vibeTerms: Record<string, string[]> = {
   romantic: ["date", "dinner", "bar", "rooftop", "cocktail"],
   date: ["date", "romantic", "dinner", "bar", "rooftop", "cocktail"],
   family: ["family", "restaurant", "garden", "park", "meal"],
-  cheap: ["$", "budget", "street-food", "food-stall", "snack"],
-  budget: ["$", "cheap", "street-food", "food-stall", "snack"],
-  breakfast: ["breakfast", "cafe", "south-indian", "chai", "bun-maska"],
+  "family-friendly": ["family-friendly", "family", "kids", "children", "parents", "group", "restaurant", "meal", "park", "garden"],
+  "pet-friendly": ["pet-friendly", "pet", "pets", "dog", "dogs", "animal", "animals", "open-air", "garden", "outdoor"],
+  "foreigner-friendly": ["foreigner-friendly", "foreigner", "foreign", "tourist", "tourist-friendly", "visitor", "traveler", "traveller", "heritage", "culture"],
+  "tourist-friendly": ["tourist-friendly", "tourist", "foreigner", "visitor", "traveler", "traveller", "heritage", "museum", "culture"],
+  "traveller-friendly": ["traveller-friendly", "traveler", "traveller", "tourist", "visitor", "heritage", "culture"],
+  cheap: ["$", "budget", "street-food", "food-stall", "snack", "pakode", "vada pav", "samosa"],
+  budget: ["$", "cheap", "street-food", "food-stall", "snack", "pakode", "vada pav", "samosa"],
+  breakfast: ["breakfast", "cafe", "south-indian", "chai", "bun-maska", "samosa", "vada pav", "chole bhature", "poha", "misal"],
   brunch: ["brunch", "cafe", "coffee", "bakery"],
   "late night": ["late night", "bar", "pub", "nightlife", "club"],
   rooftop: ["rooftop", "bar", "pub", "date", "drinks"],
@@ -29,7 +34,8 @@ const vibeTerms: Record<string, string[]> = {
   work: ["wifi", "work", "cafe", "coffee", "quiet"],
   outdoor: ["outdoor", "garden", "park", "walk"],
   heritage: ["heritage", "walk", "museum", "temple", "tourist"],
-  spicy: ["spicy", "misal", "street-food", "chaat"],
+  spicy: ["spicy", "misal", "street-food", "chaat", "pakode", "samosa", "vada pav", "kachori"],
+  desi: ["street-food", "food-stall", "spicy", "typical indian", "comfort food", "chaat", "tapri", "pakode", "samosa", "vada pav"],
 };
 
 const normalize = (value: string) => value.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();

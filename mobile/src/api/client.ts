@@ -1,5 +1,5 @@
 /** Point at your deployed site or local dev server. Website codebase stays separate. */
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://town-discover.vercel.app";
 
 export type MoodAxis =
   | "chill"
@@ -55,4 +55,21 @@ export async function fetchTownEvents(city: string) {
   if (!response.ok) throw new Error("Could not load town events");
   const data = await response.json();
   return data.events as Place[];
+}
+
+export async function fetchPlaceReviews(placeId: string) {
+  const response = await fetch(`${API_BASE_URL}/api/places/reviews?placeId=${encodeURIComponent(placeId)}`);
+  if (!response.ok) throw new Error("Could not load reviews");
+  const data = await response.json();
+  return data.reviews as any[];
+}
+
+export async function submitCrowdReport(placeId: string, level: string, note: string) {
+  const response = await fetch(`${API_BASE_URL}/api/crowd-reports`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ placeId, level, note }),
+  });
+  if (!response.ok) throw new Error("Could not submit crowd report");
+  return response.json();
 }

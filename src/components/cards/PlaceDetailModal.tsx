@@ -2,7 +2,9 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Clock, Download, ExternalLink, MapPin, Navigation, Share2, Star, Train, Users, X, UtensilsCrossed, ChevronLeft } from "lucide-react";
+import { LazyImage } from "@/components/common/LazyImage";
+
+import { Clock, Download, ExternalLink, MapPin, Navigation, Share2, Sparkles, Star, Train, Users, X, UtensilsCrossed, ChevronLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
 import { API_URL, formatDistance, formatHours, formatPlaceArea, formatTime, getCategoryLabel, getInitials, isOpenNow } from "@/lib/utils";
@@ -121,6 +123,9 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const [placeHistory, setPlaceHistory] = useState<Place[]>([]);
   const [nearbyPlaces, setNearbyPlaces] = useState<Place[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
+  const [surroundings, setSurroundings] = useState<any[]>([]);
+  const [loadingSurroundings, setLoadingSurroundings] = useState(false);
+  const [surroundingsError, setSurroundingsError] = useState("");
 
   useEffect(() => {
     if (place) {
@@ -383,6 +388,46 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
     return () => controller.abort();
   }, [activePlace?.id, activePlace?.latitude, activePlace?.longitude]);
 
+  // Dynamic surroundings and conveniences scan logic (350m radius)
+  useEffect(() => {
+    if (!activePlace) return;
+
+    setSurroundings([]);
+    setLoadingSurroundings(true);
+    setSurroundingsError("");
+
+    const controller = new AbortController();
+
+    fetch(`/api/places/surroundings?lat=${activePlace.latitude}&lng=${activePlace.longitude}&radius=350`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to load surroundings.");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data && data.surroundings) {
+          setSurroundings(data.surroundings);
+        }
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setSurroundingsError(err.message || "Failed to load surroundings.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoadingSurroundings(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [activePlace?.id, activePlace?.latitude, activePlace?.longitude]);
+
   const handleSelectSubPlace = (spot: Place) => {
     if (activePlace) {
       setPlaceHistory((prev) => [...prev, activePlace]);
@@ -421,6 +466,23 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const currentSummary = crowdSummary?.placeId === activePlace.id ? crowdSummary : null;
   const hasCrowdSignal = Boolean(currentSummary?.crowdLevel && currentSummary.reportCount > 0);
   const shareText = `Check out ${activePlace.title} in ${outletLocation} on Sheher. Rating ${activePlace.rating}/5, ${formatDistance(activePlace.distance)} away. ${placeUrl}`;
+
+  const getGoogleMapsDirectionsUrl = () => {
+    if (!activePlace.routeWaypoints || activePlace.routeWaypoints.length < 2) return "";
+    const origin = `${activePlace.routeWaypoints[0].latitude},${activePlace.routeWaypoints[0].longitude}`;
+    const destination = `${activePlace.routeWaypoints[activePlace.routeWaypoints.length - 1].latitude},${activePlace.routeWaypoints[activePlace.routeWaypoints.length - 1].longitude}`;
+    
+    if (activePlace.routeWaypoints.length === 2) {
+      return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=walking`;
+    }
+    
+    const waypoints = activePlace.routeWaypoints
+      .slice(1, -1)
+      .map((w) => `${w.latitude},${w.longitude}`)
+      .join("|");
+      
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}&travelmode=walking`;
+  };
 
   const submitCrowdReport = async () => {
     if (!user) {
@@ -673,6 +735,60 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
         <div className="space-y-4 p-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] md:space-y-5 md:p-6">
           <p className="text-sm leading-6 text-[var(--muted-strong)] sm:text-base sm:leading-7">{activePlace.description}</p>
 
+          {/* Walking Trail Timeline */}
+          {activePlace.trailStops && activePlace.trailStops.length > 0 && (
+            <div className="space-y-4 rounded-xl border border-teal-500/20 bg-teal-500/5 p-4 shadow-xl">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-300">
+                  <Navigation size={14} className="text-teal-400 rotate-45" />
+                  Walking Trail Timeline
+                </h3>
+                <span className="rounded-full bg-teal-500/10 border border-teal-500/25 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-teal-300">
+                  {activePlace.trailStops.length} Stops
+                </span>
+              </div>
+
+              <div className="relative border-l border-dashed border-teal-500/30 pl-5 ml-2.5 space-y-5">
+                {activePlace.trailStops.map((stop, idx) => (
+                  <div key={idx} className="relative space-y-1">
+                    {/* Bullet node */}
+                    <span className="absolute -left-[27px] top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 border border-teal-400 text-[9px] font-black text-teal-300 shadow-[0_0_8px_rgba(45,212,191,0.3)]">
+                      {idx + 1}
+                    </span>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-slate-100 text-xs leading-snug">{stop.title}</h4>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">
+                          {stop.locality}
+                        </p>
+                        <p className="text-[11px] text-[var(--muted-strong)] leading-relaxed mt-1">{stop.description}</p>
+                      </div>
+                      {stop.image && (
+                        <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-slate-900 shadow">
+                          <LazyImage src={stop.image} alt={stop.title} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {activePlace.routeWaypoints && activePlace.routeWaypoints.length >= 2 && (
+                <div className="pt-2">
+                  <a
+                    href={getGoogleMapsDirectionsUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-400 hover:bg-teal-300 px-4 py-2.5 text-xs font-black text-slate-950 transition shadow-lg cursor-pointer"
+                  >
+                    <MapPin size={14} />
+                    Open Walking Route in Google Maps
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
           {isCluster && (nearbyPlaces.length > 0 || loadingNearby) && (
             <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4 shadow-xl">
               <div className="flex items-center justify-between">
@@ -698,10 +814,10 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                       className="group/spot-card relative h-40 w-52 shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] text-left transition hover:border-teal-400/40 hover:scale-[1.02]"
                     >
                       <div className="relative h-20 w-full overflow-hidden bg-slate-800">
-                        <img
+                        <LazyImage
                           src={spot.image}
                           alt={spot.title}
-                          className="h-full w-full object-cover transition duration-500 group-hover/spot-card:scale-105"
+                          className="transition duration-500 group-hover/spot-card:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         <span className="absolute bottom-1.5 left-2 rounded bg-black/50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-teal-300">
@@ -859,6 +975,115 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
             </div>
           </div>
 
+          {/* Surroundings & Nearby Conveniences (Live Overpass Scan) */}
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4 space-y-4 shadow-xl animate-fade-in">
+            <div className="flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <span className="text-teal-400 animate-pulse">📡</span>
+                Surroundings & Conveniences (Live Scan)
+              </h3>
+              {loadingSurroundings && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black text-teal-400 uppercase tracking-widest bg-teal-500/10 rounded-full px-2 py-0.5 border border-teal-500/20 animate-pulse">
+                  <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-ping mr-1" />
+                  Scanning 350m...
+                </span>
+              )}
+            </div>
+
+            {loadingSurroundings && surroundings.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center text-xs text-[var(--muted-strong)]">
+                <div className="relative mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-teal-500/20 bg-teal-500/5">
+                  <span className="absolute h-full w-full rounded-full border border-teal-400 animate-ping opacity-30" />
+                  <span className="text-lg">📡</span>
+                </div>
+                <p className="font-bold max-w-sm leading-relaxed">Scanning OpenStreetMap for nearby parking, toilets, ATMs, and transit...</p>
+              </div>
+            ) : surroundingsError ? (
+              <p className="text-xs font-semibold text-rose-400">{surroundingsError}</p>
+            ) : surroundings.length === 0 ? (
+              <p className="text-xs font-semibold text-[var(--muted)] italic">No conveniences (toilets, parking, ATMs) found within 350m.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {surroundings.slice(0, 10).map((item) => {
+                  let icon = "📍";
+                  let typeColor = "text-slate-300";
+                  
+                  if (item.type === "toilets") {
+                    icon = "🚻";
+                    typeColor = "text-pink-300";
+                  } else if (item.type === "parking") {
+                    icon = "🅿️";
+                    typeColor = "text-blue-300";
+                  } else if (item.type === "atm") {
+                    icon = "💵";
+                    typeColor = "text-emerald-300";
+                  } else if (item.type === "water") {
+                    icon = "💧";
+                    typeColor = "text-cyan-300";
+                  } else if (item.type === "transit") {
+                    icon = "🚌";
+                    typeColor = "text-amber-300";
+                  } else if (item.type === "police") {
+                    icon = "👮";
+                    typeColor = "text-indigo-300";
+                  } else if (item.type === "hospital") {
+                    icon = "🏥";
+                    typeColor = "text-rose-300";
+                  } else if (item.type === "pharmacy") {
+                    icon = "💊";
+                    typeColor = "text-teal-300";
+                  }
+
+                  const distMeters = Math.round(item.distance * 1000);
+                  const distText = distMeters < 1000 ? `${distMeters}m` : `${(distMeters / 1000).toFixed(1)} km`;
+
+                  const extraLabels = [];
+                  if (item.details.fee === "yes") extraLabels.push("Paid");
+                  if (item.details.fee === "no") extraLabels.push("Free");
+                  if (item.details.wheelchair === "yes") extraLabels.push("♿ Access");
+                  if (item.details.capacity) extraLabels.push(`Cap: ${item.details.capacity}`);
+
+                  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`;
+
+                  return (
+                    <a
+                      key={item.id}
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 hover:border-teal-400/40 hover:bg-[var(--panel-strong)] transition animate-fade-in group cursor-pointer"
+                    >
+                      <div className="text-xl shrink-0 mt-0.5">{icon}</div>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className={`text-[10px] font-black uppercase tracking-wider ${typeColor}`}>
+                            {item.label}
+                          </span>
+                          <span className="text-[10px] font-black text-[var(--muted-strong)] group-hover:text-teal-300 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1">
+                            🚶 {distText}
+                            <ExternalLink size={10} className="opacity-60" />
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-black text-slate-200 line-clamp-1 leading-tight group-hover:text-teal-300 transition-colors">
+                          {item.name || `Unlabeled ${item.label}`}
+                        </h4>
+                        {extraLabels.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {extraLabels.map((lbl, idx) => (
+                              <span key={idx} className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+                                {lbl}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Reviews & Ratings Section */}
           <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4 space-y-4">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
@@ -867,6 +1092,46 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
             </h3>
 
             <div className="space-y-4">
+              {/* Creator Highlights */}
+              {activePlace.influencerFeatures && activePlace.influencerFeatures.length > 0 && (
+                <div className="space-y-2 border-b border-[var(--border)] pb-4">
+                  <p className="text-xs font-black uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+                    <Sparkles size={13} className="animate-pulse" />
+                    Creator Choices & Vibe Checks ({activePlace.influencerFeatures.length})
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {activePlace.influencerFeatures.map((feat, idx) => (
+                      <a
+                        key={idx}
+                        href={feat.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group block rounded-lg border border-teal-500/20 bg-teal-500/5 p-2.5 transition hover:border-teal-400 hover:bg-teal-500/10 cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-teal-300 text-xs">{feat.creatorName}</span>
+                            <span className="text-[10px] font-bold text-slate-400 group-hover:text-teal-200 transition">
+                              {feat.handle}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 text-amber-400">
+                            <Star size={9} fill="currentColor" />
+                            <span className="text-[10px] font-black">{feat.rating}</span>
+                          </div>
+                        </div>
+                        <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-200 italic">
+                          "{feat.quote}"
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-end text-[9px] font-black uppercase tracking-widest text-teal-400 group-hover:translate-x-0.5 transition-transform">
+                          Watch Reel ↗
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Review Form */}
               <div className="rounded-lg border border-white/5 bg-white/[0.01] p-3 space-y-3">
                 <p className="text-xs font-black uppercase tracking-wider text-slate-300">
@@ -905,8 +1170,8 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
                     {reviewImages.map((img, index) => (
-                      <div key={index} className="relative h-14 w-14 rounded-lg border border-white/10 overflow-hidden group/thumb">
-                        <img src={img} alt="preview" className="h-full w-full object-cover" />
+                      <div key={index} className="relative h-20 w-20 overflow-hidden rounded-lg">
+                        <LazyImage src={img} alt="preview" />
                         <button
                           type="button"
                           onClick={() => removeReviewImage(index)}
@@ -986,9 +1251,11 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                         {r.imageUrls && r.imageUrls.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {r.imageUrls.map((url: string, imgIdx: number) => (
-                              <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer" className="relative h-12 w-12 overflow-hidden rounded-lg border border-white/10 hover:border-teal-400/50 transition animate-fade-in">
-                                <img src={url} alt={`Review photo ${imgIdx + 1}`} className="h-full w-full object-cover" />
-                              </a>
+                              <div key={imgIdx} className="relative h-16 w-16 overflow-hidden rounded-lg cursor-pointer border border-[var(--border)] hover:border-[var(--muted)] transition">
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
+                                  <LazyImage src={url} alt={`Review photo ${imgIdx + 1}`} />
+                                </a>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -1079,10 +1346,10 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                       className="group/spot-card relative h-40 w-52 shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] text-left transition hover:border-teal-400/40 hover:scale-[1.02]"
                     >
                       <div className="relative h-20 w-full overflow-hidden bg-slate-800">
-                        <img
+                        <LazyImage
                           src={spot.image}
                           alt={spot.title}
-                          className="h-full w-full object-cover transition duration-500 group-hover/spot-card:scale-105"
+                          className="transition duration-500 group-hover/spot-card:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         <span className="absolute bottom-1.5 left-2 rounded bg-black/50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-teal-300">

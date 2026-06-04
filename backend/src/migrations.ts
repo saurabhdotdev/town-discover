@@ -211,6 +211,24 @@ CREATE INDEX IF NOT EXISTS trip_plans_user_id_created_at_idx
 ON trip_plans (user_id, created_at DESC);
 `,
   },
+  {
+    id: "202606040001_premium_pass_and_flash_deals",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium_pass BOOLEAN DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS flash_deals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  place_id TEXT NOT NULL,
+  place_title TEXT NOT NULL,
+  discount_percentage INT NOT NULL CHECK (discount_percentage > 0 AND discount_percentage <= 100),
+  description TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS flash_deals_expires_at_idx ON flash_deals (expires_at DESC);
+`,
+  },
 ];
 
 export const runDatabaseMigrations = async (pool: Pool) => {

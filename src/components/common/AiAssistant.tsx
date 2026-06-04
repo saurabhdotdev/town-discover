@@ -206,7 +206,7 @@ export const AiAssistant: React.FC = () => {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
         onClick={() => setIsOpen((prev) => !prev)}
-        className="fixed bottom-20 right-4 z-[9980] flex h-14 w-14 items-center justify-center rounded-full bg-slate-950/90 border border-teal-500/30 text-slate-200 shadow-2xl shadow-teal-500/20 hover:shadow-teal-400/40 outline-none transition cursor-pointer md:bottom-6 md:right-6 overflow-hidden p-0.5"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] right-4 z-[9980] flex h-14 w-14 items-center justify-center rounded-full bg-slate-950/90 border border-teal-500/30 text-slate-200 shadow-2xl shadow-teal-500/20 hover:shadow-teal-400/40 outline-none transition cursor-pointer md:bottom-6 md:right-6 overflow-hidden p-0.5"
         aria-label="Toggle AI Assistant"
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.94 }}
@@ -372,7 +372,7 @@ export const AiAssistant: React.FC = () => {
                 e.preventDefault();
                 handleSend();
               }}
-              className="border-t border-[var(--border)] bg-slate-900/70 p-3 flex gap-2 items-center"
+              className="border-t border-[var(--border)] bg-slate-900/70 p-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] md:pb-3 flex gap-2 items-center"
             >
               <input
                 ref={inputRef}

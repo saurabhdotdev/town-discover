@@ -9,6 +9,7 @@ export interface AuthenticatedUser {
   email: string;
   fullName: string | null;
   role: string;
+  isPremiumPass?: boolean;
 }
 
 declare global {
@@ -41,7 +42,8 @@ export const authenticateUser = async (
         users.id,
         users.email,
         users.full_name AS "fullName",
-        users.role
+        users.role,
+        users.is_premium_pass AS "isPremiumPass"
       FROM auth_sessions
       JOIN users ON users.id = auth_sessions.user_id
       WHERE auth_sessions.token_hash = $1

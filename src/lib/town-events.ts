@@ -23,12 +23,15 @@ export async function fetchLiveTownEvents(city: string): Promise<Event[]> {
     return getTownEventsForCity(city as any);
   }
   const url = `${base}/api/v2/events?city=${encodeURIComponent(city)}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
   try {
     const res = await fetch(url, {
       headers: {
         "Accept": "application/json",
         "User-Agent": "TownDiscover/1.0 (+https://github.com/your-repo)"
-      }
+      },
+      signal: controller.signal,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
@@ -55,5 +58,7 @@ export async function fetchLiveTownEvents(city: string): Promise<Event[]> {
   } catch (err) {
     console.error("Failed to fetch live town events:", err);
     return [];
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

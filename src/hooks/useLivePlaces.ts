@@ -24,14 +24,32 @@ export const useLivePlaces = (location: UserLocation | null, query = "") => {
       query,
     });
 
+    const cacheKey = `sheher:places:${params.toString()}`;
+    const cachedData = typeof window !== "undefined" ? sessionStorage.getItem(cacheKey) : null;
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData) as PlacesResponse;
+        setPlaces(parsed.places ?? []);
+        setLoading(false);
+        setError(null);
+        if (parsed.source === "fallback") {
+          setError(parsed.warning ?? "Live OpenStreetMap places could not be loaded.");
+        }
+        return;
+      } catch {
+        // Fall back to fetching if JSON parsing fails
+      }
+    }
+
     queueMicrotask(() => {
       if (controller.signal.aborted) return;
       setLoading(true);
+      setPlaces([]);
       setError(null);
     });
 
     fetch(`/api/places/osm?${params.toString()}`, {
-      cache: "no-store",
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -42,6 +60,10 @@ export const useLivePlaces = (location: UserLocation | null, query = "") => {
       .then((data) => {
         setPlaces(data.places ?? []);
         console.log(`[Sheher] Loaded ${data.places?.length ?? 0} places. Source: ${data.source}`);
+
+        if (typeof window !== "undefined" && data.places && data.places.length > 0) {
+          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        }
 
         if (data.source === "fallback") {
           setError(data.warning ?? "Live OpenStreetMap places could not be loaded.");
@@ -64,7 +86,8 @@ export const useLivePlaces = (location: UserLocation | null, query = "") => {
       });
 
     return () => controller.abort();
-  }, [location, query]);
+  }, [location?.latitude, location?.longitude, query]);
+
 
   return { places, loading, error };
 };
