@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.42, ease: "easeOut" }}
       className={cn(
-        "sticky top-14 z-30 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16",
+        "sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16",
         className
       )}
     >

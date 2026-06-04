@@ -282,7 +282,7 @@ export default function TripPage({
         initial={{ opacity: 0, y: -18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.42, ease: "easeOut" }}
-        className="sticky top-14 z-30 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16"
+        className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16"
       >
         <div className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5">
           <div className="min-w-0">
