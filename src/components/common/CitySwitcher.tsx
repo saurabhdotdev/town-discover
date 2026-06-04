@@ -53,7 +53,7 @@ export const CitySwitcher: React.FC<CitySwitcherProps> = ({ value, onChange }) =
   const isTwinSelected = CITY_GROUPS.find((g) => g.id === "twins")?.cities.includes(value);
 
   return (
-    <div ref={dropdownRef} className="relative mb-3 w-full sm:max-w-xs z-30">
+    <div ref={dropdownRef} className="relative mb-3 w-full sm:max-w-xs z-20">
       {/* Dropdown Trigger */}
       <button
         type="button"
