@@ -247,7 +247,7 @@ function HeroEventCard({
           </div>
         </div>
 
-        <div className="flex flex-row md:flex-col gap-2 shrink-0">
+        <div className="flex flex-row flex-wrap md:flex-col gap-2 w-full md:w-auto shrink-0">
           <div className="rounded-xl bg-[var(--panel-soft)] border border-[var(--border)] px-4 py-3 text-center min-w-[120px]">
             <p className="text-[10px] font-black uppercase tracking-widest text-[var(--muted)]">Price</p>
             <p className="mt-0.5 text-base font-black text-[var(--foreground)]">{formatPrice(event.price)}</p>
@@ -550,7 +550,7 @@ export default function EventsPage() {
   const freeCount = events.filter((e) => e.price.isFree).length;
 
   return (
-    <div className="min-h-screen">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
       <Header
         eyebrow="Live Events"
         title="What's Happening"
@@ -558,7 +558,7 @@ export default function EventsPage() {
         showLocation
       />
 
-      <div className="mx-auto max-w-screen-xl px-3 py-4 sm:px-4 md:px-6 md:py-6">
+      <div className="w-full max-w-screen-xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-6">
         {/* City switcher + controls */}
         <div className="app-surface rounded-lg p-3 md:p-4 mb-5">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">

@@ -249,6 +249,20 @@ CREATE INDEX IF NOT EXISTS trip_plans_user_id_created_at_idx
 ON trip_plans (user_id, created_at DESC);
 `,
   },
+  {
+    id: "202606040003_explorer_passport_stamps",
+    sql: `
+CREATE TABLE IF NOT EXISTS user_city_stamps (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  city_name TEXT NOT NULL,
+  stamped_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, city_name)
+);
+
+CREATE INDEX IF NOT EXISTS user_city_stamps_user_id_idx
+ON user_city_stamps (user_id);
+`,
+  },
 ];
 
 let migrationPromise: Promise<void> | null = null;

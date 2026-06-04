@@ -765,13 +765,13 @@ export default function Home() {
     "bg-teal-500/10 text-teal-400";
 
   return (
-    <div className="min-h-screen">
-      <section className="mx-auto grid max-w-screen-xl gap-5 px-3 py-4 sm:px-4 md:min-h-[calc(100vh-5rem)] md:grid-cols-[minmax(0,1fr)_380px] md:px-6 md:py-10">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
+      <section className="w-full max-w-screen-xl mx-auto grid gap-5 px-3 py-4 sm:px-4 md:min-h-[calc(100vh-5rem)] lg:grid-cols-[minmax(0,1fr)_380px] md:grid-cols-[minmax(0,1fr)_320px] md:px-6 md:py-10">
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col justify-center gap-5 pt-3 md:gap-6 md:pt-0"
+          className="flex flex-col gap-5 pt-3 md:gap-6 md:pt-0 w-full min-w-0"
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -867,12 +867,28 @@ export default function Home() {
               { label: "Top Picks", value: allPlaces.filter((place) => place.isTrending).length.toString() },
               { label: "Near You", value: nearbyPlaces.length.toString() },
             ].map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 sm:p-4">
+              <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-2 sm:p-4 text-center sm:text-left">
                 <p className="text-xl font-black text-[var(--foreground)] sm:text-2xl">{stat.value}</p>
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] sm:text-xs sm:tracking-[0.14em]">{stat.label}</p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] sm:text-xs sm:tracking-[0.14em] truncate">{stat.label}</p>
               </div>
             ))}
           </div>
+
+          <Link
+            href="/trips"
+            className="flex items-center justify-between rounded-xl border border-teal-500/25 bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-transparent px-4 py-3 sm:px-5 sm:py-4 transition-all duration-300 hover:-translate-y-1 hover:border-teal-400/50 hover:from-teal-500/10 hover:to-cyan-500/10 hover:shadow-[0_8px_30px_rgba(20,184,166,0.12)]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-400">
+                <Sparkles size={18} className="animate-pulse" />
+              </div>
+              <div className="text-left min-w-0">
+                <p className="text-sm font-black text-[var(--foreground)]">Twin-City Route Planner 🔀</p>
+                <p className="text-[10px] sm:text-xs font-semibold text-[var(--muted)] truncate">Itinerary builder for Hubli-Dharwad, Pune-PCMC, Bangalore-Mysore...</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-teal-400" />
+          </Link>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
@@ -973,7 +989,7 @@ export default function Home() {
                               setWidgetPreviewStops(null);
                               setWidgetPreviewStats(null);
                             }}
-                            className={`rounded-lg py-1.5 px-2 text-[11px] font-black transition duration-205 cursor-pointer ${
+                            className={`rounded-lg py-1.5 px-1 sm:px-2 text-[10px] sm:text-[11px] font-black transition duration-205 cursor-pointer text-center truncate ${
                               active
                                 ? "bg-teal-400 text-slate-950 shadow-md"
                                 : "text-slate-400 hover:text-white"
@@ -1344,7 +1360,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.08 }}
-          className="flex items-center"
+          className="flex items-center w-full min-w-0"
         >
           {featuredPlace ? (
             <button
@@ -1400,7 +1416,7 @@ export default function Home() {
         </motion.aside>
       </section>
 
-      <section className="mx-auto max-w-screen-xl px-3 pb-12 sm:px-4 md:px-6 md:pb-16">
+      <section className="w-full max-w-screen-xl mx-auto px-3 pb-12 sm:px-4 md:px-6 md:pb-16">
         {weatherRecommendations.length > 0 && !query && activeFilter === "all" && (
           <DiscoverySection
             title={`Weather Vibe: ${weather.condition} Match`}

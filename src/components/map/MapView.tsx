@@ -183,6 +183,8 @@ export const MapView: React.FC<MapProps> = ({
       const nextMap = L.map(mapContainer.current, {
         zoomControl: false,
         attributionControl: true,
+        scrollWheelZoom: false,
+        dragging: tripMode ? !L.Browser.mobile : true,
       }).setView([initialLat, initialLng], 14);
       map.current = nextMap;
 

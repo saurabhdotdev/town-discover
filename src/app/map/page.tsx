@@ -1111,15 +1111,15 @@ export default function MapPage() {
   }, [tripStats, tripSource, tripDest, vehicleType]);
 
   return (
-    <div className="min-h-screen">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
       <Header
         eyebrow="Map"
         title="Map View"
         location={locationLabel}
       />
 
-      <div className="mx-auto grid max-w-screen-xl gap-4 px-3 py-4 sm:px-4 md:px-6 md:py-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="lg:col-span-2">
+      <div className="w-full max-w-screen-xl mx-auto grid gap-4 px-3 py-4 sm:px-4 md:px-6 md:py-5 md:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
           <div className="flex flex-col gap-3">
             <CitySwitcher
               value={activeCity}
@@ -1225,7 +1225,7 @@ export default function MapPage() {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.42 }}
-          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:h-[calc(100vh-11rem)] ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
+          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] md:h-[calc(100vh-11rem)] ${mobileView === "list" ? "h-0 hidden md:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
         >
           <div className="absolute top-4 left-4 z-[500] flex items-center gap-2">
             <button
@@ -1303,7 +1303,7 @@ export default function MapPage() {
           )}
 
           {focusedPlace && (
-            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl sm:inset-x-3 sm:bottom-3 sm:p-4 lg:hidden">
+            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl sm:inset-x-3 sm:bottom-3 sm:p-4 md:hidden">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-teal-200">
@@ -1327,7 +1327,7 @@ export default function MapPage() {
           )}
 
           {mobileView === "map" && !focusedPlace && (
-            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl lg:hidden">
+            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl md:hidden">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-teal-300">
@@ -1378,7 +1378,7 @@ export default function MapPage() {
         </motion.div>
 
         {/* Mobile Map/List toggle FAB */}
-        <div className="fixed left-4 z-[600] lg:hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 5.5rem)" }}>
+        <div className="fixed left-4 z-[600] md:hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 5.5rem)" }}>
           <button
             type="button"
             onClick={() => setMobileView(mobileView === "map" ? "list" : "map")}
@@ -1392,7 +1392,7 @@ export default function MapPage() {
           </button>
         </div>
 
-        <aside className={`space-y-3 ${mobileView === "map" ? "hidden lg:block" : "block"}`}>
+        <aside className={`space-y-3 ${mobileView === "map" ? "hidden md:block" : "block"}`}>
           {/* LIVE FLASH DEAL ALERTS */}
           {activeFlashDeal && user?.isPremiumPass && (
             <motion.div
@@ -1599,7 +1599,7 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="space-y-3 pr-0 lg:max-h-[calc(100vh-21rem)] lg:overflow-y-auto lg:pr-1">
+              <div className="space-y-3 pr-0 md:max-h-[calc(100vh-21rem)] md:overflow-y-auto md:pr-1">
                 {sortedPlaces.map((place) => {
                   const active = focusedPlace?.id === place.id;
                   const open = isOpenNow(place.hours);

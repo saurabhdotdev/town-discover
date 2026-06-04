@@ -353,7 +353,7 @@ export default function HangoutsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pb-8 text-[var(--foreground)]">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden bg-[var(--background)] pb-8 text-[var(--foreground)]">
       <Header
         eyebrow="Community"
         title="Community Hangouts"
@@ -362,7 +362,7 @@ export default function HangoutsPage() {
         showLocation={true}
       />
 
-      <main className="mx-auto max-w-4xl px-4 pt-4">
+      <div className="w-full max-w-4xl mx-auto px-4 pt-4">
         {/* Hero Card */}
         <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--hero-gradient-from)] via-[var(--hero-gradient-via)] to-[var(--hero-gradient-to)] p-6 md:p-8 shadow-2xl">
           <div className="absolute inset-0 bg-teal-500/5 blur-3xl pointer-events-none" />
@@ -482,7 +482,7 @@ export default function HangoutsPage() {
               </button>
             </div>
           ) : (
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2">
               {filteredHangouts.map((h) => {
                 const dateBadge = getRelativeDateBadge(h.eventDate);
                 const isUserRsvped = h.rsvps.some((r) => r.userId === user?.id);
@@ -646,7 +646,7 @@ export default function HangoutsPage() {
             </div>
           )}
         </div>
-      </main>
+      </div>
 
       {/* Place details modal popover */}
       {selectedPlace && (

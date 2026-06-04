@@ -317,7 +317,7 @@ export default function LeaderboardPage() {
   const myEntry = user ? data.find((e) => e.userId === (user as any).id) : null;
 
   return (
-    <div className="min-h-screen">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-[var(--border)] bg-gradient-to-br from-amber-500/5 via-[var(--background)] to-cyan-500/5 pb-6 pt-8">
         <div className="pointer-events-none absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl" />
@@ -443,7 +443,7 @@ export default function LeaderboardPage() {
             <h2 className="mb-4 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-[var(--muted)]">
               <Zap size={14} className="text-cyan-400" /> Active City Quests in {cityFilter === "All Cities" ? "Pune" : cityFilter}
             </h2>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-3">
               {getCityQuests(cityFilter === "All Cities" ? "Pune" : cityFilter).map((quest, idx) => (
                 <motion.div
                   key={idx}
@@ -529,7 +529,7 @@ export default function LeaderboardPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="mt-10 grid grid-cols-3 gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-5"
+            className="mt-10 grid grid-cols-3 gap-2 sm:gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-5"
           >
             {[
               {

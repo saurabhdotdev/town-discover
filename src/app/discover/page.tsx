@@ -23,6 +23,7 @@ import {
   ShoppingBag,
   Bed
 } from "lucide-react";
+import Link from "next/link";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
@@ -574,7 +575,7 @@ export default function DiscoverPage() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
       <Header
         eyebrow="Discover"
         title="Explore Nearby"
@@ -583,7 +584,7 @@ export default function DiscoverPage() {
         showLocation
       />
 
-      <div className="mx-auto max-w-screen-xl px-3 py-4 sm:px-4 md:px-6 md:py-6">
+      <div className="w-full max-w-screen-xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-6">
         {/* Weekly Spotlight Slideshow */}
         {spotlightSpots.length > 0 && !hasFilters && (
           <section className="relative mb-5 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:mb-6">
@@ -671,6 +672,23 @@ export default function DiscoverPage() {
               requestLocation();
             }}
           />
+
+          <Link
+            href="/trips"
+            className="mt-3 flex items-center justify-between rounded-xl border border-teal-500/25 bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-transparent px-4 py-3 sm:px-5 sm:py-4 transition-all duration-300 hover:-translate-y-1 hover:border-teal-400/50 hover:from-teal-500/10 hover:to-cyan-500/10 hover:shadow-[0_8px_30px_rgba(20,184,166,0.12)]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-400">
+                <Sparkles size={18} className="animate-pulse" />
+              </div>
+              <div className="text-left min-w-0">
+                <p className="text-sm font-black text-[var(--foreground)]">Twin-City Route Planner 🔀</p>
+                <p className="text-[10px] sm:text-xs font-semibold text-[var(--muted)] truncate">Create custom itineraries for Hubli-Dharwad, Pune-PCMC, Bangalore-Mysore...</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-teal-400" />
+          </Link>
+
           <MoodPicker value={selectedMood} onChange={setSelectedMood} className="mt-3" />
 
           {/* Search controls — mobile 2-row, desktop single-row */}
@@ -757,7 +775,7 @@ export default function DiscoverPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden border-t border-[var(--border)] mt-4 pt-4 grid gap-4 sm:grid-cols-3 text-xs sm:text-sm font-semibold"
+                className="overflow-hidden border-t border-[var(--border)] mt-4 pt-4 grid gap-4 md:grid-cols-3 text-xs sm:text-sm font-semibold"
               >
                 {/* Rating Filter */}
                 <div className="space-y-2">
@@ -1067,7 +1085,7 @@ export default function DiscoverPage() {
                       type="button"
                       onClick={() => setLayoverTimeBucket(tab.id as any)}
                       className={cn(
-                        "flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-bold transition cursor-pointer",
+                        "flex flex-col items-center justify-center py-2 px-0.5 rounded-lg text-[10px] sm:text-xs font-bold transition cursor-pointer text-center select-none",
                         layoverTimeBucket === tab.id
                           ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/10"
                           : "text-slate-400 hover:text-white hover:bg-white/5"

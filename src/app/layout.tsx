@@ -46,7 +46,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <AuthProvider>
           <ServiceWorkerRegister />
-          <main className="flex-1 pb-24 pt-14 md:pb-0 md:pt-16">{children}</main>
+          <main className="flex-1 w-full max-w-full overflow-x-hidden pb-24 pt-14 md:pb-0 md:pt-16">{children}</main>
           <BottomNavigation />
           <AiAssistant />
         </AuthProvider>

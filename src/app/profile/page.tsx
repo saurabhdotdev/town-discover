@@ -18,6 +18,7 @@ import { XPProgressBar } from "@/components/profile/XPProgressBar";
 import { clearOnboarding } from "@/hooks/useOnboarding";
 import { SheherPassCard } from "@/components/profile/SheherPassCard";
 import { useRouter } from "next/navigation";
+import { ExplorerPassport } from "@/components/profile/ExplorerPassport";
 
 export default function ProfilePage() {
   const { location } = useGeolocation();
@@ -38,7 +39,7 @@ export default function ProfilePage() {
   const [errorSuggestions, setErrorSuggestions] = useState("");
     const [newSuggestion, setNewSuggestion] = useState("");
     const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
-  const { stats: gamificationStats } = useBadges(!!user);
+  const { stats: gamificationStats, refresh: refreshGamificationStats } = useBadges(!!user);
 
   // Admin Management Modal states
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -274,7 +275,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[var(--background)] pb-8 text-[var(--foreground)]">
+      <div className="w-full max-w-full min-h-screen overflow-x-hidden bg-[var(--background)] pb-8 text-[var(--foreground)]">
         {authRequiredMessage ? (
           <Header eyebrow="Profile" title="Explorer Profile" subtitle={authRequiredMessage} showLocation={false} />
         ) : mode === "signup" ? (
@@ -366,10 +367,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pb-8 text-[var(--foreground)]">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden bg-[var(--background)] pb-8 text-[var(--foreground)]">
       <Header eyebrow="Profile" title="Sheher Explorer Profile" subtitle="Saved places, collections, and your account overview." showLocation={false} />
 
-      <div className="mx-auto grid max-w-screen-xl gap-6 px-3 py-4 sm:px-4 md:grid-cols-[280px_minmax(0,1fr)] md:px-6 md:py-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="w-full max-w-screen-xl mx-auto grid gap-6 px-3 py-4 sm:px-4 md:grid-cols-[280px_minmax(0,1fr)] md:px-6 md:py-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <motion.aside
           initial={{ opacity: 0, x: -18 }}
           animate={{ opacity: 1, x: 0 }}
@@ -397,7 +398,7 @@ export default function ProfilePage() {
                 { label: "Cities", value: savedCities.length.toString() },
               ].map((stat) => (
                 <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-2 text-center sm:p-3">
-                  <p className="text-lg font-black text-[var(--foreground)] sm:text-xl">{stat.value}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl font-black text-[var(--foreground)] truncate px-0.5">{stat.value}</p>
                   <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">{stat.label}</p>
                 </div>
               ))}
@@ -822,6 +823,23 @@ export default function ProfilePage() {
               </div>
             )}
           </motion.section>
+
+          {/* ── Explorer Passport & City Stamps ── */}
+          {user && (
+            <motion.section
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.42, delay: 0.14 }}
+            >
+              <ExplorerPassport
+                savedPlaces={rawSavedPlaces}
+                onStampClaimed={() => {
+                  refreshGamificationStats();
+                  window.dispatchEvent(new Event("sheher:refresh-badges"));
+                }}
+              />
+            </motion.section>
+          )}
 
           {user?.role === "super_admin" && (
             <motion.section

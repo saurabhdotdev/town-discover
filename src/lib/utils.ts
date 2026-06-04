@@ -1,4 +1,5 @@
 import { PlaceCategory, Place } from "@/types";
+import { CITY_DISPLAY_NAMES, SupportedCityName } from "@/lib/pune-location";
 
 // API Configuration
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -123,7 +124,8 @@ export const isUsefulArea = (value?: string | null): boolean => {
 
 export const formatPlaceArea = (place: PlaceAreaLike): string => {
   const locality = cleanLocationPart(place.locality);
-  const city = cleanLocationPart(place.city);
+  const rawCity = cleanLocationPart(place.city);
+  const city = CITY_DISPLAY_NAMES[rawCity as SupportedCityName] || rawCity;
   const parts: string[] = [];
 
   if (isUsefulArea(locality)) {

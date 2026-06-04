@@ -22,6 +22,7 @@ import {
   getCrowdReportsSchema,
   postCrowdReportSchema,
 } from "./schemas/crowdReport";
+import { postLaunchDealSchema } from "./schemas/flashDeal";
 import { requestLogger } from "./middleware/logger";
 
 // Load environment variables from frontend env.local first for convenience
@@ -401,6 +402,7 @@ app.post(
   "/api/deals/launch",
   authenticateUser,
   requireUser,
+  validateRequest(postLaunchDealSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     const { placeId, placeTitle, discountPercentage, description } = req.body;
     try {
