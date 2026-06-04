@@ -652,42 +652,6 @@ export default function DiscoverPage() {
           </section>
         )}
 
-        {/* Sheher Airport Companion Banner */}
-        {!hasFilters && activeAirportCode && AIRPORT_GUIDES[activeAirportCode] && (
-          <section className="mb-5 overflow-hidden rounded-lg border border-amber-500/30 bg-gradient-to-r from-slate-950 via-[#0b1c24] to-[#050b0d] p-5 shadow-xl md:mb-6 relative">
-            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-              <Plane size={120} className="rotate-45 text-amber-400 animate-pulse" style={{ animationDuration: '4s' }} />
-            </div>
-            <div className="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex rounded-full bg-amber-400/20 text-amber-300 px-2.5 py-0.5 text-[10px] font-black uppercase border border-amber-500/30 tracking-wider">
-                    ✈️ SHEHER AIRPORT COMPANION
-                  </span>
-                  <span className="inline-flex rounded-full bg-white/5 text-[var(--muted)] px-2 py-0.5 text-[9px] font-bold border border-white/10 uppercase tracking-widest">
-                    {activeAirportCode}
-                  </span>
-                </div>
-                <h3 className="text-lg font-black text-white leading-tight">
-                  Terminal Guide: {AIRPORT_GUIDES[activeAirportCode].name}
-                </h3>
-                <p className="text-xs font-semibold text-slate-400 max-w-2xl">
-                  Laying over or waiting for a flight at {AIRPORT_GUIDES[activeAirportCode].terminal}? Discover curated spots by time budget, relaxation areas, or claim premium lounge access coupons.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedAirportCode(activeAirportCode);
-                  setIsAirportGuideOpen(true);
-                }}
-                className="shrink-0 rounded-lg bg-amber-400 px-5 py-3 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/10 transition hover:bg-amber-350 active:scale-95 cursor-pointer"
-              >
-                Explore Terminal {activeAirportCode} 🔍
-              </button>
-            </div>
-          </section>
-        )}
 
         <div className="app-surface rounded-lg p-3 md:p-4">
           <CitySwitcher
@@ -998,20 +962,52 @@ export default function DiscoverPage() {
               )}
             </>
           ) : (
-            defaultSections.map((section) => (
-              <DiscoverySection
-                key={section.title}
-                title={section.title}
-                description={section.description}
-                places={section.places}
-                loading={livePlacesLoading && !usingLivePlaces}
-                onPlaceClick={setSelectedPlace}
-                onSavePlace={toggleSave}
-                savedPlaceIds={savedPlaceIds}
-                carousel={true}
-                vibeScores={vibeScores}
-              />
-            ))
+            <>
+              {activeAirportCode && AIRPORT_GUIDES[activeAirportCode] && (
+                <div className="mb-6 rounded-xl border border-amber-500/20 bg-gradient-to-r from-slate-950 to-[#0b1c24] p-4 relative overflow-hidden backdrop-blur-sm shadow-md">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-inner">
+                        <Plane size={18} className="rotate-45 text-amber-400" />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-400">Airport layover guide</span>
+                        <h4 className="text-sm font-black text-white leading-tight mt-0.5">
+                          Terminal Companion: {AIRPORT_GUIDES[activeAirportCode].name}
+                        </h4>
+                        <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                          View time-budgeted spots and claim VIP Lounge coupons.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAirportCode(activeAirportCode);
+                        setIsAirportGuideOpen(true);
+                      }}
+                      className="shrink-0 rounded-lg bg-amber-400 hover:bg-amber-350 px-4 py-2 text-xs font-black text-slate-950 transition active:scale-95 cursor-pointer shadow"
+                    >
+                      Explore {activeAirportCode} Guide
+                    </button>
+                  </div>
+                </div>
+              )}
+              {defaultSections.map((section) => (
+                <DiscoverySection
+                  key={section.title}
+                  title={section.title}
+                  description={section.description}
+                  places={section.places}
+                  loading={livePlacesLoading && !usingLivePlaces}
+                  onPlaceClick={setSelectedPlace}
+                  onSavePlace={toggleSave}
+                  savedPlaceIds={savedPlaceIds}
+                  carousel={true}
+                  vibeScores={vibeScores}
+                />
+              ))}
+            </>
           )}
         </div>
       </div>
