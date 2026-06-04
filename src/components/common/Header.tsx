@@ -23,16 +23,18 @@ export const Header: React.FC<HeaderProps> = ({
   className,
 }) => {
   return (
-    <motion.header
-      initial={{ opacity: 0, y: -18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.42, ease: "easeOut" }}
+    <header
       className={cn(
         "sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16",
         className
       )}
     >
-      <div className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5">
+      <motion.div
+        initial={{ opacity: 0, y: -18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.42, ease: "easeOut" }}
+        className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5"
+      >
         <div className="min-w-0">
           {eyebrow && (
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
@@ -60,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="truncate">{location}</span>
           </motion.div>
         )}
-      </div>
-    </motion.header>
+      </motion.div>
+    </header>
   );
 };

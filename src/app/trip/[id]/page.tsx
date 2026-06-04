@@ -278,13 +278,15 @@ export default function TripPage({
   return (
     <div className="w-full max-w-full min-h-screen overflow-x-hidden pb-28">
       {/* Hero Header */}
-      <motion.header
-        initial={{ opacity: 0, y: -18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.42, ease: "easeOut" }}
+      <header
         className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16"
       >
-        <div className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5">
+        <motion.div
+          initial={{ opacity: 0, y: -18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.42, ease: "easeOut" }}
+          className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5"
+        >
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
               <Route size={13} />
@@ -316,8 +318,8 @@ export default function TripPage({
               Share
             </button>
           </div>
-        </div>
-      </motion.header>
+        </motion.div>
+      </header>
 
       <div className="mx-auto max-w-screen-xl px-3 py-5 sm:px-4 md:px-6 md:py-8">
         {/* Trip stats strip */}
