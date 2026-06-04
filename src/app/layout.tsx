@@ -3,6 +3,7 @@ import "./globals.css";
 import { BottomNavigation } from "@/components/common/BottomNavigation";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { AiAssistant } from "@/components/common/AiAssistant";
+import { ServiceWorkerRegister } from "@/components/common/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
   title: "Sheher | Indian City Discovery",
@@ -44,6 +45,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <AuthProvider>
+          <ServiceWorkerRegister />
           <main className="flex-1 pb-24 pt-14 md:pb-0 md:pt-16">{children}</main>
           <BottomNavigation />
           <AiAssistant />

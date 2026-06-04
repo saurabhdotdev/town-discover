@@ -9,6 +9,11 @@ const pool = new Pool({
       : { rejectUnauthorized: false },
 });
 
+// Handle unexpected errors on idle pool clients to prevent process crashes
+pool.on("error", (err) => {
+  console.error("❌ Unexpected error on idle database client:", err.message || err);
+});
+
 export const db = {
   query: <T extends Record<string, any> = any>(
     text: string,

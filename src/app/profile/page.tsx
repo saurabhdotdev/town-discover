@@ -16,6 +16,7 @@ import { useBadges } from "@/hooks/useBadges";
 import { BadgeShelf } from "@/components/profile/BadgeShelf";
 import { XPProgressBar } from "@/components/profile/XPProgressBar";
 import { clearOnboarding } from "@/hooks/useOnboarding";
+import { SheherPassCard } from "@/components/profile/SheherPassCard";
 import { useRouter } from "next/navigation";
 
 export default function ProfilePage() {
@@ -277,9 +278,9 @@ export default function ProfilePage() {
         {authRequiredMessage ? (
           <Header eyebrow="Profile" title="Explorer Profile" subtitle={authRequiredMessage} showLocation={false} />
         ) : mode === "signup" ? (
-          <Header eyebrow="Profile" title="Log In" subtitle="Create a Sheher account to save places and report live crowd updates." showLocation={false} />
+          <Header eyebrow="Profile" title="Create Explorer Account" subtitle="Create a Sheher account to save places and report live crowd updates." showLocation={false} />
         ) : (
-          <Header eyebrow="Profile" title="Sheher Explorer Profile" subtitle="Saved places, preferences, and your account overview." showLocation={false} />
+          <Header eyebrow="Profile" title="Log In" subtitle="Sign in to sync saved places, create collections, and earn XP." showLocation={false} />
         )}
 
         <main className="mx-auto max-w-md px-4 pt-12">
@@ -346,7 +347,13 @@ export default function ProfilePage() {
             <div className="mt-5 border-t border-[var(--border)] pt-4 text-center">
               <button
                 type="button"
-                onClick={() => setMode((current) => (current === "login" ? "signup" : "login"))}
+                onClick={() => {
+                  setMode((current) => (current === "login" ? "signup" : "login"));
+                  setAuthMessage("");
+                  setAuthStatus("idle");
+                  setPassword("");
+                  setFullName("");
+                }}
                 className="text-xs font-bold text-teal-300 hover:underline"
               >
                 {mode === "login" ? "Don't have an account? Sign up" : "Already have an account? Log in"}
@@ -480,6 +487,8 @@ export default function ProfilePage() {
               <ChevronRight size={18} className="text-[var(--muted)]" />
             </button>
           </div>
+
+          <SheherPassCard />
         </motion.aside>
 
         <main className="space-y-5">

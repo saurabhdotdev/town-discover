@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       const places = mergePlaces([...approvedPlaces, ...livePlaces], filteredEvents);
       return Response.json(
         { places, city, source: "osm-bounds", eventsMerged: filteredEvents.length },
-        { status: 200, headers: { "Cache-Control": "public, max-age=10" } }
+        { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } }
       );
     } catch (error: any) {
       console.error("OSM bounds fetch failed:", error);
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
       const places = mergePlaces([...approvedPlaces, ...googlePlaces], townEvents);
       return Response.json(
         { places, city, source: "google", eventsMerged: townEvents.length },
-        { status: 200, headers: { "Cache-Control": "public, max-age=60" } }
+        { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } }
       );
     } catch (error) {
       console.error("Google Places API failed, falling back to OpenStreetMap:", error);
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
   try {
     const livePlaces = await fetchLivePlacesByCity(city);
     const places = mergePlaces([...approvedPlaces, ...livePlaces], townEvents);
-    return Response.json({ places, city, source: "osm", eventsMerged: townEvents.length }, { status: 200, headers: { "Cache-Control": "public, max-age=60" } });
+    return Response.json({ places, city, source: "osm", eventsMerged: townEvents.length }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } });
   } catch (error) {
     const fallbackPlaces = await getFallbackPlacesForCity(city);
     const places = mergePlaces([...approvedPlaces, ...fallbackPlaces], townEvents);
@@ -199,6 +199,6 @@ export async function GET(request: NextRequest) {
       source: "fallback",
       eventsMerged: townEvents.length,
       warning: error instanceof Error ? error.message : "OpenStreetMap places could not be loaded.",
-    }, { status: 200, headers: { "Cache-Control": "public, max-age=60" } });
+    }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } });
   }
 }

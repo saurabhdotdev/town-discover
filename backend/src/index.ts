@@ -3,28 +3,36 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import compression from "compression";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
+import crypto from "crypto";
 
 // Import local components
 import db from "./db";
 import { runDatabaseMigrations } from "./migrations";
-import { authenticateUser, requireUser } from "./middleware/auth";
+import { authenticateUser, requireUser, AuthenticatedUser } from "./middleware/auth";
 import { apiLimiter, reportPostLimiter } from "./middleware/rateLimiter";
 import { getAllowedOrigins, requireTrustedOrigin } from "./middleware/security";
 import { validateRequest } from "./middleware/validate";
 import { errorHandler } from "./middleware/errors";
+import { requestTimeout } from "./middleware/timeout";
 import {
   getCrowdReportsSchema,
   postCrowdReportSchema,
 } from "./schemas/crowdReport";
+import { requestLogger } from "./middleware/logger";
 
 // Load environment variables from frontend env.local first for convenience
 dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
 dotenv.config(); // Fallback to backend .env
 
 const app: Application = express();
+
+// Background database cleanup worker state
+let cleanupInterval: NodeJS.Timeout | null = null;
+let keepAliveInterval: NodeJS.Timeout | null = null;
 const PORT = process.env.PORT || 5000;
 const allowedOrigins = getAllowedOrigins();
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
@@ -46,7 +54,29 @@ const io = new Server(httpServer, {
   },
 });
 
-// Middleware
+// Parse cookie strings manually (for Socket.io handshakes)
+const parseCookies = (cookieHeader: string | undefined): Record<string, string> => {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  cookieHeader.split(";").forEach((cookieStr) => {
+    const parts = cookieStr.split("=");
+    const name = parts[0]?.trim();
+    const value = parts.slice(1).join("=").trim();
+    if (name) {
+      cookies[name] = decodeURIComponent(value);
+    }
+  });
+  return cookies;
+};
+
+const hashSessionToken = (token: string) => {
+  return crypto.createHash("sha256").update(token).digest("base64url");
+};
+
+// Middleware setup
+app.use(compression());
+app.use(requestLogger);
+app.use(requestTimeout(15000)); // 15-second request timeout limit
 app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
@@ -56,6 +86,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "64kb" }));
+app.use(express.urlencoded({ extended: true, limit: "64kb" })); // Secure urlencoded payload limit
 app.use(cookieParser());
 app.use("/api/", requireTrustedOrigin);
 
@@ -70,6 +101,27 @@ const cooldownMinutes = 10;
 // SQL Helper functions
 const pruneExpiredReports = async () => {
   await db.query(`DELETE FROM crowd_reports WHERE reported_at < ${activeWindowSql}`);
+};
+
+const startCleanupInterval = () => {
+  // Prune once immediately on boot to clear out stale reports
+  pruneExpiredReports().catch((err) => {
+    console.error("❌ Startup database cleanup failed:", err.message || err);
+  });
+
+  // Run cleanup every 5 minutes
+  cleanupInterval = setInterval(async () => {
+    try {
+      console.log("🧹 Running background database cleanup for expired crowd reports...");
+      await pruneExpiredReports();
+      console.log("🧹 Background database cleanup completed successfully.");
+    } catch (error: any) {
+      console.error("❌ Background database cleanup failed:", error.message || error);
+    }
+  }, 5 * 60 * 1000);
+
+  // Allow server shutdown without waiting for this interval
+  cleanupInterval.unref();
 };
 
 const summariesSql = (whereClause: string) => `
@@ -147,8 +199,6 @@ app.get(
     const { placeId, placeIds } = req.query as any;
 
     try {
-      await pruneExpiredReports();
-
       if (placeIds) {
         const idsArray = placeIds
           .split(",")
@@ -230,8 +280,6 @@ app.post(
     const user = req.user!;
 
     try {
-      await pruneExpiredReports();
-
       // Check Cooldown
       const recentReportResult = await db.query(
         `
@@ -307,6 +355,114 @@ app.post(
   }
 );
 
+// GET active flash deals
+app.get(
+  "/api/deals/active",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { rows } = await db.query(
+        `
+        SELECT 
+          id, 
+          place_id AS "placeId", 
+          place_title AS "placeTitle", 
+          discount_percentage AS "discountPercentage", 
+          description, 
+          expires_at AS "expiresAt"
+        FROM flash_deals
+        WHERE expires_at > NOW()
+        ORDER BY created_at DESC
+        `
+      );
+      res.json({ success: true, deals: rows });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST launch new flash deal (Simulated merchant endpoint)
+app.post(
+  "/api/deals/launch",
+  authenticateUser,
+  requireUser,
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { placeId, placeTitle, discountPercentage, description } = req.body;
+    try {
+      const expiresAt = new Date(Date.now() + 45 * 60 * 1000); // 45 mins expiry
+      const { rows } = await db.query(
+        `
+        INSERT INTO flash_deals (place_id, place_title, discount_percentage, description, expires_at)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, place_id AS "placeId", place_title AS "placeTitle", discount_percentage AS "discountPercentage", description, expires_at AS "expiresAt"
+        `,
+        [placeId, placeTitle, discountPercentage, description || "", expiresAt]
+      );
+      const deal = rows[0];
+      io.emit("new-flash-deal", deal);
+      res.status(201).json({ success: true, deal });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST subscribe to premium pass
+app.post(
+  "/api/auth/subscribe",
+  authenticateUser,
+  requireUser,
+  async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user!;
+    try {
+      await db.query(
+        `UPDATE users SET is_premium_pass = TRUE WHERE id = $1`,
+        [user.id]
+      );
+      res.json({ success: true, message: "Subscription activated successfully! ✨" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Socket.io handshake cookie authentication middleware
+io.use(async (socket, next) => {
+  try {
+    const cookieHeader = socket.handshake.headers.cookie;
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies["town_discover_session"];
+
+    if (token) {
+      const { rows } = await db.query<AuthenticatedUser>(
+        `
+        SELECT
+          users.id,
+          users.email,
+          users.full_name AS "fullName",
+          users.role,
+          users.is_premium_pass AS "isPremiumPass"
+        FROM auth_sessions
+        JOIN users ON users.id = auth_sessions.user_id
+        WHERE auth_sessions.token_hash = $1
+          AND auth_sessions.expires_at > NOW()
+        LIMIT 1
+        `,
+        [hashSessionToken(token)]
+      );
+      
+      if (rows[0]) {
+        socket.data.user = rows[0];
+        console.log(`🔌 Secure socket connection established for user: ${rows[0].email}`);
+      }
+    }
+    next();
+  } catch (error) {
+    console.error("❌ Socket authentication error:", error);
+    next(); // Fallback gracefully to anonymous socket
+  }
+});
+
 // Socket.io connection setup
 io.on("connection", (socket) => {
   socket.on("join-place", (placeId: string) => {
@@ -321,15 +477,49 @@ io.on("connection", (socket) => {
 // Centralized error handler middleware (must be registered last)
 app.use(errorHandler);
 
+// Database connection retry loop helper
+const connectWithRetry = async (retries = 5, delayMs = 3000): Promise<void> => {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      console.log(`📡 Connecting to database (Attempt ${i}/${retries})...`);
+      const client = await db.connect();
+      client.release();
+      console.log("📡 Database connection established successfully.");
+      return;
+    } catch (error: any) {
+      console.error(`❌ Connection attempt ${i} failed:`, error.message || error);
+      if (i < retries) {
+        console.log(`📡 Retrying database connection in ${delayMs / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      } else {
+        throw new Error("Could not connect to database after maximum retries.");
+      }
+    }
+  }
+};
+
 // Start Server
 let server: ReturnType<typeof httpServer.listen> | null = null;
 
 const startServer = async () => {
+  // Ensure DB connection is established with retry logic
+  await connectWithRetry();
+  
   await runDatabaseMigrations(db.pool);
+  startCleanupInterval();
+
+  // Start 60-second database keep-alive ping loop
+  keepAliveInterval = setInterval(async () => {
+    try {
+      await db.query("SELECT 1");
+    } catch (err) {
+      console.warn("⚠️ [DB Keep-Alive] Failed to ping database:", err);
+    }
+  }, 60000);
 
   server = httpServer.listen(PORT, () => {
-  console.log(`🚀 Sheher API Server running on port ${PORT}`);
-  console.log(`📡 Real-time Socket.io active`);
+    console.log(`🚀 Sheher API Server running on port ${PORT}`);
+    console.log(`📡 Real-time Socket.io active`);
   });
 };
 
@@ -337,12 +527,28 @@ const startServer = async () => {
 const shutdown = async (signal: string) => {
   console.log(`\n📡 Received ${signal}. Beginning graceful shutdown...`);
   
-  // Close HTTP and Socket.io server
+  // Stop background cleanups
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    console.log("📡 Background cleanup interval stopped.");
+  }
+
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    console.log("📡 Database keep-alive interval stopped.");
+  }
+
+  // Close Socket.io server explicitly to drain active websocket connections
+  io.close(() => {
+    console.log("📡 Socket.io server closed.");
+  });
+
+  // Close HTTP server from receiving new requests
   server?.close(() => {
     console.log("📡 HTTP server closed.");
   });
 
-  // Close database pool connection
+  // Close database pool connection pool
   await db.close();
 
   console.log("👋 Graceful shutdown complete.");
@@ -351,6 +557,17 @@ const shutdown = async (signal: string) => {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// Process-wide unhandled errors handlers (prevent process-level raw crashes)
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error);
+  shutdown("uncaughtException");
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
+  shutdown("unhandledRejection");
+});
 
 startServer().catch(async (error) => {
   console.error("Failed to start Sheher API Server:", error);

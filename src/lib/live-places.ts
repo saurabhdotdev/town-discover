@@ -272,9 +272,63 @@ const buildOverpassQuery = (location: UserLocation, radiusMeters: number) => `
 
 const overpassEndpoints = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.nchc.org.tw/api/interpreter",
   "https://overpass.openstreetmap.ru/api/interpreter",
 ];
+
+async function fetchOverpassWithTimeout(
+  query: string,
+  signal?: AbortSignal,
+  timeoutMs = 15000
+): Promise<Response> {
+  let lastError: any = null;
+
+  for (const endpoint of overpassEndpoints) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Link the parent signal if provided
+    let onAbort: (() => void) | null = null;
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        onAbort = () => controller.abort();
+        signal.addEventListener("abort", onAbort);
+      }
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: `data=${encodeURIComponent(query)}`,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "User-Agent": "Sheher/1.0 contact:town-discover.vercel.app",
+        },
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        return response;
+      }
+      lastError = new Error(`HTTP ${response.status} from ${endpoint}`);
+    } catch (err: any) {
+      if (signal?.aborted) {
+        throw new Error("Live request was cancelled.");
+      }
+      lastError = err;
+    } finally {
+      clearTimeout(timeoutId);
+      if (onAbort && signal) {
+        signal.removeEventListener("abort", onAbort);
+      }
+    }
+  }
+
+  throw lastError || new Error("All Overpass endpoints failed to respond.");
+}
 
 export async function fetchLivePlaces(
   location: UserLocation,
@@ -284,30 +338,11 @@ export async function fetchLivePlaces(
   const activeLocation = getSupportedCityLocation(location);
   const activeCity = getNearestSupportedCity(activeLocation);
   const query = buildOverpassQuery(activeLocation, radiusMeters);
-  let response: Response | null = null;
 
-  for (const endpoint of overpassEndpoints) {
-    try {
-      const nextResponse = await fetch(endpoint, {
-        method: "POST",
-        body: `data=${encodeURIComponent(query)}`,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "User-Agent": "Sheher/1.0 contact:town-discover.vercel.app",
-        },
-        signal,
-      });
-
-      if (nextResponse.ok) {
-        response = nextResponse;
-        break;
-      }
-    } catch {
-      if (signal?.aborted) throw new Error("Live nearby places request was cancelled.");
-    }
-  }
-
-  if (!response) {
+  let response: Response;
+  try {
+    response = await fetchOverpassWithTimeout(query, signal);
+  } catch {
     throw new Error("Live nearby places could not be loaded right now.");
   }
 
@@ -396,29 +431,10 @@ export async function fetchOSMPlacesByIds(ids: string[], signal?: AbortSignal): 
   if (relations.length > 0) query += `relation(id:${relations.join(",")});`;
   query += ");out center tags;";
 
-  let response: Response | null = null;
-  for (const endpoint of overpassEndpoints) {
-    try {
-      const nextResponse = await fetch(endpoint, {
-        method: "POST",
-        body: `data=${encodeURIComponent(query)}`,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "User-Agent": "Sheher/1.0 contact:town-discover.vercel.app",
-        },
-        signal,
-      });
-
-      if (nextResponse.ok) {
-        response = nextResponse;
-        break;
-      }
-    } catch {
-      if (signal?.aborted) throw new Error("Live request was cancelled.");
-    }
-  }
-
-  if (!response) {
+  let response: Response;
+  try {
+    response = await fetchOverpassWithTimeout(query, signal);
+  } catch {
     return [];
   }
 
@@ -518,29 +534,10 @@ export async function fetchLivePlacesByBounds(
     out center tags 150;
   `;
 
-  let response: Response | null = null;
-  for (const endpoint of overpassEndpoints) {
-    try {
-      const nextResponse = await fetch(endpoint, {
-        method: "POST",
-        body: `data=${encodeURIComponent(query)}`,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "User-Agent": "Sheher/1.0 contact:town-discover.vercel.app",
-        },
-        signal,
-      });
-
-      if (nextResponse.ok) {
-        response = nextResponse;
-        break;
-      }
-    } catch {
-      if (signal?.aborted) throw new Error("Live bounds places request was cancelled.");
-    }
-  }
-
-  if (!response) {
+  let response: Response;
+  try {
+    response = await fetchOverpassWithTimeout(query, signal);
+  } catch {
     throw new Error("Live places by bounds could not be loaded right now.");
   }
 

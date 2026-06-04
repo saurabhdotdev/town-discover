@@ -6,6 +6,13 @@ export interface Location {
   longitude: number;
 }
 
+export interface TrailStop {
+  title: string;
+  description: string;
+  locality: string;
+  image?: string;
+}
+
 export interface Place extends Location {
   id: string;
   title: string;
@@ -29,6 +36,8 @@ export interface Place extends Location {
     close: string;
   };
   routeWaypoints?: Location[];
+  trailStops?: TrailStop[];
+  isVeg?: boolean;
 }
 
 export interface InfluencerFeature {
@@ -59,6 +68,7 @@ export interface AuthUser {
   email: string;
   fullName: string | null;
   role: UserRole;
+  isPremiumPass?: boolean;
 }
 
 export type CrowdLevel = "low" | "moderate" | "busy" | "very_crowded";

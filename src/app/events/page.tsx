@@ -25,6 +25,8 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { useCitySelection } from "@/hooks/useCitySelection";
+import { LazyImage } from "@/components/common/LazyImage";
+
 import type { LiveEvent } from "@/app/api/events/live/route";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { SUPPORTED_CITY_NAMES, SupportedCityName } from "@/lib/pune-location";
@@ -196,10 +198,10 @@ function HeroEventCard({
       onClick={() => onBookClick(event)}
     >
       <div className="absolute inset-0 z-0">
-        <img
+        <LazyImage
           src={event.image}
           alt={event.title}
-          className="h-full w-full object-cover opacity-20 scale-105 transition-transform duration-700 group-hover:scale-110 blur-[1px]"
+          className="opacity-20 scale-105 transition-transform duration-700 group-hover:scale-110 blur-[1px]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--panel-strong)] via-[var(--panel-strong)]/60 to-transparent" />
       </div>
@@ -309,10 +311,10 @@ function EventCard({
     >
       {/* Image */}
       <div className="relative h-44 overflow-hidden shrink-0">
-        <img
+        <LazyImage
           src={event.image}
           alt={event.title}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          className="transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--panel)] via-transparent to-transparent" />
 
@@ -469,6 +471,7 @@ export default function EventsPage() {
 
   const fetchEvents = useCallback(async (city: string, refresh = false) => {
     setLoading(true);
+    setEvents([]); // Clear stale events on city change
     setError("");
     try {
       const params = new URLSearchParams({ city, category: "all", ...(refresh ? { refresh: "true" } : {}) });

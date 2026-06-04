@@ -304,3 +304,115 @@ img {
   mask-image: linear-gradient(to right, black 85%, transparent 100%);
   -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
 }
+
+/* ─── Premium UI Polishes & Animations ────────────────────────────────────── */
+
+/* Spotlight border utilities */
+.card-spotlight-border {
+  position: relative;
+}
+
+.card-spotlight-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    800px circle at var(--mouse-x, 0px) var(--mouse-y, 0px),
+    rgba(20, 184, 166, 0.15),
+    transparent 40%
+  );
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+  opacity: 0;
+}
+
+.card-spotlight-border:hover::before {
+  opacity: 1;
+}
+
+/* Confetti Burst Animations */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-20px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(180px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 20%;
+  animation: confetti-fall 1.5s ease-out forwards;
+  pointer-events: none;
+  z-index: 90;
+}
+
+/* Vibe Circle dash drawing animation */
+@keyframes draw-progress {
+  from {
+    stroke-dashoffset: 100;
+  }
+}
+
+.vibe-ring-progress {
+  animation: draw-progress 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Category shadow glows */
+.glow-cafe:hover {
+  box-shadow: 0 10px 30px -10px rgba(20, 184, 166, 0.4);
+}
+.glow-restaurant:hover {
+  box-shadow: 0 10px 30px -10px rgba(249, 115, 22, 0.4);
+}
+.glow-nightlife:hover {
+  box-shadow: 0 10px 30px -10px rgba(244, 63, 94, 0.4);
+}
+.glow-bar:hover {
+  box-shadow: 0 10px 30px -10px rgba(168, 85, 247, 0.4);
+}
+.glow-event:hover {
+  box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.4);
+}
+.glow-dessert:hover, .glow-ice-cream:hover {
+  box-shadow: 0 10px 30px -10px rgba(236, 72, 153, 0.4);
+}
+.glow-street-food:hover, .glow-food-stall:hover {
+  box-shadow: 0 10px 30px -10px rgba(234, 179, 8, 0.4);
+}
+
+/* ─── Upgraded Trail Planner Widget Custom Styles ─────────────────────── */
+.border-amber-550 {
+  border-color: rgba(245, 158, 11, 0.32) !important;
+}
+.border-rose-550 {
+  border-color: rgba(244, 63, 94, 0.32) !important;
+}
+.border-emerald-550 {
+  border-color: rgba(16, 185, 129, 0.32) !important;
+}
+.border-teal-550 {
+  border-color: rgba(20, 184, 166, 0.32) !important;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-down {
+  animation: slideDown 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

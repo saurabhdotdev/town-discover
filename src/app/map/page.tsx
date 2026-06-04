@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, Reorder } from "framer-motion";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
@@ -14,14 +14,19 @@ import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { Place } from "@/types";
 import { MapSkeleton } from "@/components/common/Skeleton";
+import { useRouter } from "next/navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
   ssr: false,
   loading: () => <MapSkeleton />
 });
-import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2 } from "lucide-react";
-import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow } from "@/lib/utils";
+import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee } from "lucide-react";
+import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow, isVegetarianPlace, API_URL } from "@/lib/utils";
+import { io } from "socket.io-client";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
+import { LazyImage } from "@/components/common/LazyImage";
+import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
+
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { CITY_CENTERS } from "@/lib/pune-location";
 import { SuggestPlaceModal } from "@/components/map/SuggestPlaceModal";
@@ -41,8 +46,164 @@ interface SavedTripPlan {
   createdAt: string;
 }
 
+interface AirportRecommendation {
+  title: string;
+  description: string;
+  location: string;
+  isPremium?: boolean;
+  couponCode?: string;
+}
+
+interface AirportGuide {
+  name: string;
+  city: string;
+  terminal: string;
+  loungeDiscountPercent?: number;
+  layovers: {
+    quick: AirportRecommendation[];
+    medium: AirportRecommendation[];
+    long: AirportRecommendation[];
+  };
+  lounges: {
+    name: string;
+    location: string;
+    amenities: string[];
+    premiumBenefit: string;
+    couponCode?: string;
+  }[];
+}
+
+const AIRPORT_GUIDES: Record<string, AirportGuide> = {
+  PNQ: {
+    name: "Pune Airport (Lohegaon)",
+    city: "Pune",
+    terminal: "New Integrated Terminal",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "Chai Point Express", description: "Grab a piping hot traditional Elaichi Chai & bun maska in less than 3 minutes.", location: "Departure Gates, Area 2" },
+        { title: "Charge Hub & Workspace", description: "Ergonomic charging bays and standing desks with free high-speed airport Wi-Fi.", location: "Near Gate 4" },
+        { title: "Local Craft Souvenirs", description: "Quick window shopping for traditional brasswares and Puneri accessories.", location: "Retail Arcade" }
+      ],
+      medium: [
+        { title: "Earth Lounge Access", description: "Relax on comfortable leather recliners with a gourmet hot buffet spread.", location: "First Floor, Departure Area", isPremium: true, couponCode: "SHEHER_PNQ_EARTH" },
+        { title: "The Coffee Bean & Tea Leaf", description: "Sip an ice-blended coffee while reading book selections at the library shelf.", location: "Security Hold Area" },
+        { title: "Pavers England", description: "Browse and try premium hand-stitched leather footwear and traveling accessories.", location: "Retail Boulevard" }
+      ],
+      long: [
+        { title: "Aroma Wellness & Reflexology", description: "Indulge in a 30-minute express foot reflexology or back massage to de-stress.", location: "Near Gate 6", isPremium: true, couponCode: "SPA_SHEHER_30" },
+        { title: "Silent resting alcoves", description: "Rest in quiet relaxation chairs with dim lighting away from boarding announcements.", location: "Upper Level, opposite Gate 8" }
+      ]
+    },
+    lounges: [
+      {
+        name: "Earth Lounge",
+        location: "First Floor, near gate 3",
+        amenities: ["Gourmet Buffet", "Free High-Speed Wi-Fi", "Charging Stations", "Flight Monitors"],
+        premiumBenefit: "Free Entry + Dedicated Lounge Pass with Sheher Premium Pass",
+        couponCode: "SHEHER-PNQ-LOUNGE"
+      }
+    ]
+  },
+  BOM: {
+    name: "Chhatrapati Shivaji Maharaj International Airport (T2)",
+    city: "Mumbai",
+    terminal: "Terminal 2 - Luxury Hub",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "Jaya He Museum Walk", description: "India's largest public art program. Explore 5,500+ stunning historical artifacts spanning a 3km walkway.", location: "Departures Level 3 & 4" },
+        { title: "Third Wave Coffee Roasters", description: "Quick hand-brewed single-origin Pour Over coffee.", location: "Domestic Departures, Gate 45" },
+        { title: "Scentido Luxury Perfumery", description: "Try exotic niche perfumes from around the globe.", location: "Duty Free Walkway" }
+      ],
+      medium: [
+        { title: "Adani Lounge (Luxury Class)", description: "Ultra-luxury airport lounge experience with five-star live cooking stations and custom cocktail mixers.", location: "Level 4, Departures", isPremium: true, couponCode: "SHEHER_BOM_ADANI" },
+        { title: "Lotus Spa by O2", description: "Luxury body massage therapies, dry steam baths, and hot stone reflexology.", location: "Level 3, near Gate 64", isPremium: true, couponCode: "SPA_BOM_O2" },
+        { title: "Forest Essentials Retail", description: "Indulge in pure Ayurvedic luxury skincare consultations and complimentary tester kits.", location: "Luxury Galleria" }
+      ],
+      long: [
+        { title: "Niranta Transit Hotel & Lounge", description: "Rent a cozy hourly sleeping room, take a refreshing hot shower, and enjoy a premium buffet.", location: "Landside, Terminal 2", isPremium: true, couponCode: "NIRANTA_SHEHER_20" },
+        { title: "Prana Spa & Salon Lounge", description: "Full beauty parlor, styling, hair treatments, and holistic massages.", location: "Departures Level 4" },
+        { title: "Luxury Duty-Free Exploration", description: "Browse exclusive Single Malts, gourmet chocolates, and high-end watches with personal shopper assistance.", location: "Duty-Free Core" }
+      ]
+    },
+    lounges: [
+      {
+        name: "Adani Lounge (Luxury Class)",
+        location: "Level 4, T2 (Post-Security)",
+        amenities: ["Live Chef Counters", "Premium Bar", "Shower Suites", "Massage Chairs", "Business Center"],
+        premiumBenefit: "Complimentary access for Sheher Pass holders (Valid once/quarter)",
+        couponCode: "SHEHER-BOM-ADANI-VIP"
+      }
+    ]
+  },
+  BLR: {
+    name: "Kempegowda International Airport (T2)",
+    city: "Bengaluru",
+    terminal: "Terminal 2 - Terminal in a Garden",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "T2 Forest Walkway", description: "Walk through the stunning indoor bamboo gardens, moss walls, and hanging plant bells.", location: "T2 Transit Core" },
+        { title: "Araku Coffee Experience", description: "Quick luxury organic espresso shot sourced from the Araku Valley.", location: "Departures Retail" },
+        { title: "Tech charging pods", description: "Ergonomic charging capsules equipped with high-speed ports.", location: "Gate 12" }
+      ],
+      medium: [
+        { title: "080 Lounge (Domestic/International)", description: "Premium Bengaluru-themed lounge featuring curated library rooms, cocktail bars, and chef counters.", location: "Level 2, Domestic Departures", isPremium: true, couponCode: "SHEHER_BLR_080" },
+        { title: "Windmills Craftworks Bar", description: "Sip micro-brewed craft beers on tap while waiting for boarding calls.", location: "T2 Pier F", isPremium: true, couponCode: "WINDMILLS_FREE_BREW" },
+        { title: "The Quad Mall Exploration", description: "Step just outside T1 to experience an outdoor plaza filled with live music, restaurants, and shopping stores.", location: "Arrivals Quad Plaza" }
+      ],
+      long: [
+        { title: "Snooze At My Space Pods", description: "Soundproof sleeping pods with individual climate controls and work desk settings.", location: "T2, Near Gate 21", isPremium: true, couponCode: "SNOOZE_BLR_SHEHER" },
+        { title: "O2 Spa Sanctuary", description: "Traditional Swedish therapy or deep tissue massages for complete relaxation.", location: "T2 Upper Level" }
+      ]
+    },
+    lounges: [
+      {
+        name: "080 Lounge (Garden City Premium)",
+        location: "T2 Departures, near Gate 15",
+        amenities: ["Curated Library Room", "Whiskey Bar", "Live Wok & Pasta Counters", "Private Resting Cabins"],
+        premiumBenefit: "Free access (subject to availability) + Priority Booking for Sheher Pass holders",
+        couponCode: "SHEHER-BLR-080"
+      }
+    ]
+  },
+  DEL: {
+    name: "Indira Gandhi International Airport (T3)",
+    city: "Delhi",
+    terminal: "Terminal 3 - Global Gateway",
+    loungeDiscountPercent: 50,
+    layovers: {
+      quick: [
+        { title: "Starbucks Reserve Experience", description: "Taste exclusive reserve blends in a highly stylish lounge cafe.", location: "T3 Retail Hub" },
+        { title: "Charging Stations & Loungers", description: "Relax on reclining leather chairs with direct USB and AC outlets.", location: "Gates 27-36 Corridor" },
+        { title: "Hamleys Toy Store Experience", description: "Fun, color-filled live displays and gadget testing counters.", location: "T3 Departures" }
+      ],
+      medium: [
+        { title: "Encalm Lounge", description: "Massive lounge area with extensive culinary dishes, a live bar, and relaxing environments.", location: "Lounge Mezzanine Level", isPremium: true, couponCode: "SHEHER_DEL_ENCALM" },
+        { title: "Encalm Spa Wellness", description: "Revitalizing aromatherapy treatments and fast foot massages.", location: "Lounge Level, T3", isPremium: true, couponCode: "SPA_DEL_ENCALM" },
+        { title: "Delhi Bazaar Retail Walk", description: "Browse curated Indian spices, luxury teas, and hand-woven pashmina shawls.", location: "Duty Free Lane" }
+      ],
+      long: [
+        { title: "SAM Snooze Pods", description: "Comfortable air-conditioned micro-hotel pods rented hourly with TV and Wi-Fi.", location: "International Departures, T3", isPremium: true, couponCode: "SAM_SNOOZE_DELHI" },
+        { title: "Holiday Inn Express Transit Hotel", description: "Check in for an hourly room, get access to the fitness center and hot showers.", location: "Level 5, Departures T3", isPremium: true, couponCode: "HOLIDAY_IN_DELHI" }
+      ]
+    },
+    lounges: [
+      {
+        name: "Encalm Lounge (T3 Mezzanine)",
+        location: "Level 4, T3 Departures",
+        amenities: ["Extensive International Buffet", "Bar Station", "Dedicated Workstations", "Wi-Fi & Magazines"],
+        premiumBenefit: "100% Free Entry + Fast Track Lounge Check-In with Sheher Pass Card",
+        couponCode: "SHEHER-DEL-ENCALM-VIP"
+      }
+    ]
+  }
+};
+
 export default function MapPage() {
   const { user, setAuthRequiredMessage } = useAuth();
+  const router = useRouter();
   const { selectedCity, hasChosenCity, chooseCity, preferDetectedCity } = useCitySelection();
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -66,9 +227,17 @@ export default function MapPage() {
     activeCity
   );
   const [focusedPlace, setFocusedPlace] = useState<Place | null>(null);
+  const [hideOtherPlaces, setHideOtherPlaces] = useState(false);
   const [detailsPlace, setDetailsPlace] = useState<Place | null>(null);
+
+  useEffect(() => {
+    if (!focusedPlace) {
+      setHideOtherPlaces(false);
+    }
+  }, [focusedPlace]);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showOnlyOpen, setShowOnlyOpen] = useState<boolean>(false);
+  const [vegOnly, setVegOnly] = useState<boolean>(false);
   const [minRating, setMinRating] = useState<number>(0);
   const { savedPlaceIds, savedPlaces } = useSavedPlaces();
 
@@ -87,12 +256,30 @@ export default function MapPage() {
   const [activeTripPlanId, setActiveTripPlanId] = useState<string | null>(null);
   const [tripSaveStatus, setTripSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [tripSaveMessage, setTripSaveMessage] = useState("");
+  const [vehicleType, setVehicleType] = useState<"car" | "suv" | "lcv">("car");
+
+  // Itinerary Sharing & Reordering States
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copyShareMessage, setCopyShareMessage] = useState("");
+
+  // Airport Layover Companion States
+  const [isAirportGuideOpen, setIsAirportGuideOpen] = useState(false);
+  const [selectedAirportCode, setSelectedAirportCode] = useState<string>("BOM");
+  const [layoverTimeBucket, setLayoverTimeBucket] = useState<"quick" | "medium" | "long">("medium");
 
   // Cruise Simulation States
   const [simulationActive, setSimulationActive] = useState<boolean>(false);
   const [simulationSpeed, setSimulationSpeed] = useState<number>(2); // 2x default
   const [simulationIndex, setSimulationIndex] = useState<number>(0);
   const [upcomingStopAlert, setUpcomingStopAlert] = useState<{ place: Place; distance: number } | null>(null);
+
+  // Route Optimization & Weather States
+  const [optimizationFeedback, setOptimizationFeedback] = useState<string | null>(null);
+  const [simulatedDepartureHour, setSimulatedDepartureHour] = useState<number>(new Date().getHours());
+  const [weatherAlternativeAlert, setWeatherAlternativeAlert] = useState<string | null>(null);
+
+  // Flash Deal Notification States
+  const [activeFlashDeal, setActiveFlashDeal] = useState<any | null>(null);
 
   const handlePlanTrip = async (startStr: string, endStr: string) => {
     if (!startStr.trim() || !endStr.trim()) {
@@ -183,15 +370,81 @@ export default function MapPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const planId = new URLSearchParams(window.location.search).get("tripPlan");
-    if (!planId) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const planId = searchParams.get("tripPlan");
+    const stopsParam = searchParams.get("stops");
 
-    fetch(`/api/trip-plans?id=${encodeURIComponent(planId)}`, { cache: "no-store" })
-      .then(async (response) => {
-        const data = await response.json();
-        if (response.ok && data.plan) applySavedTripPlan(data.plan);
-      })
-      .catch(() => undefined);
+    if (planId) {
+      fetch(`/api/trip-plans?id=${encodeURIComponent(planId)}`, { cache: "no-store" })
+        .then(async (response) => {
+          const data = await response.json();
+          if (response.ok && data.plan) applySavedTripPlan(data.plan);
+        })
+        .catch(() => undefined);
+    } else if (stopsParam) {
+      const sourceName = searchParams.get("sourceName") ?? "Start Spot";
+      const destName = searchParams.get("destName") ?? "End Spot";
+      const trailName = searchParams.get("trailName");
+      setTripLoading(true);
+      setTripError(null);
+
+      fetch(`/api/places/resolve?ids=${encodeURIComponent(stopsParam)}`)
+        .then(async (res) => {
+          const data = await res.json();
+          if (res.ok && data.places && data.places.length > 0) {
+            const stops = data.places;
+            setTripStops(stops);
+            setTripSource(sourceName);
+            setTripDest(destName);
+            setTripPlanName(trailName ?? `Spontaneous Walk: ${sourceName} to ${destName}`);
+            
+            // Build route coordinates using OSRM foot routing
+            const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
+            const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+            
+            fetch(osrmUrl)
+              .then((res) => (res.ok ? res.json() : null))
+              .then((routeData) => {
+                if (routeData && routeData.routes?.[0]) {
+                  const route = routeData.routes[0];
+                  setTripRoutePath(
+                    route.geometry.coordinates.map(([lng, lat]: [number, number]) => ({
+                      latitude: lat,
+                      longitude: lng,
+                    }))
+                  );
+                  setTripStats({
+                    distance: parseFloat((route.distance / 1000).toFixed(1)),
+                    duration: Math.round(route.duration / 60),
+                  });
+                } else {
+                  setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
+                  setTripStats({
+                    distance: 1.5,
+                    duration: 20,
+                  });
+                }
+                setMode("trip");
+                setMobileView("map");
+              })
+              .catch(() => {
+                setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
+                setTripStats({
+                  distance: 1.5,
+                  duration: 20,
+                });
+                setMode("trip");
+                setMobileView("map");
+              });
+          }
+        })
+        .catch(() => {
+          setTripError("Failed to resolve stops for the spontaneous walk.");
+        })
+        .finally(() => {
+          setTripLoading(false);
+        });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -239,24 +492,448 @@ export default function MapPage() {
     }
   };
 
-  const shareTripPlan = async () => {
-    const link = activeTripPlanId
-      ? `${window.location.origin}/trip/${activeTripPlanId}`
-      : `${window.location.origin}/map`;
-    try {
-      if (navigator.share && activeTripPlanId) {
-        await navigator.share({
-          title: tripPlanName || "Sheher trip plan",
-          text: `Check this route: ${tripSource} to ${tripDest}`,
-          url: link,
-        });
-      } else {
-        await navigator.clipboard.writeText(link);
-        setTripSaveMessage(activeTripPlanId ? "Share link copied." : "Map link copied. Save the trip first for a reusable route link.");
-      }
-    } catch {
-      setTripSaveMessage("Share cancelled.");
+  const recalculateRouteForStops = async (newStops: Place[]) => {
+    if (newStops.length < 2) {
+      setTripRoutePath([]);
+      setTripStats(null);
+      return;
     }
+    
+    setTripLoading(true);
+    try {
+      const coordString = newStops.map((s) => `${s.longitude},${s.latitude}`).join(";");
+      const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+      
+      const res = await fetch(osrmUrl);
+      if (res.ok) {
+        const routeData = await res.json();
+        if (routeData && routeData.routes?.[0]) {
+          const route = routeData.routes[0];
+          setTripRoutePath(
+            route.geometry.coordinates.map(([lng, lat]: [number, number]) => ({
+              latitude: lat,
+              longitude: lng,
+            }))
+          );
+          setTripStats({
+            distance: parseFloat((route.distance / 1000).toFixed(1)),
+            duration: Math.round(route.duration / 60),
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to recalculate route:", err);
+    } finally {
+      setTripLoading(false);
+    }
+  };
+
+  const handleAddStopToTrip = (place: Place) => {
+    if (tripStops.some((s) => s.id === place.id)) {
+      alert("Spot is already in your itinerary!");
+      return;
+    }
+    const newStops = [...tripStops, place];
+    setTripStops(newStops);
+    recalculateRouteForStops(newStops);
+  };
+
+  const handleDeleteStop = (stopId: string) => {
+    const newStops = tripStops.filter((s) => s.id !== stopId);
+    setTripStops(newStops);
+    recalculateRouteForStops(newStops);
+  };
+
+  const handleMoveStop = (index: number, direction: "up" | "down") => {
+    const newStops = [...tripStops];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newStops.length) return;
+    
+    const temp = newStops[index];
+    newStops[index] = newStops[targetIndex];
+    newStops[targetIndex] = temp;
+    
+    setTripStops(newStops);
+    recalculateRouteForStops(newStops);
+  };
+
+  const calculateTotalPathDistance = (stops: Place[]) => {
+    let dist = 0;
+    for (let i = 0; i < stops.length - 1; i++) {
+      dist += calculateDistance(
+        stops[i].latitude,
+        stops[i].longitude,
+        stops[i + 1].latitude,
+        stops[i + 1].longitude
+      );
+    }
+    return dist;
+  };
+
+  const handleOptimizeRoute = () => {
+    if (tripStops.length <= 2) return;
+
+    const firstStop = tripStops[0];
+    const remainingStops = tripStops.slice(1);
+
+    const permute = (arr: Place[]): Place[][] => {
+      if (arr.length === 0) return [[]];
+      const result: Place[][] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const current = arr[i];
+        const remaining = [...arr.slice(0, i), ...arr.slice(i + 1)];
+        const subPerms = permute(remaining);
+        for (const p of subPerms) {
+          result.push([current, ...p]);
+        }
+      }
+      return result;
+    };
+
+    const allPermutations = permute(remainingStops);
+    let bestPermutation = remainingStops;
+    let minDistance = Infinity;
+
+    allPermutations.forEach((perm) => {
+      const candidateRoute = [firstStop, ...perm];
+      const dist = calculateTotalPathDistance(candidateRoute);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestPermutation = perm;
+      }
+    });
+
+    const optimized = [firstStop, ...bestPermutation];
+    const oldDist = calculateTotalPathDistance(tripStops);
+    const newDist = calculateTotalPathDistance(optimized);
+    const saved = oldDist - newDist;
+
+    setTripStops(optimized);
+    recalculateRouteForStops(optimized);
+
+    if (saved > 0.02) {
+      setOptimizationFeedback(`Route optimized! Reordered stops to save ${saved.toFixed(2)} km of walking 🚶✨`);
+    } else {
+      setOptimizationFeedback("Route is already in the most optimal order!");
+    }
+
+    setTimeout(() => {
+      setOptimizationFeedback(null);
+    }, 4000);
+  };
+
+  const getCityIATA = (cityName: string): string => {
+    const normalized = cityName.toLowerCase().trim();
+    if (normalized.includes("pune")) return "PNQ";
+    if (normalized.includes("mumbai") || normalized.includes("bombay")) return "BOM";
+    if (normalized.includes("bangalore") || normalized.includes("bengaluru")) return "BLR";
+    if (normalized.includes("delhi")) return "DEL";
+    if (normalized.includes("chennai") || normalized.includes("madras")) return "MAA";
+    if (normalized.includes("kolhapur")) return "KLH";
+    if (normalized.includes("nashik")) return "ISK";
+    if (normalized.includes("cherryhill")) return "CHH";
+    return "SHR";
+  };
+
+  const [postcardMessage, setPostcardMessage] = useState<string | null>(null);
+
+  const handleGeneratePostcard = async () => {
+    if (!tripStats || tripStops.length === 0) return;
+    setPostcardMessage("Generating Travel Card... 📸");
+
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080;
+      canvas.height = 1350;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas context is not available.");
+
+      const bgGrad = ctx.createRadialGradient(540, 675, 50, 540, 675, 800);
+      bgGrad.addColorStop(0, "#0b1c24");
+      bgGrad.addColorStop(1, "#050b0d");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+
+      ctx.fillStyle = "rgba(45, 212, 191, 0.03)";
+      ctx.beginPath();
+      ctx.arc(1080, 0, 400, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(245, 158, 11, 0.02)";
+      ctx.beginPath();
+      ctx.arc(0, 1350, 450, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(45, 212, 191, 0.15)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(30, 30, 1020, 1290);
+
+      ctx.fillStyle = "#2dd4bf";
+      ctx.font = "900 24px Arial";
+      ctx.fillText("✈  SHEHER EXPLORER TRAIL", 70, 95);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "900 68px Arial";
+      const heading = tripPlanName || `${tripSource} to ${tripDest}`;
+      const words = heading.split(" ");
+      let line = "";
+      let currentY = 180;
+      const maxWidth = 940;
+      const lineHeight = 80;
+
+      words.forEach((word) => {
+        const testLine = line ? `${line} ${word}` : word;
+        if (ctx.measureText(testLine).width > maxWidth && line) {
+          ctx.fillText(line, 70, currentY);
+          line = word;
+          currentY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      });
+      ctx.fillText(line, 70, currentY);
+
+      const statsY = currentY + 50;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(70, statsY, 940, 180, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      const metrics = [
+        { label: "DISTANCE", value: `${tripStats.distance} KM`, color: "#38bdf8" },
+        { label: "EST. DURATION", value: `${Math.floor(tripStats.duration / 60)}h ${tripStats.duration % 60}m`, color: "#ffffff" },
+        { label: "PITSTOPS", value: `${tripStops.length} SPOTS`, color: "#f59e0b" }
+      ];
+
+      metrics.forEach((metric, index) => {
+        const colX = 130 + index * 300;
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.font = "800 20px Arial";
+        ctx.fillText(metric.label, colX, statsY + 65);
+        
+        ctx.fillStyle = metric.color;
+        ctx.font = "900 42px Arial";
+        ctx.fillText(metric.value, colX, statsY + 125);
+      });
+
+      const stopsStartY = statsY + 250;
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.font = "800 22px Arial";
+      ctx.fillText("PLANNED ROUTE PITSTOPS", 70, stopsStartY);
+
+      let stopY = stopsStartY + 60;
+      tripStops.slice(0, 7).forEach((stop, idx) => {
+        ctx.fillStyle = "rgba(45, 212, 191, 0.1)";
+        ctx.beginPath();
+        ctx.arc(90, stopY - 10, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(45, 212, 191, 0.3)";
+        ctx.stroke();
+
+        ctx.fillStyle = "#2dd4bf";
+        ctx.font = "900 22px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(String(idx + 1), 90, stopY - 2);
+        ctx.textAlign = "left";
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "900 28px Arial";
+        ctx.fillText(stop.title, 140, stopY - 14);
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.font = "700 18px Arial";
+        ctx.fillText(`${stop.locality || stop.city}  ·  ★ ${stop.rating}  ·  ${stop.priceRange || "$$"}`, 140, stopY + 12);
+
+        stopY += 92;
+      });
+
+      if (tripStops.length > 7) {
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.font = "700 20px Arial";
+        ctx.fillText(`And ${tripStops.length - 7} more custom pitstops...`, 70, stopY + 10);
+      }
+
+      const stampX = 810;
+      const stampY = 1090;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.roundRect(stampX, stampY, 180, 180, 12);
+      ctx.fill();
+
+      ctx.fillStyle = "#050b0d";
+      ctx.fillRect(stampX + 20, stampY + 20, 45, 45);
+      ctx.fillRect(stampX + 115, stampY + 20, 45, 45);
+      ctx.fillRect(stampX + 20, stampY + 115, 45, 45);
+
+      ctx.fillRect(stampX + 35, stampY + 35, 15, 15);
+      ctx.fillRect(stampX + 130, stampY + 35, 15, 15);
+      ctx.fillRect(stampX + 35, stampY + 130, 15, 15);
+
+      ctx.fillRect(stampX + 80, stampY + 80, 20, 20);
+      ctx.fillRect(stampX + 80, stampY + 40, 10, 30);
+      ctx.fillRect(stampX + 40, stampY + 80, 30, 10);
+      ctx.fillRect(stampX + 115, stampY + 100, 15, 40);
+      ctx.fillRect(stampX + 100, stampY + 135, 40, 15);
+
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.font = "800 18px Arial";
+      ctx.fillText("SCAN TO LAUNCH", 805, 1300);
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+      ctx.font = "700 16px Arial";
+      ctx.fillText("CREATED VIA SHEHER PLATFORM  ·  WWW.SHEHER.APP", 70, 1300);
+
+      canvas.toBlob((blob) => {
+        if (!blob) throw new Error("Failed to export image blob.");
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${heading.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-travel-card.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+        setPostcardMessage("Travel Card downloaded! 📸✨");
+        setTimeout(() => setPostcardMessage(null), 3000);
+      }, "image/png");
+    } catch (err) {
+      console.error(err);
+      setPostcardMessage("Failed to export Travel Card.");
+      setTimeout(() => setPostcardMessage(null), 3000);
+    }
+  };
+
+  const hourlyWeatherForecast = useMemo(() => {
+    const forecast = [];
+    const now = new Date();
+    const city = (activeCity || "Pune") as any;
+    for (let i = 0; i < 6; i++) {
+      const futureDate = new Date(now.getTime() + i * 60 * 60 * 1000);
+      const weather = getCityWeather(city, futureDate);
+      forecast.push({
+        time: futureDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        hourValue: futureDate.getHours(),
+        weather
+      });
+    }
+    return forecast;
+  }, [activeCity]);
+
+  const selectedWeather = useMemo(() => {
+    const city = (activeCity || "Pune") as any;
+    const targetDate = new Date();
+    targetDate.setHours(simulatedDepartureHour);
+    return getCityWeather(city, targetDate);
+  }, [activeCity, simulatedDepartureHour]);
+
+  useEffect(() => {
+    if (selectedWeather.condition === "Rainy") {
+      const hasOutdoorStops = tripStops.some(stop => 
+        stop.tags.includes("outdoor") || 
+        stop.tags.includes("viewpoint") || 
+        stop.tags.includes("scenic") || 
+        stop.category === "event"
+      );
+      if (hasOutdoorStops) {
+        setWeatherAlternativeAlert(`⚠️ Rain expected during your simulated departure at ${simulatedDepartureHour % 12 || 12} ${simulatedDepartureHour >= 12 ? 'PM' : 'AM'}. Swap outdoor stops with cozy cafes to stay dry!`);
+      } else {
+        setWeatherAlternativeAlert(null);
+      }
+    } else {
+      setWeatherAlternativeAlert(null);
+    }
+  }, [selectedWeather, tripStops, simulatedDepartureHour]);
+
+  // Real-time Flash Deal Socket listener
+  useEffect(() => {
+    const socket = io(API_URL, {
+      withCredentials: true,
+    });
+
+    socket.on("new-flash-deal", (deal: any) => {
+      setActiveFlashDeal(deal);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const handleSwapToIndoorSpots = () => {
+    let swappedCount = 0;
+    const updatedStops = tripStops.map(stop => {
+      const isOutdoor = stop.tags.includes("outdoor") || 
+        stop.tags.includes("viewpoint") || 
+        stop.tags.includes("scenic") || 
+        stop.category === "event";
+
+      if (isOutdoor) {
+        let nearestIndoor: Place | null = null;
+        let minD = Infinity;
+
+        allPlaces.forEach(candidate => {
+          if (tripStops.some(s => s.id === candidate.id)) return;
+
+          const isCozyOrCafe = candidate.category === "cafe" || 
+            candidate.tags.includes("cozy") || 
+            candidate.tags.includes("indoor") || 
+            candidate.tags.includes("comfort-food");
+             
+          if (isCozyOrCafe) {
+            const dist = calculateDistance(stop.latitude, stop.longitude, candidate.latitude, candidate.longitude);
+            if (dist < minD) {
+              minD = dist;
+              nearestIndoor = candidate;
+            }
+          }
+        });
+
+        if (nearestIndoor) {
+          swappedCount++;
+          return nearestIndoor;
+        }
+      }
+      return stop;
+    });
+
+    if (swappedCount > 0) {
+      setTripStops(updatedStops);
+      recalculateRouteForStops(updatedStops);
+      setWeatherAlternativeAlert(null);
+      alert(`Swapped ${swappedCount} outdoor stops with nearby cozy cafes! ☕`);
+    } else {
+      alert("No suitable indoor alternatives found nearby.");
+    }
+  };
+
+  const generateWhatsAppShareText = () => {
+    if (!tripStats) return "";
+    const isFree = (p: Place) => p.priceRange === "Free" || p.tags.includes("free");
+    
+    let text = `*🗺️ Sheher Itinerary: ${tripPlanName || `${tripSource} to ${tripDest}`}*\n`;
+    text += `🚶 *Total Walk*: ${tripStats.distance} km | ⏱️ *Duration*: ${Math.floor(tripStats.duration / 60)}h ${tripStats.duration % 60}m\n`;
+    if (estimatedToll > 0) {
+      text += `🚗 *Est. Tolls*: ₹${estimatedToll} (SUV: ₹${Math.round(estimatedToll * 1.5)})\n`;
+    }
+    text += `\n*Planned Pitstops:*`;
+    
+    tripStops.forEach((stop, idx) => {
+      text += `\n${idx + 1}️⃣ *${stop.title}* - ${stop.rating} ★ (${getCategoryLabel(stop.category, stop.tags)})`;
+      text += `\n   📍 _${stop.locality || stop.city}_${isFree(stop) ? " [Free Entry]" : ""}`;
+    });
+    
+    const shareUrl = activeTripPlanId 
+      ? `${window.location.origin}/trip/${activeTripPlanId}` 
+      : `${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(tripStops.map(s => s.id).join(","))}&sourceName=${encodeURIComponent(tripSource)}&destName=${encodeURIComponent(tripDest)}&trailName=${encodeURIComponent(tripPlanName)}`;
+    
+    text += `\n\nExplore interactive map route here:\n${shareUrl}`;
+    text += `\n\n_Planned via Sheher City Explorer ✨_`;
+    return text;
+  };
+
+  const shareTripPlan = async () => {
+    if (!tripRoutePath || !tripStats) return;
+    setIsShareModalOpen(true);
   };
 
   const simStepSize = useMemo(() => {
@@ -342,6 +1019,7 @@ export default function MapPage() {
   const [curatedPlaces, setCuratedPlaces] = useState<Place[]>([]);
   useEffect(() => {
     let cancelled = false;
+    setCuratedPlaces([]); // Clear stale curated places on city change
     getFallbackPlacesForCity(activeCity).then((places) => {
       if (!cancelled) setCuratedPlaces(places);
     });
@@ -380,9 +1058,10 @@ export default function MapPage() {
       }
       if (showOnlyOpen && !isOpenNow(place.hours)) return false;
       if (minRating > 0 && place.rating < minRating) return false;
+      if (vegOnly && !isVegetarianPlace(place)) return false;
       return true;
     });
-  }, [allPlaces, selectedCategory, showOnlyOpen, minRating, savedPlaceIds]);
+  }, [allPlaces, selectedCategory, showOnlyOpen, minRating, vegOnly, savedPlaceIds]);
 
   const sortedPlaces = useMemo(() => [...filteredPlaces].sort((a, b) => a.distance - b.distance), [filteredPlaces]);
   const locationLabel =
@@ -409,6 +1088,27 @@ export default function MapPage() {
       { value: "street-food", label: "Street Food" },
     ];
   }, [allPlaces, savedPlaceIds]);
+
+  const estimatedToll = useMemo(() => {
+    if (!tripStats) return 0;
+    
+    const sourceNorm = tripSource.toLowerCase().trim();
+    const destNorm = tripDest.toLowerCase().trim();
+    const isPuneMumbai = 
+      (sourceNorm.includes("pune") && destNorm.includes("mumbai")) || 
+      (sourceNorm.includes("mumbai") && destNorm.includes("pune"));
+    
+    let baseToll = 0;
+    if (isPuneMumbai) {
+      baseToll = 320; // Pune-Mumbai Expressway rate
+    } else {
+      baseToll = Math.round(tripStats.distance * 2.2);
+    }
+    
+    if (vehicleType === "suv") return Math.round(baseToll * 1.5);
+    if (vehicleType === "lcv") return Math.round(baseToll * 2.5);
+    return baseToll;
+  }, [tripStats, tripSource, tripDest, vehicleType]);
 
   return (
     <div className="min-h-screen">
@@ -456,7 +1156,24 @@ export default function MapPage() {
                 })}
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="no-scrollbar flex w-full items-center gap-2 overflow-x-auto pb-1 md:pb-0 md:overflow-visible">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVegOnly(!vegOnly);
+                    setFocusedPlace(null);
+                  }}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
+                    vegOnly
+                      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                      : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)]"
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full transition-all duration-300", vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500")} />
+                  Pure Veg
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -464,7 +1181,7 @@ export default function MapPage() {
                     setFocusedPlace(null);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
                     showOnlyOpen
                       ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
                       : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)]"
@@ -481,7 +1198,7 @@ export default function MapPage() {
                     setFocusedPlace(null);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
                     minRating > 0
                       ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
                       : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)]"
@@ -510,20 +1227,33 @@ export default function MapPage() {
           transition={{ duration: 0.42 }}
           className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:h-[calc(100vh-11rem)] ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
         >
-          <button
-            type="button"
-            onClick={() => setIsSuggestModalOpen(true)}
-            className="absolute top-4 left-4 z-[500] flex items-center gap-2 rounded-full border border-teal-500/30 bg-slate-950/90 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md transition-all hover:bg-slate-900 hover:scale-105 active:scale-95 cursor-pointer"
-          >
-            <span className="flex h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
-            + Add Spot
-          </button>
+          <div className="absolute top-4 left-4 z-[500] flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsSuggestModalOpen(true)}
+              className="flex items-center gap-2 rounded-full border border-teal-500/30 bg-slate-950/90 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md transition-all hover:bg-slate-900 hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <span className="flex h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
+              + Add Spot
+            </button>
+
+            {focusedPlace && (
+              <button
+                type="button"
+                onClick={() => setHideOtherPlaces(!hideOtherPlaces)}
+                className="flex items-center gap-2 rounded-full border border-teal-500/30 bg-slate-950/90 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md transition-all hover:bg-slate-900 hover:scale-105 active:scale-95 cursor-pointer animate-fade-in"
+              >
+                {hideOtherPlaces ? <Eye size={14} /> : <EyeOff size={14} />}
+                {hideOtherPlaces ? "Show All Spots" : "Hide Other Spots"}
+              </button>
+            )}
+          </div>
 
           {livePlacesLoading && !usingLivePlaces && mode !== "trip" ? (
             <MapSkeleton />
           ) : (
             <MapView
-              places={mode === "trip" ? tripStops : sortedPlaces}
+              places={mode === "trip" ? tripStops : (hideOtherPlaces && focusedPlace ? [focusedPlace] : sortedPlaces)}
               userLocation={activeLocation}
               selectedPlace={focusedPlace}
               onMarkerClick={setFocusedPlace}
@@ -585,7 +1315,7 @@ export default function MapPage() {
                 <button
                   type="button"
                   onClick={() => setFocusedPlace(null)}
-                  className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-black text-[var(--muted-strong)]"
+                  className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-black text-[var(--muted-strong)] cursor-pointer"
                 >
                   Close
                 </button>
@@ -663,6 +1393,151 @@ export default function MapPage() {
         </div>
 
         <aside className={`space-y-3 ${mobileView === "map" ? "hidden lg:block" : "block"}`}>
+          {/* LIVE FLASH DEAL ALERTS */}
+          {activeFlashDeal && user?.isPremiumPass && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-amber-400/40 bg-gradient-to-br from-amber-500/20 via-yellow-400/10 to-amber-600/5 p-4 space-y-3 shadow-lg"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-1.5 text-xs font-black text-amber-300">
+                  <Sparkles size={14} className="animate-pulse" />
+                  <span>🔥 LIVE 50% OFF FLASH DEAL!</span>
+                </div>
+                <button type="button" onClick={() => setActiveFlashDeal(null)} className="text-[var(--muted)] hover:text-white cursor-pointer">
+                  <X size={14} />
+                </button>
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-[var(--foreground)]">{activeFlashDeal.placeTitle}</h4>
+                <p className="text-xs text-[var(--muted)] mt-1 font-semibold leading-relaxed">
+                  {activeFlashDeal.description || "Grab 50% off on all specialty items for the next 45 minutes."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const place = allPlaces.find(p => p.id === activeFlashDeal.placeId);
+                  if (place) {
+                    handleAddStopToTrip(place);
+                    setFocusedPlace(place);
+                    setMapCenter({ latitude: place.latitude, longitude: place.longitude });
+                    setActiveFlashDeal(null);
+                  } else {
+                    alert("Adding discount stop...");
+                  }
+                }}
+                className="w-full rounded bg-amber-400 hover:bg-amber-300 py-2 text-center text-xs font-black text-slate-950 transition duration-150 cursor-pointer shadow"
+              >
+                Route to Deal & Claim Coupon 🚗
+              </button>
+            </motion.div>
+          )}
+
+          {activeFlashDeal && !user?.isPremiumPass && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-slate-700 bg-slate-900/90 p-4 space-y-3 shadow-lg"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-1.5 text-xs font-black text-slate-400">
+                  <ShieldAlert size={14} className="text-amber-400 animate-bounce" />
+                  <span>👀 EXCLUSIVE FLASH DEAL ACTIVE</span>
+                </div>
+                <button type="button" onClick={() => setActiveFlashDeal(null)} className="text-[var(--muted)] hover:text-white cursor-pointer">
+                  <X size={14} />
+                </button>
+              </div>
+              <div>
+                <p className="text-xs text-slate-300 font-semibold leading-relaxed">
+                  A huge **50% discount** deal has been posted nearby! Upgrade to the **Sheher Pass** to see the venue and instantly route to it.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  router.push("/profile");
+                }}
+                className="w-full rounded bg-gradient-to-r from-amber-400 to-amber-500 py-2 text-center text-xs font-black text-slate-950 hover:from-amber-300 hover:to-amber-400 transition duration-150 cursor-pointer"
+              >
+                Upgrade to Sheher Pass (₹199) ⚡
+              </button>
+            </motion.div>
+          )}
+
+          {/* Selected Place Preview Card */}
+          {focusedPlace && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="rounded-xl border border-teal-500/35 bg-slate-950/80 p-4 space-y-3.5 shadow-2xl backdrop-blur-md"
+            >
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
+                  Selected Spot
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFocusedPlace(null)}
+                  className="text-xs font-black text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  Clear Selection
+                </button>
+              </div>
+
+              <div className="relative h-36 w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800">
+                <LazyImage
+                  src={focusedPlace.image}
+                  alt={focusedPlace.title}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent" />
+                <span className="absolute bottom-2.5 left-2.5 rounded-full bg-black/60 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-teal-300 border border-white/5">
+                  {getCategoryLabel(focusedPlace.category, focusedPlace.tags)}
+                </span>
+              </div>
+
+              <div className="space-y-0.5">
+                <h3 className="text-base font-black text-white tracking-tight">{focusedPlace.title}</h3>
+                <p className="text-xs font-bold text-slate-400">{formatPlaceArea(focusedPlace)}</p>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                {focusedPlace.description}
+              </p>
+
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-black tracking-wider uppercase text-slate-200">
+                <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900 border border-slate-800 p-2 text-center">
+                  <MapPin size={13} className="text-cyan-300 mb-1" />
+                  <span className="text-[9px] normal-case text-slate-400">Distance</span>
+                  <span className="mt-0.5 text-white">{formatDistance(focusedPlace.distance)}</span>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900 border border-slate-800 p-2 text-center">
+                  <Star size={13} className="fill-yellow-400 text-yellow-400 mb-1" />
+                  <span className="text-[9px] normal-case text-slate-400">Rating</span>
+                  <span className="mt-0.5 text-white">{focusedPlace.rating} ★</span>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900 border border-slate-800 p-2 text-center">
+                  <Clock size={13} className="text-emerald-400 mb-1" />
+                  <span className="text-[9px] normal-case text-slate-400">Status</span>
+                  <span className={cn("mt-0.5 font-black", isOpenNow(focusedPlace.hours) ? "text-emerald-400" : "text-rose-400")}>
+                    {isOpenNow(focusedPlace.hours) ? "Open" : "Closed"}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDetailsPlace(focusedPlace)}
+                className="w-full rounded-lg bg-[var(--primary)] py-3 text-xs font-black uppercase tracking-wider text-[var(--primary-foreground)] hover:scale-[1.01] active:scale-98 transition duration-200 cursor-pointer shadow-lg shadow-teal-500/10"
+              >
+                View Detailed Conveniences 🔍
+              </button>
+            </motion.div>
+          )}
+
           {/* Mode Switcher Tabs */}
           <div className="flex p-1 rounded-full bg-[var(--panel-soft)] border border-[var(--border)] w-full">
             <button
@@ -769,13 +1644,24 @@ export default function MapPage() {
                       </button>
 
                       {active && (
-                        <button
-                          type="button"
-                          onClick={() => setDetailsPlace(place)}
-                          className="mt-3 w-full rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-black text-[var(--primary-foreground)]"
-                        >
-                          View Details
-                        </button>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setDetailsPlace(place)}
+                            className="flex-1 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-black text-[var(--primary-foreground)] cursor-pointer"
+                          >
+                            View Details
+                          </button>
+                          {tripRoutePath && (
+                            <button
+                              type="button"
+                              onClick={() => handleAddStopToTrip(place)}
+                              className="flex-1 rounded-lg border border-teal-500/35 bg-teal-500/10 px-3 py-2 text-xs font-black text-teal-300 hover:bg-teal-500/20 transition cursor-pointer"
+                            >
+                              + Add to Trip
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -859,6 +1745,11 @@ export default function MapPage() {
                       {tripSaveMessage}
                     </p>
                   )}
+                  {!user && (
+                    <div className="mt-2 text-[10px] font-black uppercase text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg text-center flex items-center justify-center gap-1.5">
+                      <span>⚠️ Guest Trail: Log in to save to profile</span>
+                    </div>
+                  )}
                 </div>
 
                 {tripError && (
@@ -894,16 +1785,49 @@ export default function MapPage() {
               {tripRoutePath && tripStats && (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-cyan-400/20 bg-cyan-950/10 p-4 space-y-3.5 shadow-lg backdrop-blur-sm">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-2.5 text-left">
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-wider text-cyan-300/80">Distance</span>
-                        <div className="text-xl font-black text-[var(--foreground)] mt-0.5">{tripStats.distance} km</div>
+                        <div className="text-base font-black text-[var(--foreground)] mt-0.5">{tripStats.distance} km</div>
                       </div>
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-wider text-cyan-300/80">Est. Time</span>
-                        <div className="text-xl font-black text-[var(--foreground)] mt-0.5">
+                        <div className="text-base font-black text-[var(--foreground)] mt-0.5">
                           {Math.floor(tripStats.duration / 60)}h {tripStats.duration % 60}m
                         </div>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-300/85">Est. Tolls</span>
+                        <div className="text-base font-black text-amber-300 mt-0.5">
+                          ₹{estimatedToll}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-cyan-400/10 pt-2.5 flex items-center justify-between gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-cyan-300/85">Vehicle Type</span>
+                      <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 rounded-md p-0.5">
+                        {[
+                          { id: "car", label: "Car" },
+                          { id: "suv", label: "SUV" },
+                          { id: "lcv", label: "LCV" },
+                        ].map((v) => {
+                          const active = vehicleType === v.id;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => setVehicleType(v.id as any)}
+                              className={`px-2 py-0.5 text-[9px] font-black rounded transition duration-150 cursor-pointer ${
+                                active
+                                  ? "bg-cyan-400 text-slate-950"
+                                  : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              {v.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -973,6 +1897,118 @@ export default function MapPage() {
                     </div>
                   </div>
 
+                  {/* OPTIMIZATION FEEDBACK BANNER */}
+                  {optimizationFeedback && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 text-xs font-bold text-emerald-300 text-center shadow-md"
+                    >
+                      {optimizationFeedback}
+                    </motion.div>
+                  )}
+
+                  {/* WEATHER OPTIMIZER & DEPARTURE WIDGET */}
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4 space-y-3 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">🌤️ Departure Forecast</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-[var(--muted-strong)] uppercase">
+                        {activeCity} Time
+                      </span>
+                    </div>
+
+                    {/* Poetic forecast helper */}
+                    <div className="bg-[var(--panel-strong)] border border-[var(--border)] rounded-md p-2 text-xs leading-relaxed text-[var(--muted-strong)] font-semibold">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-black text-[var(--foreground)] text-[11px]">
+                          {selectedWeather.label} ({selectedWeather.temp}°C)
+                        </span>
+                        <span className="text-[9px] font-black text-cyan-400 bg-cyan-400/5 px-1.5 py-0.5 rounded border border-cyan-400/10">
+                          {selectedWeather.condition}
+                        </span>
+                      </div>
+                      <p className="text-[10px] leading-normal text-[var(--muted)] font-medium">{selectedWeather.poeticNote}</p>
+                    </div>
+
+                    {/* Horizontal 6-hour bar */}
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                      {hourlyWeatherForecast.map((fc) => {
+                        const isSelected = fc.hourValue === simulatedDepartureHour;
+                        const iconMap = {
+                          Pleasant: <Sun size={13} className="text-amber-300" />,
+                          Rainy: <CloudRain size={13} className="text-cyan-300 animate-bounce" />,
+                          Hot: <Sun size={13} className="text-rose-400" />,
+                          Cozy: <ThermometerSnowflake size={13} className="text-sky-300" />,
+                        };
+                        const conditionColorMap = {
+                          Pleasant: "border-amber-500/20 text-amber-300 hover:bg-amber-500/5",
+                          Rainy: "border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/5",
+                          Hot: "border-rose-500/20 text-rose-300 hover:bg-rose-500/5",
+                          Cozy: "border-sky-500/20 text-sky-300 hover:bg-sky-500/5",
+                        };
+                        const conditionIcon = iconMap[fc.weather.condition as keyof typeof iconMap] || <Cloud size={13} />;
+                        
+                        return (
+                          <button
+                            key={fc.time}
+                            type="button"
+                            onClick={() => setSimulatedDepartureHour(fc.hourValue)}
+                            className={cn(
+                              "flex flex-col items-center gap-1 p-2 rounded-md border min-w-[4.2rem] shrink-0 transition-all text-[9px] font-black cursor-pointer",
+                              isSelected
+                                ? "bg-cyan-400 border-cyan-400 text-slate-950 scale-105 shadow-sm font-black"
+                                : `bg-[var(--panel)] text-[var(--muted)] ${conditionColorMap[fc.weather.condition as keyof typeof conditionColorMap]}`
+                            )}
+                          >
+                            <span>{fc.time}</span>
+                            {isSelected ? <Clock size={11} className="animate-pulse" /> : conditionIcon}
+                            <span>{fc.weather.temp}°C</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* RAINY WEATHER ALTERNATIVE WARNING */}
+                    {weatherAlternativeAlert && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5"
+                      >
+                        <p className="text-[10px] font-bold text-amber-300 leading-relaxed">
+                          {weatherAlternativeAlert}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleSwapToIndoorSpots}
+                          className="w-full flex items-center justify-center gap-1.5 rounded bg-amber-400 px-2.5 py-1.5 text-[10px] font-black text-slate-950 hover:bg-amber-300 transition duration-150 cursor-pointer shadow"
+                        >
+                          Swap to Indoor Spots ☕
+                        </button>
+                      </motion.div>
+                    )}
+                  </div>
+
+                  {/* PREMIUM OPTIMIZE BUTTON */}
+                  {tripStops.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={handleOptimizeRoute}
+                      className="w-full relative overflow-hidden group rounded-lg border border-cyan-400/30 bg-cyan-950/10 p-3 flex items-center justify-center gap-2 cursor-pointer transition hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-400/5 active:scale-[0.98]"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/5 to-teal-400/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <span className="text-xs font-black uppercase tracking-wider text-cyan-400">
+                        Optimize Itinerary Order ⚡
+                      </span>
+                      <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-300 border border-cyan-400/20">
+                        TSP
+                      </span>
+                    </button>
+                  )}
+
                   {/* STOPS FILTER CHIPS */}
                   <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-fade-right bg-[var(--panel-soft)] p-2 rounded-lg border border-[var(--border)]">
                     {[
@@ -999,72 +2035,120 @@ export default function MapPage() {
                   </div>
 
                   {/* STOPS LIST FEED */}
-                  <div className="space-y-3 max-h-[calc(100vh-29rem)] overflow-y-auto pr-1 no-scrollbar">
+                  <div className="max-h-[calc(100vh-29rem)] overflow-y-auto pr-1 no-scrollbar">
                     {filteredTripStops.length === 0 ? (
                       <div className="text-center py-6 border border-dashed border-[var(--border)] rounded-lg bg-[var(--panel-soft)]">
                         <p className="text-xs text-[var(--muted)] font-medium">No pitstops matching filter on this route.</p>
                       </div>
                     ) : (
-                      filteredTripStops.map(stop => {
-                        const isFocused = focusedPlace?.id === stop.id;
-                        return (
-                          <div
-                            key={stop.id}
-                            className={cn(
-                              "w-full rounded-lg border p-3 text-left transition",
-                              isFocused
-                                ? "border-cyan-400 bg-cyan-400/5 shadow-md animate-pulse"
-                                : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)]"
-                            )}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFocusedPlace(stop);
-                                setMapCenter({ latitude: stop.latitude, longitude: stop.longitude });
-                              }}
-                              className="w-full text-left"
+                      <Reorder.Group 
+                        axis="y" 
+                        values={tripStops} 
+                        onReorder={(newOrder) => {
+                          setTripStops(newOrder);
+                          recalculateRouteForStops(newOrder);
+                        }}
+                        className="space-y-3"
+                      >
+                        {filteredTripStops.map((stop, idx) => {
+                          const isFocused = focusedPlace?.id === stop.id;
+                          return (
+                            <Reorder.Item
+                              key={stop.id}
+                              value={stop}
+                              className={cn(
+                                "w-full rounded-lg border p-3 text-left transition select-none flex items-start gap-2 cursor-grab active:cursor-grabbing",
+                                isFocused
+                                  ? "border-cyan-400 bg-cyan-400/5 shadow-md"
+                                  : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)]"
+                              )}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
-                                    {getCategoryLabel(stop.category, stop.tags)}
+                              {/* Drag Handle Indicator */}
+                              <div className="pt-2 text-slate-500 shrink-0 cursor-grab active:cursor-grabbing">
+                                <GripVertical size={16} />
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFocusedPlace(stop);
+                                    setMapCenter({ latitude: stop.latitude, longitude: stop.longitude });
+                                  }}
+                                  className="w-full text-left cursor-pointer"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+                                        Stop {idx + 1} · {getCategoryLabel(stop.category, stop.tags)}
+                                      </p>
+                                      <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)] text-sm">{stop.title}</h3>
+                                      <p className="mt-1 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">{formatPlaceArea(stop)}</p>
+                                    </div>
+                                    <span className="shrink-0 flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-300 border border-emerald-500/20">
+                                      ★ {stop.rating}
+                                    </span>
+                                  </div>
+
+                                  <p className="mt-2 text-xs text-[var(--muted-strong)] line-clamp-2 leading-relaxed font-semibold">
+                                    {stop.description}
                                   </p>
-                                  <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)] text-sm">{stop.title}</h3>
-                                  <p className="mt-1 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">{formatPlaceArea(stop)}</p>
-                                </div>
-                                <span className="shrink-0 flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-300 border border-emerald-500/20">
-                                  ★ {stop.rating}
-                                </span>
+
+                                  <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-[var(--muted-strong)] border-t border-[var(--border)] pt-2.5">
+                                    <span className="inline-flex items-center gap-1">
+                                      <MapPin size={11} className="text-cyan-300" />
+                                      <span className="line-clamp-1">{formatPlaceArea(stop)}</span>
+                                    </span>
+                                    <span className="font-black text-cyan-400 uppercase tracking-wider">
+                                      {stop.priceRange}
+                                    </span>
+                                  </div>
+                                </button>
+
+                                {isFocused && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDetailsPlace(stop)}
+                                    className="mt-3 w-full rounded-lg bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-cyan-300 transition active:scale-[0.98] cursor-pointer"
+                                  >
+                                    View Detailed Info
+                                  </button>
+                                )}
                               </div>
 
-                              <p className="mt-2 text-xs text-[var(--muted-strong)] line-clamp-2 leading-relaxed">
-                                {stop.description}
-                              </p>
-
-                              <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-[var(--muted-strong)] border-t border-[var(--border)] pt-2.5">
-                                <span className="inline-flex items-center gap-1">
-                                  <MapPin size={11} className="text-cyan-300" />
-                                  <span className="line-clamp-1">{formatPlaceArea(stop)}</span>
-                                </span>
-                                <span className="font-black text-cyan-400 uppercase tracking-wider">
-                                  {stop.priceRange}
-                                </span>
+                              {/* Sidebar Controls (Move Up, Move Down, Delete) */}
+                              <div className="flex flex-col items-center gap-1.5 shrink-0 border-l border-white/5 pl-2 ml-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveStop(idx, "up")}
+                                  className="p-1 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition cursor-pointer"
+                                  title="Move Up"
+                                >
+                                  <ArrowUp size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === filteredTripStops.length - 1}
+                                  onClick={() => handleMoveStop(idx, "down")}
+                                  className="p-1 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition cursor-pointer"
+                                  title="Move Down"
+                                >
+                                  <ArrowDown size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteStop(stop.id)}
+                                  className="p-1 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition mt-1 cursor-pointer"
+                                  title="Remove Stop"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
                               </div>
-                            </button>
-
-                            {isFocused && (
-                              <button
-                                type="button"
-                                onClick={() => setDetailsPlace(stop)}
-                                className="mt-3 w-full rounded-lg bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-cyan-300 transition active:scale-[0.98] cursor-pointer"
-                              >
-                                View Detailed Info
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })
+                            </Reorder.Item>
+                          );
+                        })}
+                      </Reorder.Group>
                     )}
                   </div>
                 </div>
@@ -1110,6 +2194,64 @@ export default function MapPage() {
               )}
             </>
           )}
+
+          {/* MERCHANT FLASH DEAL SIMULATOR CONSOLE */}
+          <div className="rounded-lg border border-purple-500/20 bg-purple-950/5 p-4 space-y-3 shadow mt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">🏢 Merchant Demo Console</span>
+              <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[8px] font-black text-purple-300 uppercase tracking-wider">
+                Simulation Mode
+              </span>
+            </div>
+            <p className="text-[10px] text-[var(--muted-strong)] leading-relaxed font-semibold">
+              Simulate launching a 50% discount deal from a local business. Select a spot in the city:
+            </p>
+
+            <div className="space-y-2">
+              <select
+                id="merchant-place-select"
+                aria-label="Select merchant place"
+                className="w-full h-8 rounded border border-[var(--border)] bg-[var(--input)] text-xs font-semibold px-2 text-[var(--foreground)] outline-none"
+              >
+                {allPlaces.slice(0, 10).map((p) => (
+                  <option key={p.id} value={`${p.id}|${p.title}`}>
+                    {p.title} ({p.locality})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={async () => {
+                  const selectEl = document.getElementById("merchant-place-select") as HTMLSelectElement;
+                  if (!selectEl) return;
+                  const [placeId, placeTitle] = selectEl.value.split("|");
+                  
+                  try {
+                    const res = await fetch("/api/deals/launch", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        placeId,
+                        placeTitle,
+                        discountPercentage: 50,
+                        description: `🔥 50% OFF FLASH DEAL! Grab 50% off on all specialty coffee, pastries, and main courses at ${placeTitle} for the next 45 minutes.`
+                      })
+                    });
+                    if (res.ok) {
+                      // Success is broadcasted and displays in notification
+                    } else {
+                      alert("Please log in first before simulating merchant launches.");
+                    }
+                  } catch (err) {
+                    alert("API connection failed.");
+                  }
+                }}
+                className="w-full rounded bg-purple-600 hover:bg-purple-500 py-1.5 text-center text-[10px] font-black text-white cursor-pointer transition"
+              >
+                Launch 50% Flash Deal! 🚀
+              </button>
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -1120,6 +2262,408 @@ export default function MapPage() {
         defaultCity={activeCity}
         defaultCoords={mapCenter || { latitude: activeLocation.latitude, longitude: activeLocation.longitude }}
       />
+
+      {/* Share Itinerary Modal */}
+      {isShareModalOpen && tripStats && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[800] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15 }}
+            animate={{ scale: 1, y: 0 }}
+            className="relative w-full max-w-lg rounded-2xl border border-teal-500/30 bg-slate-950 p-6 text-center shadow-2xl z-40 max-h-[90vh] overflow-y-auto no-scrollbar"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setIsShareModalOpen(false);
+                setCopyShareMessage("");
+              }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white transition cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="mb-4 flex flex-col items-center">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-500/10 text-teal-400 shadow-inner">
+                <Share2 size={24} className="animate-pulse" />
+              </div>
+              <h3 className="mt-3 text-lg font-black text-white">Share Your Trip Itinerary</h3>
+              <p className="text-xs font-semibold text-slate-400 mt-1">Copy WhatsApp text or get a direct map route link</p>
+            </div>
+
+            {/* Boarding Pass Summary Card */}
+            <div className="relative border border-teal-500/25 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 rounded-xl p-5 text-left overflow-hidden mb-5 shadow-inner">
+              {/* Decorative ticket cutout punches */}
+              <div className="absolute left-0 top-[60%] -translate-y-1/2 -translate-x-3 h-6 w-6 rounded-full bg-slate-950 border border-teal-500/20 z-10" />
+              <div className="absolute right-0 top-[60%] -translate-y-1/2 translate-x-3 h-6 w-6 rounded-full bg-slate-950 border border-teal-500/20 z-10" />
+
+              {/* TICKET MAIN SECTION */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300">SHEHER CITY EXPRESS</span>
+                  </div>
+                  <span className="text-[8px] font-black tracking-widest text-slate-500 bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                    BOARDING PASS
+                  </span>
+                </div>
+
+                {/* Airport style code routing */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="text-left flex flex-col items-start">
+                    <div className="text-3xl font-black text-white tracking-wider">{getCityIATA(tripSource)}</div>
+                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{tripSource}</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAirportCode(getCityIATA(tripSource));
+                        setIsAirportGuideOpen(true);
+                      }}
+                      className="mt-1.5 flex items-center gap-1 text-[8px] font-black uppercase text-teal-400 hover:text-teal-300 transition tracking-wider bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20 cursor-pointer"
+                    >
+                      Explore {getCityIATA(tripSource)} ✈️
+                    </button>
+                  </div>
+                  <div className="flex flex-col items-center flex-1 px-4 relative">
+                    <div className="w-full border-t border-dashed border-teal-500/30 relative">
+                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-950 px-2 text-teal-300 text-xs">
+                        ✈
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right flex flex-col items-end">
+                    <div className="text-3xl font-black text-white tracking-wider">{getCityIATA(tripDest)}</div>
+                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{tripDest}</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAirportCode(getCityIATA(tripDest));
+                        setIsAirportGuideOpen(true);
+                      }}
+                      className="mt-1.5 flex items-center gap-1 text-[8px] font-black uppercase text-amber-400 hover:text-amber-300 transition tracking-wider bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 cursor-pointer"
+                    >
+                      Explore {getCityIATA(tripDest)} ✈️
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-t border-b border-white/5 py-3 text-xs font-bold text-slate-400">
+                  <div className="space-y-1">
+                    <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Passenger</span>
+                    <div className="text-xs font-black text-white uppercase truncate">
+                      {user?.fullName || "GUEST EXPLORER"}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-right">
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Gate</span>
+                      <div className="text-xs font-black text-white">18A</div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Class</span>
+                      <div className="text-xs font-black text-amber-300">EXPLR</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Perforation divider line */}
+              <div className="border-t border-dashed border-slate-700/60 my-4 relative" />
+
+              {/* TICKET STUB / PITSTOPS SECTION */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Pitstops Stub</span>
+                  <span className="text-[9px] font-black text-teal-300">{tripStops.length} Spots</span>
+                </div>
+                
+                <div className="space-y-1.5 max-h-24 overflow-y-auto no-scrollbar">
+                  {tripStops.map((stop, idx) => (
+                    <div key={stop.id} className="flex items-center justify-between text-[11px] leading-tight">
+                      <div className="flex items-center gap-1.5 truncate pr-4">
+                        <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-teal-400/10 text-teal-300 flex items-center justify-center text-[8px] font-black">
+                          {idx + 1}
+                        </span>
+                        <span className="font-semibold text-slate-200 truncate">{stop.title}</span>
+                      </div>
+                      <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wide shrink-0">
+                        {stop.priceRange || "$$"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-3 text-[10px] font-bold text-slate-400">
+                  <div>
+                    <span className="text-[8px] uppercase text-slate-500 block">Distance</span>
+                    <span className="text-white font-black">{tripStats.distance} km</span>
+                  </div>
+                  <div>
+                    <span className="text-[8px] uppercase text-slate-500 block">Boarding</span>
+                    <span className="text-white font-black">
+                      {Math.floor(tripStats.duration / 60)}h {tripStats.duration % 60}m
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] uppercase text-slate-500 block">Tolls Est</span>
+                    <span className="text-amber-300 font-black">₹{estimatedToll}</span>
+                  </div>
+                </div>
+
+                {/* CSS Barcode stub */}
+                <div className="pt-4 flex flex-col items-center gap-1.5">
+                  <div className="flex items-center justify-center gap-[1px] h-10 w-full bg-white/5 rounded p-1.5 overflow-hidden opacity-60">
+                    {[1,2,1,3,1,2,4,1,2,1,3,2,1,4,1,2,3,1,2,1,4,2,1,2,3,1,2,1,4].map((width, i) => (
+                      <div
+                        key={i}
+                        className="bg-slate-300 h-full shrink-0"
+                        style={{ width: `${width}px` }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[8px] tracking-[0.25em] font-mono text-slate-500 uppercase">
+                    SH-{Math.round(tripStats.distance * 100)}-{tripStops.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const shareUrl = activeTripPlanId 
+                      ? `${window.location.origin}/trip/${activeTripPlanId}` 
+                      : `${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(tripStops.map(s => s.id).join(","))}&sourceName=${encodeURIComponent(tripSource)}&destName=${encodeURIComponent(tripDest)}&trailName=${encodeURIComponent(tripPlanName)}`;
+                    await navigator.clipboard.writeText(shareUrl);
+                    setCopyShareMessage("Map route link copied to clipboard!");
+                  }}
+                  className="rounded-xl bg-teal-400 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-teal-350 active:scale-98 transition duration-150 cursor-pointer shadow-lg shadow-teal-500/15"
+                >
+                  🔗 Copy Link
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleGeneratePostcard}
+                  className="rounded-xl border border-amber-400/40 bg-amber-500/10 py-3 text-xs font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/20 active:scale-98 transition duration-150 cursor-pointer"
+                >
+                  📸 Save Card
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const waText = generateWhatsAppShareText();
+                  await navigator.clipboard.writeText(waText);
+                  setCopyShareMessage("WhatsApp formatted text copied! Ready to paste.");
+                }}
+                className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-3 text-xs font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/20 active:scale-98 transition duration-150 cursor-pointer"
+              >
+                💬 Copy for WhatsApp (Emoji Rich)
+              </button>
+
+              {postcardMessage && (
+                <div className="text-xs font-black text-amber-300 bg-amber-400/10 border border-amber-400/20 p-2.5 rounded-lg text-center animate-slide-down">
+                  {postcardMessage}
+                </div>
+              )}
+
+              {copyShareMessage && (
+                <div className="text-xs font-black text-teal-300 bg-teal-400/10 border border-teal-400/20 p-2.5 rounded-lg text-center animate-slide-down">
+                  {copyShareMessage}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Airport layover companion guide modal */}
+      {isAirportGuideOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[900] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            className="relative w-full max-w-lg rounded-2xl border border-amber-500/30 bg-slate-950 p-6 shadow-2xl z-50 max-h-[90vh] overflow-y-auto no-scrollbar"
+          >
+            <button
+              type="button"
+              onClick={() => setIsAirportGuideOpen(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white transition cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Modal Header */}
+            <div className="mb-5 flex items-center gap-3 border-b border-white/5 pb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                <Plane size={24} className="rotate-45" />
+              </div>
+              <div className="text-left">
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-amber-400">SHEHER TERMINAL COMPANION</span>
+                <h3 className="text-lg font-black text-white leading-tight">
+                  {AIRPORT_GUIDES[selectedAirportCode]?.name || `${selectedAirportCode} International Airport`}
+                </h3>
+                <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                  {AIRPORT_GUIDES[selectedAirportCode]?.terminal || "All Terminals"} · {AIRPORT_GUIDES[selectedAirportCode]?.city}
+                </p>
+              </div>
+            </div>
+
+            {/* Time-Budget Selector Tabs */}
+            <div className="mb-5">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-2 text-left">
+                Select your remaining layover time:
+              </span>
+              <div className="grid grid-cols-3 gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+                {[
+                  { id: "quick", label: "< 1 Hour", desc: "Quick Grab" },
+                  { id: "medium", label: "1-3 Hours", desc: "Relax & Dine" },
+                  { id: "long", label: "3+ Hours", desc: "Sleep & Spa" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setLayoverTimeBucket(tab.id as any)}
+                    className={cn(
+                      "flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-bold transition cursor-pointer",
+                      layoverTimeBucket === tab.id
+                        ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/10"
+                        : "text-slate-400 hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    <span className="text-[8px] opacity-75 font-semibold mt-0.5">{tab.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Recommendations Content */}
+            <div className="space-y-4 mb-6">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block text-left">
+                Curated Recommendations:
+              </span>
+              
+              {AIRPORT_GUIDES[selectedAirportCode]?.layovers[layoverTimeBucket]?.length > 0 ? (
+                AIRPORT_GUIDES[selectedAirportCode].layovers[layoverTimeBucket].map((rec, idx) => (
+                  <div
+                    key={idx}
+                    className="flex gap-3 bg-white/5 p-4 rounded-xl border border-white/5 text-left items-start hover:border-amber-400/20 transition duration-150"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-amber-300 text-xs font-black">
+                      {idx === 0 ? <Coffee size={14} /> : idx === 1 ? <ShoppingBag size={14} /> : <Bed size={14} />}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-black text-white leading-snug">{rec.title}</h4>
+                        {rec.isPremium && (
+                          <span className="text-[8px] font-black tracking-wider uppercase bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30">
+                            Premium Benefit
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed font-medium">{rec.description}</p>
+                      <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        <MapPin size={10} />
+                        <span>{rec.location}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 bg-white/5 rounded-xl border border-white/5">
+                  <p className="text-xs font-bold text-slate-400">No custom recommendations configured for this duration.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Premium Lounge Access Section */}
+            {AIRPORT_GUIDES[selectedAirportCode]?.lounges && (
+              <div className="border border-amber-500/20 bg-gradient-to-br from-slate-900 to-amber-950/20 rounded-xl p-4 text-left">
+                <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-amber-400" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">Sheher Premium Lounge Access</span>
+                  </div>
+                  <span className="text-[8px] font-black tracking-widest text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    VIP LOUNGE
+                  </span>
+                </div>
+
+                {AIRPORT_GUIDES[selectedAirportCode].lounges.map((lounge, lIdx) => (
+                  <div key={lIdx} className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-sm font-black text-white">{lounge.name}</h4>
+                        <p className="text-[10px] text-slate-400 font-semibold">{lounge.location}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {lounge.amenities.slice(0, 4).map((amenity, aIdx) => (
+                        <span key={aIdx} className="text-[8px] font-black text-slate-300 bg-white/5 px-2 py-0.5 rounded border border-white/5 uppercase">
+                          ✓ {amenity}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Check if user is premium */}
+                    {user?.isPremiumPass ? (
+                      <div className="bg-amber-400 text-slate-950 rounded-lg p-3 text-center border border-amber-500 mt-2">
+                        <div className="text-[9px] font-black tracking-wider uppercase opacity-75">Your Exclusive Coupon Code</div>
+                        <div className="text-base font-black tracking-[0.1em] font-mono select-all my-0.5">
+                          {lounge.couponCode || "SHEHER-VIP"}
+                        </div>
+                        <p className="text-[9px] font-bold leading-tight mt-0.5">
+                          {lounge.premiumBenefit}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-lg p-3 border border-white/10 bg-slate-900/60 backdrop-blur-sm mt-2 text-center overflow-hidden">
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] flex flex-col justify-center items-center p-2 text-center">
+                          <span className="text-[9px] font-black uppercase text-amber-400 tracking-wider">🔒 EXCLUSIVE BENEFIT</span>
+                          <p className="text-[10px] text-slate-300 font-bold leading-tight max-w-[280px] my-1">
+                            Upgrade to the **Sheher Pass** to unlock free lounge coupons and premium discounts.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAirportGuideOpen(false);
+                              setIsShareModalOpen(false);
+                              router.push("/profile");
+                            }}
+                            className="mt-1 rounded bg-amber-400 px-2.5 py-1 text-[9px] font-black uppercase text-slate-950 hover:bg-amber-350 active:scale-95 transition cursor-pointer"
+                          >
+                            Get Sheher Pass 💳
+                          </button>
+                        </div>
+                        {/* Teaser placeholder for background blur */}
+                        <div className="filter blur-[3px] select-none opacity-40">
+                          <div className="text-[9px] font-black uppercase text-amber-300">COUPON CODE</div>
+                          <div className="text-base font-black font-mono">XXXX-XXXX-XXXX</div>
+                          <p className="text-[9px] font-bold">Details restricted to Sheher Pass holders</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }

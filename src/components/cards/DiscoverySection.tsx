@@ -19,6 +19,7 @@ interface DiscoverySectionProps {
   onSavePlace?: (place: Place) => void;
   savedPlaceIds?: Set<string>;
   carousel?: boolean;
+  vibeScores?: Record<string, number>;
 }
 
 export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
@@ -30,6 +31,7 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
   onSavePlace,
   savedPlaceIds,
   carousel = false,
+  vibeScores,
 }) => {
   const [crowdSummaries, setCrowdSummaries] = useState<Record<string, CrowdSummary>>({});
   const placeIds = useMemo(() => places.map((place) => place.id).join(","), [places]);
@@ -134,6 +136,7 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
                     onSave={onSavePlace}
                     isSaved={savedPlaceIds?.has(place.id)}
                     crowdSummary={crowdSummaries[place.id]}
+                    vibeMatch={vibeScores?.[place.id]}
                   />
                 </div>
               ))}
@@ -165,6 +168,7 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
                 onSave={onSavePlace}
                 isSaved={savedPlaceIds?.has(place.id)}
                 crowdSummary={crowdSummaries[place.id]}
+                vibeMatch={vibeScores?.[place.id]}
               />
             ))}
           </motion.div>

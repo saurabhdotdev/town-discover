@@ -24,7 +24,7 @@ import {
 import { CrowdLevel, CrowdSummary, Place, PlaceCategory } from "@/types";
 import { getCategoryFallbackImage } from "@/lib/place-images";
 import { SupportedCityName } from "@/lib/pune-location";
-import { API_URL, formatDistance, formatHours, formatPlaceArea, getCategoryAccent, getCategoryLabel, isOpenNow } from "@/lib/utils";
+import { API_URL, formatDistance, formatHours, formatPlaceArea, getCategoryAccent, getCategoryLabel, isOpenNow, isVegetarianPlace } from "@/lib/utils";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
@@ -36,6 +36,7 @@ interface DiscoveryCardProps {
   onSave?: (place: Place) => void;
   isSaved?: boolean;
   crowdSummary?: CrowdSummary;
+  vibeMatch?: number;
 }
 
 const categoryIcons: Record<PlaceCategory, React.ReactNode> = {
@@ -71,6 +72,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
   onSave,
   isSaved = false,
   crowdSummary,
+  vibeMatch,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageSrc, setImageSrc] = useState(place.image);
@@ -131,6 +133,15 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
       .catch(() => undefined);
   }, [place.category, place.city, place.id, place.image, place.title]);
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    card.style.setProperty("--mouse-x", `${x}px`);
+    card.style.setProperty("--mouse-y", `${y}px`);
+  };
+
   const open = isOpenNow(place.hours);
   const hasHours = Boolean(place.hours);
   const hasCrowdSignal = Boolean(localCrowdSummary?.crowdLevel && localCrowdSummary.reportCount > 0);
@@ -187,7 +198,8 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}
         onClick={onClick}
-        className="group flex h-full min-h-[330px] cursor-pointer flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] shadow-xl shadow-black/10 backdrop-blur-md transition duration-300 hover:border-[var(--muted)] hover:bg-[var(--panel-strong)] sm:min-h-[420px] sm:hover:-translate-y-1"
+        onMouseMove={handleMouseMove}
+        className={`group card-spotlight-border glow-${place.category} flex h-full min-h-[330px] cursor-pointer flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] shadow-xl shadow-black/10 backdrop-blur-md transition duration-300 hover:border-teal-500/40 hover:bg-[var(--panel-strong)] sm:min-h-[420px] sm:hover:-translate-y-1.5`}
       >
         <div className="relative h-40 overflow-hidden bg-slate-900 sm:h-52">
           <Image
@@ -213,7 +225,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
 
           <div className="absolute inset-0 bg-gradient-to-t from-[#080b0f] via-[#080b0f]/16 to-transparent" />
 
-          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 sm:gap-2">
+          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 sm:gap-2 z-10">
             <span
               className={`inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r ${getCategoryAccent(
                 place.category
@@ -234,13 +246,50 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                 {crowdLabels[localCrowdSummary.crowdLevel]}
               </span>
             )}
+            {vibeMatch && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/90 border border-teal-500/30 pl-1.5 pr-2.5 py-1 text-[11px] font-black text-white shadow-lg sm:text-xs backdrop-blur-md">
+                <svg className="h-4 w-4 shrink-0 -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(20, 184, 166, 0.2)" strokeWidth="4" />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="url(#vibe-grad)"
+                    strokeWidth="4"
+                    strokeDasharray="94.2"
+                    strokeDashoffset={94.2 - (94.2 * vibeMatch) / 100}
+                    strokeLinecap="round"
+                    className="vibe-ring-progress"
+                  />
+                  <defs>
+                    <linearGradient id="vibe-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#2dd4bf" />
+                      <stop offset="100%" stopColor="#10b981" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <span>{vibeMatch}% Match</span>
+              </span>
+            )}
           </div>
+
 
           <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-sm font-bold text-white backdrop-blur-md">
             <Star size={14} className="fill-yellow-300 text-yellow-300" />
             {place.rating}
             <span className="font-medium text-slate-300">({place.reviewCount})</span>
           </div>
+
+          {isVegetarianPlace(place) && (
+            <div className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-950/80 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-400 backdrop-blur-md">
+              {/* Indian Veg Mark: Green dot inside green square */}
+              <span className="flex h-3 w-3 shrink-0 items-center justify-center border border-emerald-500 rounded bg-transparent p-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+              <span>Pure Veg</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 flex-col gap-2.5 p-3 sm:gap-3 sm:p-4">
