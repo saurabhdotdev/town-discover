@@ -25,6 +25,7 @@ import { AuthUser } from "@/types";
 import { ApiError, ForbiddenError, ServiceUnavailableError, UnauthorizedError, serializeError } from "./api-errors";
 import { getClientIp, logRequest } from "./request-logger";
 import { checkRateLimit, RateLimitConfig, RATE_LIMIT_READ, RATE_LIMIT_WRITE } from "./rate-limit";
+import { verifyTrustedOrigin } from "@/lib/request-security";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,11 @@ export function createApiHandler(options: HandlerOptions, handler: Handler): (re
     let rateLimitHeaders: Record<string, string> = {};
 
     try {
+      const originError = verifyTrustedOrigin(request);
+      if (originError) {
+        throw new ForbiddenError(originError);
+      }
+
       // ── 1. Rate Limiting ──────────────────────────────────────────────
       const rateLimitConfig = options.rateLimit === false
         ? null

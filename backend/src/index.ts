@@ -14,7 +14,7 @@ import db from "./db";
 import { runDatabaseMigrations } from "./migrations";
 import { authenticateUser, requireUser, AuthenticatedUser } from "./middleware/auth";
 import { apiLimiter, reportPostLimiter } from "./middleware/rateLimiter";
-import { getAllowedOrigins, requireTrustedOrigin } from "./middleware/security";
+import { getAllowedOrigins, isAllowedOrigin, requireTrustedOrigin } from "./middleware/security";
 import { validateRequest } from "./middleware/validate";
 import { errorHandler } from "./middleware/errors";
 import { requestTimeout } from "./middleware/timeout";
@@ -41,16 +41,30 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
     return;
   }
 
-  callback(null, allowedOrigins.has(origin));
+  callback(null, isAllowedOrigin(origin, allowedOrigins));
 };
 
 // Create HTTP Server for Socket.io
 const httpServer = createServer(app);
+httpServer.requestTimeout = 20_000;
+httpServer.headersTimeout = 15_000;
+httpServer.keepAliveTimeout = 5_000;
+httpServer.maxHeadersCount = 100;
+
 const io = new Server(httpServer, {
   cors: {
     origin: corsOrigin,
     methods: ["GET", "POST"],
     credentials: true,
+  },
+  allowRequest: (request, callback) => {
+    const origin = request.headers.origin;
+    callback(
+      null,
+      origin
+        ? isAllowedOrigin(origin, allowedOrigins)
+        : process.env.NODE_ENV !== "production"
+    );
   },
 });
 
@@ -77,6 +91,7 @@ const hashSessionToken = (token: string) => {
 app.use(compression());
 app.use(requestLogger);
 app.use(requestTimeout(15000)); // 15-second request timeout limit
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
@@ -453,7 +468,7 @@ io.use(async (socket, next) => {
       
       if (rows[0]) {
         socket.data.user = rows[0];
-        console.log(`🔌 Secure socket connection established for user: ${rows[0].email}`);
+        console.log(`Secure socket connection established for user: ${rows[0].id}`);
       }
     }
     next();
@@ -466,10 +481,13 @@ io.use(async (socket, next) => {
 // Socket.io connection setup
 io.on("connection", (socket) => {
   socket.on("join-place", (placeId: string) => {
+    if (typeof placeId !== "string" || !/^[a-zA-Z0-9:_-]{1,120}$/.test(placeId)) return;
+    if (socket.rooms.size >= 51) return;
     socket.join(placeId);
   });
 
   socket.on("leave-place", (placeId: string) => {
+    if (typeof placeId !== "string" || !/^[a-zA-Z0-9:_-]{1,120}$/.test(placeId)) return;
     socket.leave(placeId);
   });
 });

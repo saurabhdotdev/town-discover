@@ -6,7 +6,13 @@ const pool = new Pool({
     process.env.DATABASE_URL?.includes("localhost") ||
     process.env.DATABASE_URL?.includes("127.0.0.1")
       ? false
-      : { rejectUnauthorized: false },
+      : {
+          rejectUnauthorized:
+            process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+        },
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
+  max: Number(process.env.DATABASE_POOL_MAX ?? 10),
 });
 
 // Handle unexpected errors on idle pool clients to prevent process crashes

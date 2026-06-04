@@ -18,6 +18,9 @@ export const getAllowedOrigins = () => {
   for (const value of [
     process.env.FRONTEND_URL,
     process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
   ]) {
     const origin = normalizeOrigin(value);
@@ -32,6 +35,14 @@ export const getAllowedOrigins = () => {
   }
 
   return origins;
+};
+
+export const isAllowedOrigin = (
+  value: string | undefined,
+  allowedOrigins = getAllowedOrigins()
+) => {
+  const origin = normalizeOrigin(value);
+  return Boolean(origin && allowedOrigins.has(origin));
 };
 
 export const requireTrustedOrigin = (req: Request, res: Response, next: NextFunction) => {
