@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AuthUser } from "@/types";
+import { useBadges } from "@/hooks/useBadges";
+import { BadgeToast } from "@/components/profile/BadgeToast";
 
 type AuthMode = "login" | "signup";
 
@@ -21,6 +23,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [authRequiredMessage, setAuthRequiredMessage] = useState("");
+  const { newBadgeId, dismissBadge } = useBadges(!!user);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -60,24 +63,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const submitAuth = useCallback(async (mode: AuthMode, email: string, password: string, fullName = "") => {
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mode === "signup" ? { email, password, fullName } : { email, password }),
-    });
-    const data = await response.json();
+    try {
+      const response = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "signup" ? { email, password, fullName } : { email, password }),
+      });
 
-    if (!response.ok) {
-      return { ok: false, error: data.error ?? "Unable to continue." };
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        return { ok: false, error: data.error ?? "Unable to continue." };
+      }
+
+      setUser(data.user ?? null);
+      setAuthRequiredMessage("");
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err.message ?? "Network connection error. Please try again." };
     }
-
-    setUser(data.user ?? null);
-    setAuthRequiredMessage("");
-    return { ok: true };
   }, []);
 
   const logout = useCallback(async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.warn("Failed to notify backend of logout:", err);
+    }
     setUser(null);
   }, []);
 
@@ -94,7 +111,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [authRequiredMessage, loading, logout, refreshUser, submitAuth, user]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <BadgeToast badgeId={newBadgeId} onDismiss={dismissBadge} />
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPool } from "@/lib/postgres";
+import { createApiHandler } from "@/lib/server/api-handler";
 import {
   authCookieName,
   createSession,
-  ensureAuthSetup,
   getSessionCookieOptions,
   getSignupRole,
   hashPassword,
@@ -13,37 +12,32 @@ import {
   validateFullName,
   validatePassword,
 } from "@/lib/auth";
+import { requireTrustedOrigin } from "@/lib/request-security";
+import { RATE_LIMIT_AUTH } from "@/lib/server/rate-limit";
+import { BadRequestError } from "@/lib/server/api-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
-  const pool = getPool();
-  if (!pool) {
-    return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-  }
+export const POST = createApiHandler(
+  { auth: "none", rateLimit: RATE_LIMIT_AUTH, rateLimitKey: "POST:/api/auth/signup" },
+  async (request: NextRequest, { pool }) => {
+    const originResponse = requireTrustedOrigin(request);
+    if (originResponse) return originResponse;
 
-  try {
     const body = await request.json();
     const fullName = normalizeFullName(typeof body.fullName === "string" ? body.fullName : "");
     const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
     const password = typeof body.password === "string" ? body.password : "";
 
     const fullNameError = validateFullName(fullName);
-    if (fullNameError) {
-      return Response.json({ error: fullNameError }, { status: 400 });
-    }
+    if (fullNameError) throw new BadRequestError(fullNameError);
 
-    if (!isValidEmail(email)) {
-      return Response.json({ error: "Enter a valid email address." }, { status: 400 });
-    }
+    if (!isValidEmail(email)) throw new BadRequestError("Enter a valid email address.");
 
     const passwordError = validatePassword(password);
-    if (passwordError) {
-      return Response.json({ error: passwordError }, { status: 400 });
-    }
+    if (passwordError) throw new BadRequestError(passwordError);
 
-    await ensureAuthSetup(pool);
     const role = await getSignupRole(pool, email);
     const passwordData = await hashPassword(password);
 
@@ -61,14 +55,5 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set(authCookieName, session.token, getSessionCookieOptions(session.expiresAt));
     return response;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "23505") {
-      return Response.json({ error: "An account with this email already exists." }, { status: 409 });
-    }
-
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Unable to create account." },
-      { status: 503 }
-    );
   }
-}
+);

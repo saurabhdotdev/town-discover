@@ -1,8 +1,16 @@
-export type PlaceCategory = "cafe" | "restaurant" | "event" | "nightlife" | "food-stall" | "bar" | "dessert" | "street-food";
+export type PlaceCategory = "cafe" | "restaurant" | "event" | "nightlife" | "food-stall" | "bar" | "dessert" | "ice-cream" | "street-food";
+export type { SupportedCityName } from '@/lib/pune-location';
 
 export interface Location {
   latitude: number;
   longitude: number;
+}
+
+export interface TrailStop {
+  title: string;
+  description: string;
+  locality: string;
+  image?: string;
 }
 
 export interface Place extends Location {
@@ -27,6 +35,9 @@ export interface Place extends Location {
     open: string;
     close: string;
   };
+  routeWaypoints?: Location[];
+  trailStops?: TrailStop[];
+  isVeg?: boolean;
 }
 
 export interface InfluencerFeature {
@@ -57,6 +68,7 @@ export interface AuthUser {
   email: string;
   fullName: string | null;
   role: UserRole;
+  isPremiumPass?: boolean;
 }
 
 export type CrowdLevel = "low" | "moderate" | "busy" | "very_crowded";

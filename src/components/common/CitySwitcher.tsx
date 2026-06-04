@@ -10,7 +10,7 @@ interface CitySwitcherProps {
 
 export const CitySwitcher: React.FC<CitySwitcherProps> = ({ value, onChange }) => {
   return (
-    <label className="relative mb-3 block max-w-xs" aria-label="Choose city">
+    <label className="relative mb-3 block w-full sm:max-w-xs" aria-label="Choose city">
       <MapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fresh)]" size={17} />
       <select
         value={value}

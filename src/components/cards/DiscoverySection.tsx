@@ -1,11 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CrowdSummary, Place } from "@/types";
 import { DiscoveryCard } from "./DiscoveryCard";
 import { DiscoverySectionSkeleton } from "@/components/common/Skeleton";
+import { API_URL } from "@/lib/utils";
 
 const crowdSummaryUpdatedEvent = "sheher:crowd-summary-updated";
 
@@ -17,6 +18,8 @@ interface DiscoverySectionProps {
   onPlaceClick?: (place: Place) => void;
   onSavePlace?: (place: Place) => void;
   savedPlaceIds?: Set<string>;
+  carousel?: boolean;
+  vibeScores?: Record<string, number>;
 }
 
 export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
@@ -27,6 +30,8 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
   onPlaceClick,
   onSavePlace,
   savedPlaceIds,
+  carousel = false,
+  vibeScores,
 }) => {
   const [crowdSummaries, setCrowdSummaries] = useState<Record<string, CrowdSummary>>({});
   const placeIds = useMemo(() => places.map((place) => place.id).join(","), [places]);
@@ -38,7 +43,7 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
 
     const controller = new AbortController();
 
-    fetch(`/api/crowd-reports?placeIds=${encodeURIComponent(placeIds)}`, {
+    fetch(`${API_URL}/api/crowd-reports?placeIds=${encodeURIComponent(placeIds)}`, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -72,6 +77,16 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
     return () => window.removeEventListener(crowdSummaryUpdatedEvent, handleCrowdSummaryUpdate);
   }, []);
 
+  const scrollId = useMemo(() => `carousel-${title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}`, [title]);
+
+  const handleScroll = (direction: "left" | "right") => {
+    const el = document.getElementById(scrollId);
+    if (el) {
+      const scrollAmt = direction === "left" ? -400 : 400;
+      el.scrollBy({ left: scrollAmt, behavior: "smooth" });
+    }
+  };
+
   if (loading) {
     return <DiscoverySectionSkeleton />;
   }
@@ -82,12 +97,12 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
       whileInView={{ opacity: 1 }}
       transition={{ duration: 0.45 }}
       viewport={{ once: true, margin: "0px 0px -80px 0px" }}
-      className="space-y-4 py-5 md:space-y-5 md:py-8"
+      className="space-y-3 py-4 md:space-y-5 md:py-8"
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0 space-y-1">
-          <h2 className="text-xl font-black tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">{title}</h2>
-          {description && <p className="max-w-2xl text-sm leading-6 text-[var(--muted)] md:text-base">{description}</p>}
+          <h2 className="text-lg font-black tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">{title}</h2>
+          {description && <p className="max-w-2xl text-sm leading-5 text-[var(--muted)] md:text-base md:leading-6">{description}</p>}
         </div>
         <span className="w-fit rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted)] sm:text-xs sm:tracking-[0.16em]">
           {places.length} places
@@ -95,25 +110,69 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
       </div>
 
       {places.length > 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          transition={{ duration: 0.45, delay: 0.08 }}
-          viewport={{ once: true }}
-          className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3"
-        >
-          {places.map((place, index) => (
-            <DiscoveryCard
-              key={place.id}
-              place={place}
-              index={index}
-              onClick={() => onPlaceClick?.(place)}
-              onSave={onSavePlace}
-              isSaved={savedPlaceIds?.has(place.id)}
-              crowdSummary={crowdSummaries[place.id]}
-            />
-          ))}
-        </motion.div>
+        carousel ? (
+          <div className="relative group">
+            {/* Scroll Navigation Arrows */}
+            <button
+              onClick={() => handleScroll("left")}
+              type="button"
+              className="absolute left-2 top-1/2 z-20 -translate-y-1/2 hidden group-hover:flex h-9 w-9 items-center justify-center rounded-full bg-[var(--panel-strong)] border border-[var(--border)] text-[var(--foreground)] backdrop-blur-sm shadow-xl hover:bg-[var(--panel)] transition hover:scale-105 active:scale-95 cursor-pointer"
+              aria-label="Previous spots"
+            >
+              <ChevronLeft size={20} />
+            </button>
+
+            {/* Scrollable container snaps */}
+            <div
+              id={scrollId}
+              className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory pb-3"
+            >
+              {places.map((place, index) => (
+                <div key={place.id} className="w-[82vw] max-w-[320px] shrink-0 snap-start sm:w-[320px]">
+                  <DiscoveryCard
+                    place={place}
+                    index={index}
+                    onClick={() => onPlaceClick?.(place)}
+                    onSave={onSavePlace}
+                    isSaved={savedPlaceIds?.has(place.id)}
+                    crowdSummary={crowdSummaries[place.id]}
+                    vibeMatch={vibeScores?.[place.id]}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => handleScroll("right")}
+              type="button"
+              className="absolute right-2 top-1/2 z-20 -translate-y-1/2 hidden group-hover:flex h-9 w-9 items-center justify-center rounded-full bg-[var(--panel-strong)] border border-[var(--border)] text-[var(--foreground)] backdrop-blur-sm shadow-xl hover:bg-[var(--panel)] transition hover:scale-105 active:scale-95 cursor-pointer"
+              aria-label="Next spots"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ duration: 0.45, delay: 0.08 }}
+            viewport={{ once: true }}
+            className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3"
+          >
+            {places.map((place, index) => (
+              <DiscoveryCard
+                key={place.id}
+                place={place}
+                index={index}
+                onClick={() => onPlaceClick?.(place)}
+                onSave={onSavePlace}
+                isSaved={savedPlaceIds?.has(place.id)}
+                crowdSummary={crowdSummaries[place.id]}
+                vibeMatch={vibeScores?.[place.id]}
+              />
+            ))}
+          </motion.div>
+        )
       ) : (
         <div className="grid min-h-48 place-items-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-8 text-center">
           <div>

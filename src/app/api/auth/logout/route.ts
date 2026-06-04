@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPool } from "@/lib/postgres";
-import { authCookieName, ensureAuthSetup, getExpiredSessionCookieOptions, hashSessionToken } from "@/lib/auth";
+import { createApiHandler } from "@/lib/server/api-handler";
+import { authCookieName, getExpiredSessionCookieOptions, hashSessionToken } from "@/lib/auth";
+import { requireTrustedOrigin } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
-  const pool = getPool();
-  const token = request.cookies.get(authCookieName)?.value;
+export const POST = createApiHandler(
+  { auth: "none" },
+  async (request: NextRequest, { pool }) => {
+    const originResponse = requireTrustedOrigin(request);
+    if (originResponse) return originResponse;
 
-  if (pool && token) {
-    await ensureAuthSetup(pool);
-    await pool.query("DELETE FROM auth_sessions WHERE token_hash = $1", [hashSessionToken(token)]);
+    const token = request.cookies.get(authCookieName)?.value;
+
+    if (token) {
+      await pool.query("DELETE FROM auth_sessions WHERE token_hash = $1", [hashSessionToken(token)]);
+    }
+
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(authCookieName, "", getExpiredSessionCookieOptions());
+    return response;
   }
-
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(authCookieName, "", getExpiredSessionCookieOptions());
-  return response;
-}
+);

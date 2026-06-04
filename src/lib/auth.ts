@@ -3,6 +3,8 @@ import { promisify } from "util";
 import { NextRequest } from "next/server";
 import { Pool } from "pg";
 import { AuthUser, UserRole } from "@/types";
+import { runDatabaseMigrations } from "@/lib/db-migrations";
+import { requireTrustedOrigin } from "@/lib/request-security";
 
 export const authCookieName = "town_discover_session";
 
@@ -11,52 +13,8 @@ const passwordIterations = 210000;
 const passwordKeyLength = 32;
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 
-const authSetupSql = `
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT NOT NULL UNIQUE,
-  full_name TEXT,
-  password_hash TEXT NOT NULL,
-  password_salt TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'super_admin')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS full_name TEXT;
-
-CREATE TABLE IF NOT EXISTS auth_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL UNIQUE,
-  expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS saved_places (
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  place_id TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (user_id, place_id)
-);
-
-CREATE INDEX IF NOT EXISTS auth_sessions_token_hash_idx
-ON auth_sessions (token_hash);
-
-CREATE INDEX IF NOT EXISTS auth_sessions_expires_at_idx
-ON auth_sessions (expires_at);
-
-CREATE INDEX IF NOT EXISTS saved_places_user_id_idx
-ON saved_places (user_id);
-`;
-
-let authSetupPromise: Promise<void> | null = null;
-
 export const ensureAuthSetup = async (pool: Pool) => {
-  authSetupPromise ??= pool.query(authSetupSql).then(() => undefined);
-  await authSetupPromise;
+  await runDatabaseMigrations(pool);
 };
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -116,7 +74,7 @@ export const createSession = async (pool: Pool, userId: string) => {
 export const getSessionCookieOptions = (expires?: Date) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "strict" as const,
   path: "/",
   maxAge: expires ? undefined : sessionMaxAgeSeconds,
   expires,
@@ -125,7 +83,7 @@ export const getSessionCookieOptions = (expires?: Date) => ({
 export const getExpiredSessionCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "strict" as const,
   path: "/",
   maxAge: 0,
 });
@@ -135,18 +93,17 @@ export const pruneExpiredSessions = async (pool: Pool) => {
 };
 
 export const getCurrentUser = async (pool: Pool, request: NextRequest): Promise<AuthUser | null> => {
-  await ensureAuthSetup(pool);
   const token = request.cookies.get(authCookieName)?.value;
   if (!token) return null;
 
-  await pruneExpiredSessions(pool);
   const { rows } = await pool.query(
     `
     SELECT
       users.id,
       users.email,
       users.full_name AS "fullName",
-      users.role
+      users.role,
+      users.is_premium_pass AS "isPremiumPass"
     FROM auth_sessions
     JOIN users ON users.id = auth_sessions.user_id
     WHERE auth_sessions.token_hash = $1
@@ -160,6 +117,11 @@ export const getCurrentUser = async (pool: Pool, request: NextRequest): Promise<
 };
 
 export const requireCurrentUser = async (pool: Pool, request: NextRequest) => {
+  const originResponse = requireTrustedOrigin(request);
+  if (originResponse) {
+    return { user: null, response: originResponse };
+  }
+
   const user = await getCurrentUser(pool, request);
   if (!user) {
     return { user: null, response: Response.json({ error: "Please log in first." }, { status: 401 }) };
