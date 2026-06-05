@@ -1111,15 +1111,15 @@ export default function MapPage() {
   }, [tripStats, tripSource, tripDest, vehicleType]);
 
   return (
-    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
+    <div className="w-full max-w-full min-h-screen lg:h-[calc(100vh-4rem)] lg:min-h-0 lg:overflow-hidden flex flex-col">
       <Header
         eyebrow="Map"
         title="Map View"
         location={locationLabel}
       />
 
-      <div className="mx-auto grid max-w-screen-xl gap-4 px-3 py-4 sm:px-4 md:px-6 md:py-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="lg:col-span-2">
+      <div className="mx-auto grid w-full max-w-screen-xl gap-4 px-3 py-4 sm:px-4 md:px-6 md:py-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:flex-1 lg:overflow-hidden lg:min-h-0">
+        <div className="lg:col-span-2 flex flex-col gap-3 lg:h-full lg:overflow-hidden lg:min-h-0">
           <div className="flex flex-col gap-3">
             <CitySwitcher
               value={activeCity}
@@ -1225,7 +1225,7 @@ export default function MapPage() {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.42 }}
-          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:h-[calc(100vh-11rem)] ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
+          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:flex-1 lg:h-full lg:min-h-0 ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
         >
           <div className="absolute top-4 left-4 z-[500] flex items-center gap-2">
             <button
@@ -1392,7 +1392,7 @@ export default function MapPage() {
           </button>
         </div>
 
-        <aside className={`space-y-3 ${mobileView === "map" ? "hidden lg:block" : "block"}`}>
+        <aside className={`space-y-3 lg:h-full lg:overflow-y-auto lg:pr-1 custom-scrollbar ${mobileView === "map" ? "hidden lg:block" : "block"}`}>
           {/* LIVE FLASH DEAL ALERTS */}
           {activeFlashDeal && user?.isPremiumPass && (
             <motion.div
@@ -1599,7 +1599,7 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="space-y-3 pr-0 lg:max-h-[calc(100vh-21rem)] lg:overflow-y-auto lg:pr-1">
+              <div className="space-y-3 pr-0">
                 {sortedPlaces.map((place) => {
                   const active = focusedPlace?.id === place.id;
                   const open = isOpenNow(place.hours);
@@ -2035,7 +2035,7 @@ export default function MapPage() {
                   </div>
 
                   {/* STOPS LIST FEED */}
-                  <div className="max-h-[calc(100vh-29rem)] overflow-y-auto pr-1 no-scrollbar">
+                  <div className="space-y-3">
                     {filteredTripStops.length === 0 ? (
                       <div className="text-center py-6 border border-dashed border-[var(--border)] rounded-lg bg-[var(--panel-soft)]">
                         <p className="text-xs text-[var(--muted)] font-medium">No pitstops matching filter on this route.</p>
