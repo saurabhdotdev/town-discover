@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { AuthUser } from "@/types";
 import { useBadges } from "@/hooks/useBadges";
 import { BadgeToast } from "@/components/profile/BadgeToast";
+import { CitySoundtracks } from "@/components/common/CitySoundtracks";
 
 type AuthMode = "login" | "signup";
 
@@ -114,6 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={value}>
       {children}
+      <CitySoundtracks />
       <BadgeToast badgeId={newBadgeId} onDismiss={dismissBadge} />
     </AuthContext.Provider>
   );
