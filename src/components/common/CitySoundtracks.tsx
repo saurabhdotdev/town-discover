@@ -376,7 +376,7 @@ export const CitySoundtracks = () => {
   }, []);
 
   return (
-    <div className="fixed bottom-20 left-4 z-[999] select-none">
+    <div className="fixed top-24 right-4 z-[999] select-none">
       <AnimatePresence>
         {isExpanded ? (
           /* EXPANDED PLAYER PANEL */
