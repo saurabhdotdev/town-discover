@@ -1,9 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import dynamic from "next/dynamic";
 import "./globals.css";
 import { BottomNavigation } from "@/components/common/BottomNavigation";
 import { AuthProvider } from "@/components/auth/AuthProvider";
-import { AiAssistant } from "@/components/common/AiAssistant";
-import { ServiceWorkerRegister } from "@/components/common/ServiceWorkerRegister";
+
+// Lazy-load non-critical layout components (code-split into separate chunks)
+const AiAssistant = dynamic(
+  () => import("@/components/common/AiAssistant").then((mod) => mod.AiAssistant)
+);
+const ServiceWorkerRegister = dynamic(
+  () => import("@/components/common/ServiceWorkerRegister").then((mod) => mod.ServiceWorkerRegister)
+);
 
 export const metadata: Metadata = {
   title: "Sheher | Indian City Discovery",

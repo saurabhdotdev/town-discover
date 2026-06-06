@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["redis"],
+  experimental: {
+    optimizePackageImports: ["framer-motion"],
+  },
   async headers() {
     return [
       {

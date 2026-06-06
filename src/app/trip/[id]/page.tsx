@@ -279,7 +279,7 @@ export default function TripPage({
     <div className="w-full max-w-full min-h-screen overflow-x-hidden pb-28">
       {/* Hero Header */}
       <header
-        className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16"
+        className="relative z-40 border-b border-[var(--border)] bg-[var(--nav)] md:sticky md:top-16 md:backdrop-blur-xl"
       >
         <motion.div
           initial={{ opacity: 0, y: -18 }}

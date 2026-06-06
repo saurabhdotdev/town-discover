@@ -263,6 +263,21 @@ CREATE INDEX IF NOT EXISTS user_city_stamps_user_id_idx
 ON user_city_stamps (user_id);
 `,
   },
+  {
+    id: "202606060004_vibe_shoutbox",
+    sql: `
+CREATE TABLE IF NOT EXISTS shoutbox_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  city TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS shoutbox_messages_city_created_at_idx
+ON shoutbox_messages (city, created_at DESC);
+`,
+  },
 ];
 
 let migrationPromise: Promise<void> | null = null;

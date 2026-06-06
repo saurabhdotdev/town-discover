@@ -26,7 +26,23 @@ const readPersistedCityState = () => {
 };
 
 export const useCitySelection = () => {
-  const [{ selectedCity, hasChosenCity }, setCityState] = useState(readPersistedCityState);
+  const [state, setCityState] = useState<{ selectedCity: SupportedCityName; hasChosenCity: boolean }>({
+    selectedCity: "Pune",
+    hasChosenCity: false,
+  });
+
+  // Hydrate from localStorage on client mount to prevent SSR mismatch
+  useEffect(() => {
+    const storedCity = parseStoredCity(window.localStorage.getItem(CITY_STORAGE_KEY));
+    const manuallyChosen = window.localStorage.getItem(CITY_CHOSEN_KEY) === "true";
+
+    if (storedCity) {
+      setCityState({
+        selectedCity: storedCity,
+        hasChosenCity: manuallyChosen,
+      });
+    }
+  }, []);
 
   // Sync state across multiple instances of the hook in the client
   useEffect(() => {
@@ -56,8 +72,8 @@ export const useCitySelection = () => {
   }, []);
 
   return {
-    selectedCity,
-    hasChosenCity,
+    selectedCity: state.selectedCity,
+    hasChosenCity: state.hasChosenCity,
     chooseCity,
     preferDetectedCity,
   };

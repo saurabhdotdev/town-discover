@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { motion, Reorder } from "framer-motion";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
@@ -20,7 +20,7 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => m
   ssr: false,
   loading: () => <MapSkeleton />
 });
-import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee } from "lucide-react";
+import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee, Compass, Utensils, Moon, Store, GlassWater, Cake, IceCream, Soup, Heart, Car } from "lucide-react";
 import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow, isVegetarianPlace, API_URL } from "@/lib/utils";
 import { io } from "socket.io-client";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
@@ -202,12 +202,56 @@ const AIRPORT_GUIDES: Record<string, AirportGuide> = {
 };
 
 export default function MapPage() {
+  const [mapWidth, setMapWidth] = useState(65); // default 65% width
+  const [isDragging, setIsDragging] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+
+  const startResizing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if ("button" in e && e.button !== 0) return;
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent | TouchEvent) => {
+      if (!splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const newWidthPx = clientX - rect.left;
+      let newWidthPercent = (newWidthPx / rect.width) * 100;
+      
+      // Constraint width between 30% and 80%
+      if (newWidthPercent < 30) newWidthPercent = 30;
+      if (newWidthPercent > 80) newWidthPercent = 80;
+      
+      setMapWidth(newWidthPercent);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleMouseMove);
+    window.addEventListener("touchend", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleMouseMove);
+      window.removeEventListener("touchend", handleMouseUp);
+    };
+  }, [isDragging]);
+
   const { user, setAuthRequiredMessage } = useAuth();
   const router = useRouter();
   const { selectedCity, hasChosenCity, chooseCity, preferDetectedCity } = useCitySelection();
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
+  const [isMobileCardCollapsed, setIsMobileCardCollapsed] = useState(false);
   const {
     location,
     loading: locationLoading,
@@ -239,6 +283,11 @@ export default function MapPage() {
   const [showOnlyOpen, setShowOnlyOpen] = useState<boolean>(false);
   const [vegOnly, setVegOnly] = useState<boolean>(false);
   const [minRating, setMinRating] = useState<number>(0);
+  const [visiblePlacesCount, setVisiblePlacesCount] = useState(15);
+
+  useEffect(() => {
+    setVisiblePlacesCount(15);
+  }, [selectedCategory, vegOnly, showOnlyOpen, minRating, activeCity]);
   const { savedPlaceIds, savedPlaces } = useSavedPlaces();
 
   // Sheher Trip Planner States
@@ -1111,16 +1160,13 @@ export default function MapPage() {
   }, [tripStats, tripSource, tripDest, vehicleType]);
 
   return (
-    <div className="w-full max-w-full min-h-screen lg:h-[calc(100vh-4rem)] lg:min-h-0 lg:overflow-hidden flex flex-col">
-      <Header
-        eyebrow="Map"
-        title="Map View"
-        location={locationLabel}
-      />
+    <>
+    <div className="w-full max-w-full flex flex-col overflow-hidden map-page-container">
 
-      <div className="mx-auto grid w-full max-w-screen-xl gap-4 px-3 py-4 sm:px-4 md:px-6 md:py-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:flex-1 lg:overflow-hidden lg:min-h-0">
-        <div className="lg:col-span-2 flex flex-col gap-3 lg:h-full lg:overflow-hidden lg:min-h-0">
-          <div className="flex flex-col gap-3">
+      {/* Filter toolbar — Floating Glassmorphic Capsule */}
+      <div className="flex-shrink-0 z-[1010] px-2 pt-2 pb-0.5 md:px-4 md:pt-4">
+        <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 rounded-xl md:rounded-2xl glass-toolbar px-3 py-2.5 md:px-4 md:py-3 border border-[var(--border)] shadow-xl w-full">
+          <div className="shrink-0 w-full md:w-[200px]">
             <CitySwitcher
               value={activeCity}
               onChange={(city) => {
@@ -1128,105 +1174,128 @@ export default function MapPage() {
                 setFocusedPlace(null);
                 setDetailsPlace(null);
               }}
+              className="mb-0 w-full"
             />
-
-            {/* Horizontal Filter Chips */}
-            <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-[var(--panel-soft)] p-3 rounded-lg border border-[var(--border)]">
-              <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-                {categories.map((cat) => {
-                  const active = selectedCategory === cat.value;
-                  return (
-                    <button
-                      key={cat.value}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategory(cat.value);
-                        setFocusedPlace(null);
-                      }}
-                      className={cn(
-                        "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black transition-all border cursor-pointer",
-                        active
-                          ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] shadow-sm"
-                          : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)] hover:text-[var(--foreground)]"
-                      )}
-                    >
-                      {cat.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="no-scrollbar flex w-full items-center gap-2 overflow-x-auto pb-1 md:pb-0 md:overflow-visible">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVegOnly(!vegOnly);
-                    setFocusedPlace(null);
-                  }}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
-                    vegOnly
-                      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                      : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)]"
-                  )}
-                >
-                  <span className={cn("h-1.5 w-1.5 rounded-full transition-all duration-300", vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500")} />
-                  Pure Veg
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowOnlyOpen(!showOnlyOpen);
-                    setFocusedPlace(null);
-                  }}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
-                    showOnlyOpen
-                      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                      : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)]"
-                  )}
-                >
-                  <span className={cn("h-1.5 w-1.5 rounded-full", showOnlyOpen ? "bg-emerald-300 animate-pulse" : "bg-slate-500")} />
-                  Open Now
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMinRating(minRating === 0 ? 4.5 : 0);
-                    setFocusedPlace(null);
-                  }}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer",
-                    minRating > 0
-                      ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
-                      : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)]"
-                  )}
-                >
-                  <Star size={12} className={cn("shrink-0", minRating > 0 ? "fill-yellow-300 text-yellow-300" : "text-slate-500")} />
-                  Top Rated (4.5★+)
-                </button>
-              </div>
-            </div>
           </div>
 
-          <LocationPermissionCard
-            source={locationSource}
-            loading={locationLoading}
-            error={locationError}
-            onRequest={() => {
-              preferDetectedCity();
-              requestLocation();
-            }}
-          />
+          <div className="hidden md:block h-6 w-px bg-[var(--border)] shrink-0" />
+
+          {/* Horizontal Filter Chips */}
+          <div className="flex-1 no-scrollbar flex items-center gap-2 overflow-x-auto scroll-fade-right py-1">
+            {categories.map((cat) => {
+              const active = selectedCategory === cat.value;
+              
+              // Lucide Icon mapping
+              let icon: React.ReactNode = null;
+              if (cat.value === "all") icon = <Compass size={13} className="shrink-0" />;
+              else if (cat.value === "saved") icon = <Heart size={13} className="shrink-0 fill-rose-500 text-rose-500" />;
+              else if (cat.value === "night-drive") icon = <Car size={13} className="shrink-0 text-pink-400" />;
+              else if (cat.value === "ice-cream") icon = <IceCream size={13} className="shrink-0 text-purple-400 animate-pulse" />;
+              else if (cat.value === "cafe") icon = <Coffee size={13} className="shrink-0 text-amber-400" />;
+              else if (cat.value === "restaurant") icon = <Utensils size={13} className="shrink-0 text-rose-400" />;
+              else if (cat.value === "event") icon = <Sparkles size={13} className="shrink-0 text-sky-400" />;
+              else if (cat.value === "nightlife") icon = <Moon size={13} className="shrink-0 text-fuchsia-400" />;
+              else if (cat.value === "food-stall") icon = <Store size={13} className="shrink-0 text-yellow-400" />;
+              else if (cat.value === "bar") icon = <GlassWater size={13} className="shrink-0 text-rose-300" />;
+              else if (cat.value === "dessert") icon = <Cake size={13} className="shrink-0 text-teal-400" />;
+              else if (cat.value === "street-food") icon = <Soup size={13} className="shrink-0 text-orange-400" />;
+
+              // Strip raw emojis from labels since we render Lucide icons
+              const cleanLabel = cat.label.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim();
+
+              return (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(cat.value);
+                    setFocusedPlace(null);
+                  }}
+                  className={cn(
+                    "shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition-all border flex items-center gap-1.5 cursor-pointer select-none",
+                    active
+                      ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] shadow-md shadow-teal-500/10 scale-[1.02]"
+                      : "bg-[var(--input)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-soft)] hover:text-[var(--foreground)]"
+                  )}
+                >
+                  {icon}
+                  <span>{cleanLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-px md:h-6 w-full md:w-px bg-[var(--border)] shrink-0" />
+
+          {/* Veg / Open / Rating */}
+          <div className="no-scrollbar flex items-center justify-between md:justify-start gap-2 shrink-0 py-0.5">
+            <button
+              type="button"
+              onClick={() => { setVegOnly(!vegOnly); setFocusedPlace(null); }}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer select-none",
+                vegOnly ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 shadow-sm" : "bg-[var(--input)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-soft)]"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", vegOnly ? "bg-emerald-400 shadow-md shadow-emerald-400/50" : "bg-slate-500")} />
+              Veg
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowOnlyOpen(!showOnlyOpen); setFocusedPlace(null); }}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer select-none",
+                showOnlyOpen ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 shadow-sm" : "bg-[var(--input)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-soft)]"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", showOnlyOpen ? "bg-emerald-300 animate-pulse shadow-md shadow-emerald-300/50" : "bg-slate-500")} />
+              Open
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMinRating(minRating === 0 ? 4.5 : 0); setFocusedPlace(null); }}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black border transition-all cursor-pointer select-none",
+                minRating > 0 ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30 shadow-sm" : "bg-[var(--input)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-soft)]"
+              )}
+            >
+              <Star size={12} className={cn("shrink-0", minRating > 0 ? "fill-yellow-300 text-yellow-300" : "text-slate-500")} />
+              4.5★+
+            </button>
+          </div>
         </div>
+      </div>
+
+
+      {/* Main content: map 60% + sidebar 40% */}
+      <div ref={splitContainerRef} className="flex flex-1 min-h-0 overflow-hidden gap-2 p-2 flex-col md:flex-row">
+
+        {/* MAP — always visible on desktop, toggled on mobile */}
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.42 }}
-          className={`relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] lg:flex-1 lg:h-full lg:min-h-0 ${mobileView === "list" ? "h-0 hidden lg:block" : "h-[68dvh] min-h-[420px] sm:h-[58vh]"}`}
+          style={{ "--map-width": `${mapWidth}%` } as React.CSSProperties}
+          className={cn(
+            "resizable-map relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] min-h-0",
+            mobileView === "list"
+              ? "hidden md:block md:h-full"
+              : "w-full h-full md:h-full"
+          )}
         >
+          {/* Location permission — floats inside map, doesn't affect layout */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] w-[90%] max-w-md pointer-events-auto">
+            <LocationPermissionCard
+              source={locationSource}
+              loading={locationLoading}
+              error={locationError}
+              onRequest={() => {
+                preferDetectedCity();
+                requestLocation();
+              }}
+            />
+          </div>
+
           <div className="absolute top-4 left-4 z-[500] flex items-center gap-2">
             <button
               type="button"
@@ -1249,22 +1318,26 @@ export default function MapPage() {
             )}
           </div>
 
-          {livePlacesLoading && !usingLivePlaces && mode !== "trip" ? (
-            <MapSkeleton />
-          ) : (
-            <MapView
-              places={mode === "trip" ? tripStops : (hideOtherPlaces && focusedPlace ? [focusedPlace] : sortedPlaces)}
-              userLocation={activeLocation}
-              selectedPlace={focusedPlace}
-              onMarkerClick={setFocusedPlace}
-              onCenterChange={setMapCenter}
-              onBoundsChange={setMapBounds}
-              className="h-full min-h-full rounded-lg border-0"
-              tripMode={mode === "trip"}
-              tripRoutePath={mode === "trip" ? tripRoutePath : null}
-              simulationActive={simulationActive}
-              simulationCoord={currentSimCoord}
-            />
+          <MapView
+            places={mode === "trip" ? tripStops : (hideOtherPlaces && focusedPlace ? [focusedPlace] : sortedPlaces)}
+            userLocation={activeLocation}
+            selectedPlace={focusedPlace}
+            onMarkerClick={setFocusedPlace}
+            onCenterChange={setMapCenter}
+            onBoundsChange={setMapBounds}
+            className="h-full w-full rounded-xl border-0"
+            tripMode={mode === "trip"}
+            tripRoutePath={mode === "trip" ? tripRoutePath : null}
+            simulationActive={simulationActive}
+            simulationCoord={currentSimCoord}
+            scrollWheelZoom={true}
+          />
+
+          {livePlacesLoading && mode !== "trip" && (
+            <div className="absolute top-4 right-4 z-[500] flex items-center gap-2 rounded-full border border-teal-500/30 bg-slate-950/90 px-3.5 py-2 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md animate-pulse">
+              <span className="flex h-2 w-2 rounded-full bg-teal-400 animate-ping" />
+              <span>Scanning area...</span>
+            </div>
           )}
 
           {/* Simulation Cruise Upcoming Stop Toast Alert */}
@@ -1303,7 +1376,7 @@ export default function MapPage() {
           )}
 
           {focusedPlace && (
-            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl sm:inset-x-3 sm:bottom-3 sm:p-4 lg:hidden">
+            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl sm:inset-x-3 sm:bottom-3 sm:p-4 md:hidden">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-teal-200">
@@ -1327,17 +1400,27 @@ export default function MapPage() {
           )}
 
           {mobileView === "map" && !focusedPlace && (
-            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl lg:hidden">
+            <div className="absolute inset-x-2 bottom-2 z-[500] rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] p-3 shadow-2xl backdrop-blur-xl md:hidden">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-teal-300">
-                    {mode === "trip" ? "Route stops" : "Nearby places"}
-                  </p>
-                  <p className="truncate text-sm font-semibold text-[var(--muted)]">
-                    {mode === "trip"
-                      ? `${filteredTripStops.length} stops on ${tripSource} to ${tripDest}`
-                      : `${sortedPlaces.length} places around ${activeCity}`}
-                  </p>
+                <div className="min-w-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileCardCollapsed(!isMobileCardCollapsed)}
+                    className="p-1.5 rounded-lg bg-[var(--panel-soft)] border border-[var(--border)] text-[var(--muted-strong)] hover:text-[var(--foreground)] transition cursor-pointer"
+                    title={isMobileCardCollapsed ? "Expand list" : "Collapse list"}
+                  >
+                    <ChevronRight size={16} className={cn("transition-transform duration-200", isMobileCardCollapsed ? "rotate-90" : "-rotate-90")} />
+                  </button>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-teal-300">
+                      {mode === "trip" ? "Route stops" : "Nearby places"}
+                    </p>
+                    <p className="truncate text-sm font-semibold text-[var(--muted)]">
+                      {mode === "trip"
+                        ? `${filteredTripStops.length} stops`
+                        : `${sortedPlaces.length} places`}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1348,37 +1431,39 @@ export default function MapPage() {
                 </button>
               </div>
 
-              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                {(mode === "trip" ? filteredTripStops : sortedPlaces).slice(0, 8).map((place) => (
-                  <button
-                    key={place.id}
-                    type="button"
-                    onClick={() => {
-                      setFocusedPlace(place);
-                      setMapCenter({ latitude: place.latitude, longitude: place.longitude });
-                    }}
-                    className="w-52 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 text-left"
-                  >
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                      {getCategoryLabel(place.category, place.tags)}
-                    </p>
-                    <h3 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h3>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-xs font-bold text-[var(--muted-strong)]">
-                      <span className="line-clamp-1">{formatPlaceArea(place)}</span>
-                      <span className="inline-flex items-center gap-1 text-amber-300">
-                        <Star size={12} className="fill-amber-300" />
-                        {place.rating}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {!isMobileCardCollapsed && (
+                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1 mt-2">
+                  {(mode === "trip" ? filteredTripStops : sortedPlaces).slice(0, 8).map((place) => (
+                    <button
+                      key={place.id}
+                      type="button"
+                      onClick={() => {
+                        setFocusedPlace(place);
+                        setMapCenter({ latitude: place.latitude, longitude: place.longitude });
+                      }}
+                      className="w-52 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 text-left"
+                    >
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
+                        {getCategoryLabel(place.category, place.tags)}
+                      </p>
+                      <h3 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h3>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-xs font-bold text-[var(--muted-strong)]">
+                        <span className="line-clamp-1">{formatPlaceArea(place)}</span>
+                        <span className="inline-flex items-center gap-1 text-amber-300">
+                          <Star size={12} className="fill-amber-300" />
+                          {place.rating}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </motion.div>
 
         {/* Mobile Map/List toggle FAB */}
-        <div className="fixed left-4 z-[600] lg:hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 5.5rem)" }}>
+        <div className="fixed left-4 z-[600] md:hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 5.5rem)" }}>
           <button
             type="button"
             onClick={() => setMobileView(mobileView === "map" ? "list" : "map")}
@@ -1392,7 +1477,42 @@ export default function MapPage() {
           </button>
         </div>
 
-        <aside className={`space-y-3 lg:h-full lg:overflow-y-auto lg:pr-1 custom-scrollbar ${mobileView === "map" ? "hidden lg:block" : "block"}`}>
+        {/* Resize Divider Handle */}
+        <div
+          onMouseDown={startResizing}
+          onTouchStart={startResizing}
+          className={cn(
+            "hidden md:flex items-center justify-center w-3 z-[600] cursor-col-resize shrink-0 select-none group relative h-full -mx-1.5",
+            isDragging ? "bg-teal-500/10" : "bg-transparent hover:bg-teal-500/5"
+          )}
+        >
+          {/* Visual line inside the handle */}
+          <div className={cn(
+            "w-[1px] h-full transition-all duration-150",
+            isDragging ? "bg-teal-400" : "bg-[var(--border)] group-hover:bg-teal-400"
+          )} />
+          
+          {/* Grab handle dot button */}
+          <div className={cn(
+            "absolute w-5 h-8 rounded-md border flex flex-col items-center justify-center gap-0.5 shadow-md transition-all duration-200 pointer-events-none",
+            isDragging
+              ? "bg-teal-400 border-teal-300 text-slate-950 scale-105"
+              : "bg-[var(--panel-strong)] border-[var(--border)] text-[var(--muted-strong)] group-hover:border-teal-400/50 group-hover:text-teal-400"
+          )}>
+            <GripVertical size={11} />
+          </div>
+        </div>
+
+        <aside
+          style={{ "--sidebar-width": `${100 - mapWidth}%` } as React.CSSProperties}
+          className={cn(
+            "resizable-sidebar relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-3 h-full flex flex-col gap-3 min-h-0",
+            mobileView === "map"
+              ? "hidden md:flex md:shrink-0"
+              : "w-full h-full md:shrink-0"
+          )}
+        >
+          <div className="custom-scrollbar overflow-y-auto flex-1 space-y-3 pr-0.5 min-h-0">
           {/* LIVE FLASH DEAL ALERTS */}
           {activeFlashDeal && user?.isPremiumPass && (
             <motion.div
@@ -1468,75 +1588,139 @@ export default function MapPage() {
           )}
 
           {/* Selected Place Preview Card */}
-          {focusedPlace && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: -10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="rounded-xl border border-teal-500/35 bg-slate-950/80 p-4 space-y-3.5 shadow-2xl backdrop-blur-md"
-            >
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
-                  Selected Spot
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setFocusedPlace(null)}
-                  className="text-xs font-black text-slate-400 hover:text-white transition cursor-pointer"
-                >
-                  Clear Selection
-                </button>
-              </div>
+          {focusedPlace && (() => {
+            // Crowd indicator calculation
+            let crowdIndicator = "⭐ Recommended Spot";
+            if (["cafe", "restaurant", "street-food", "food-stall"].includes(focusedPlace.category)) {
+              crowdIndicator = focusedPlace.rating >= 4.6 ? "🔥 Bustling Hub (Popular)" : "☕ Lively Spot (Moderate crowd)";
+            } else if (focusedPlace.tags.includes("scenic") || focusedPlace.tags.includes("viewpoint") || focusedPlace.tags.includes("scenic-cruise")) {
+              crowdIndicator = "🍃 Serene Stroll (Calm vibe)";
+            } else if (focusedPlace.category === "event") {
+              crowdIndicator = "✨ Vibrant gathering";
+            }
 
-              <div className="relative h-36 w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800">
-                <LazyImage
-                  src={focusedPlace.image}
-                  alt={focusedPlace.title}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent" />
-                <span className="absolute bottom-2.5 left-2.5 rounded-full bg-black/60 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-teal-300 border border-white/5">
-                  {getCategoryLabel(focusedPlace.category, focusedPlace.tags)}
-                </span>
-              </div>
+            // Operating hours countdown
+            let hoursStatus = "Timings vary";
+            if (focusedPlace.hours) {
+              const isOpen = isOpenNow(focusedPlace.hours);
+              hoursStatus = isOpen
+                ? `Closes at ${focusedPlace.hours.close}`
+                : `Opens at ${focusedPlace.hours.open}`;
+            }
 
-              <div className="space-y-0.5">
-                <h3 className="text-base font-black text-white tracking-tight">{focusedPlace.title}</h3>
-                <p className="text-xs font-bold text-slate-400">{formatPlaceArea(focusedPlace)}</p>
-              </div>
+            // Facilities list
+            const facilities = [];
+            if (focusedPlace.tags.includes("ev-station") || focusedPlace.tags.includes("ev-charger")) {
+              facilities.push({ text: "EV Charging", icon: <span className="text-emerald-400">⚡</span> });
+            }
+            if (focusedPlace.tags.includes("toilet") || focusedPlace.tags.includes("restroom") || focusedPlace.tags.includes("washroom")) {
+              facilities.push({ text: "Restroom", icon: <span className="text-orange-400">🚻</span> });
+            }
+            if (focusedPlace.category === "cafe") {
+              facilities.push({ text: "Free Wi-Fi", icon: <span className="text-blue-400">📶</span> });
+            }
+            if (["cafe", "restaurant", "bar"].includes(focusedPlace.category)) {
+              facilities.push({ text: "Seating Available", icon: <span className="text-amber-400">🪑</span> });
+            }
+            if (focusedPlace.rating >= 4.6) {
+              facilities.push({ text: "Top Choice", icon: <span className="text-yellow-400">🏆</span> });
+            }
 
-              <p className="text-xs text-slate-300 leading-relaxed font-semibold">
-                {focusedPlace.description}
-              </p>
-
-              <div className="grid grid-cols-3 gap-2 text-[10px] font-black tracking-wider uppercase text-slate-200">
-                <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900 border border-slate-800 p-2 text-center">
-                  <MapPin size={13} className="text-cyan-300 mb-1" />
-                  <span className="text-[9px] normal-case text-slate-400">Distance</span>
-                  <span className="mt-0.5 text-white">{formatDistance(focusedPlace.distance)}</span>
+            return (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="rounded-xl border border-teal-500/20 bg-slate-950/85 p-4 space-y-3.5 shadow-2xl backdrop-blur-xl"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-teal-300 bg-teal-500/10 px-2.5 py-0.5 rounded border border-teal-500/20">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
+                    Selected Spot
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFocusedPlace(null)}
+                    className="text-xs font-black text-slate-400 hover:text-white transition cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
                 </div>
-                <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900 border border-slate-800 p-2 text-center">
-                  <Star size={13} className="fill-yellow-400 text-yellow-400 mb-1" />
-                  <span className="text-[9px] normal-case text-slate-400">Rating</span>
-                  <span className="mt-0.5 text-white">{focusedPlace.rating} ★</span>
-                </div>
-                <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900 border border-slate-800 p-2 text-center">
-                  <Clock size={13} className="text-emerald-400 mb-1" />
-                  <span className="text-[9px] normal-case text-slate-400">Status</span>
-                  <span className={cn("mt-0.5 font-black", isOpenNow(focusedPlace.hours) ? "text-emerald-400" : "text-rose-400")}>
-                    {isOpenNow(focusedPlace.hours) ? "Open" : "Closed"}
+
+                <div className="relative h-40 w-full overflow-hidden rounded-xl bg-slate-900 border border-slate-800/80 shadow-md">
+                  <LazyImage
+                    src={focusedPlace.image}
+                    alt={focusedPlace.title}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/15 to-transparent" />
+                  <span className="absolute bottom-3 left-3 rounded-full bg-slate-900/90 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-teal-300 border border-white/5 shadow-md">
+                    {getCategoryLabel(focusedPlace.category, focusedPlace.tags)}
                   </span>
                 </div>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => setDetailsPlace(focusedPlace)}
-                className="w-full rounded-lg bg-[var(--primary)] py-3 text-xs font-black uppercase tracking-wider text-[var(--primary-foreground)] hover:scale-[1.01] active:scale-98 transition duration-200 cursor-pointer shadow-lg shadow-teal-500/10"
-              >
-                View Detailed Conveniences 🔍
-              </button>
-            </motion.div>
-          )}
+                <div className="space-y-0.5">
+                  <h3 className="text-lg font-black text-white tracking-tight leading-tight">{focusedPlace.title}</h3>
+                  <p className="text-xs font-bold text-slate-400">{formatPlaceArea(focusedPlace)}</p>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                  {focusedPlace.description}
+                </p>
+
+                {/* Vibe & Hours Status Bar */}
+                <div className="flex flex-row items-center justify-between gap-2 border-y border-white/5 py-2 text-[10px] font-bold text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <span>{crowdIndicator}</span>
+                  </span>
+                  <span className="h-3 w-px bg-white/5" />
+                  <span className="flex items-center gap-1 text-emerald-400 font-black">
+                    <Clock size={11} className="shrink-0" />
+                    {hoursStatus}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-[10px] font-black tracking-wider uppercase text-slate-200">
+                  <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900/60 border border-slate-800/80 p-2 text-center">
+                    <MapPin size={13} className="text-cyan-300 mb-1" />
+                    <span className="text-[8px] normal-case text-slate-400 leading-tight">Distance</span>
+                    <span className="mt-0.5 text-white">{formatDistance(focusedPlace.distance)}</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900/60 border border-slate-800/80 p-2 text-center">
+                    <Star size={13} className="fill-yellow-400 text-yellow-400 mb-1" />
+                    <span className="text-[8px] normal-case text-slate-400 leading-tight">Rating</span>
+                    <span className="mt-0.5 text-white">{focusedPlace.rating} ★</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center rounded-lg bg-slate-900/60 border border-slate-800/80 p-2 text-center">
+                    <Star size={13} className="text-teal-400 fill-teal-400/20 mb-1" />
+                    <span className="text-[8px] normal-case text-slate-400 leading-tight">Price Range</span>
+                    <span className="mt-0.5 text-white">{focusedPlace.priceRange ?? "Varies"}</span>
+                  </div>
+                </div>
+
+                {/* Facilities/Amenities */}
+                {facilities.length > 0 && (
+                  <div className="space-y-1.5 pt-0.5">
+                    <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Amenities & Perks</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {facilities.map((fac, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 rounded bg-slate-900/80 border border-slate-800 px-2 py-0.5 text-[9px] font-bold text-slate-300">
+                          {fac.icon}
+                          <span>{fac.text}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setDetailsPlace(focusedPlace)}
+                  className="w-full rounded-xl bg-teal-500 hover:bg-teal-400 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:scale-[1.01] active:scale-98 transition duration-200 cursor-pointer shadow-lg shadow-teal-500/10"
+                >
+                  View Detailed Conveniences 🔍
+                </button>
+              </motion.div>
+            );
+          })()}
 
           {/* Mode Switcher Tabs */}
           <div className="flex p-1 rounded-full bg-[var(--panel-soft)] border border-[var(--border)] w-full">
@@ -1600,49 +1784,78 @@ export default function MapPage() {
               </div>
 
               <div className="space-y-3 pr-0">
-                {sortedPlaces.map((place) => {
+                {sortedPlaces.slice(0, visiblePlacesCount).map((place) => {
                   const active = focusedPlace?.id === place.id;
                   const open = isOpenNow(place.hours);
                   const hasHours = Boolean(place.hours);
 
+                  // Capability tag selection
+                  let capabilityTag: { text: string; className: string } | null = null;
+                  if (place.tags.includes("ev-station") || place.tags.includes("ev-charger")) {
+                    capabilityTag = { text: "⚡ EV Support", className: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20" };
+                  } else if (place.tags.includes("toilet") || place.tags.includes("restroom") || place.tags.includes("washroom")) {
+                    capabilityTag = { text: "🚻 Restroom", className: "bg-orange-500/10 text-orange-300 border-orange-500/20" };
+                  } else if (place.tags.includes("viewpoint") || place.tags.includes("scenic") || place.tags.includes("scenic-cruise")) {
+                    capabilityTag = { text: "⛰️ Scenic", className: "bg-purple-500/10 text-purple-300 border-purple-500/20" };
+                  } else if (place.tags.includes("night-drive") || place.category === "nightlife") {
+                    capabilityTag = { text: "🌙 Late Night", className: "bg-pink-500/10 text-pink-300 border-pink-500/20" };
+                  } else if (["cafe", "restaurant", "street-food", "food-stall"].includes(place.category)) {
+                    capabilityTag = { text: "🍽️ Dining", className: "bg-teal-500/10 text-teal-300 border-teal-500/20" };
+                  }
+
                   return (
                     <div
                       key={place.id}
-                      className={`w-full rounded-lg border p-3 text-left transition sm:p-4 ${active
-                          ? "border-teal-300/70 bg-teal-300/10"
+                      className={cn(
+                        "w-full rounded-xl border p-3.5 text-left place-card-modern",
+                        active
+                          ? "border-teal-400 bg-teal-500/5 shadow-lg shadow-teal-500/10 scale-[1.01]"
                           : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)]"
-                        }`}
+                      )}
                     >
-                      <button type="button" onClick={() => setFocusedPlace(place)} className="w-full text-left">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)]">
-                              {getCategoryLabel(place.category, place.tags)}
-                            </p>
-                            <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)]">{place.title}</h3>
-                            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--muted-strong)]">{formatPlaceArea(place)}</p>
-                          </div>
-                          <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${hasHours ? (open ? "bg-emerald-300 text-slate-950" : "bg-rose-500 text-white") : "bg-slate-700 text-slate-200"}`}>
-                            {!hasHours ? "Unknown" : open ? "Open" : "Closed"}
-                          </span>
+                      <button type="button" onClick={() => setFocusedPlace(place)} className="w-full text-left flex items-center gap-3.5">
+                        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-900 border border-slate-800 shadow-inner group">
+                          <LazyImage
+                            src={place.image}
+                            alt={place.title}
+                          />
                         </div>
-
-                        <div className="mt-3 grid grid-cols-3 gap-1.5 text-xs font-bold text-[var(--muted-strong)] sm:gap-2">
-                          <span className="inline-flex min-w-0 items-center gap-1 rounded-lg bg-[var(--panel-soft)] px-2 py-2">
-                            <MapPin size={13} className="shrink-0 text-cyan-300" />
-                            <span className="truncate">{formatDistance(place.distance)}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--panel-soft)] px-2 py-2">
-                            <Star size={13} className="fill-yellow-300 text-yellow-300" />
-                            {place.rating}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--panel-soft)] px-2 py-2">
-                            <Clock size={13} className="text-[var(--muted)]" />
-                            {place.priceRange ?? "Varies"}
-                          </span>
+ 
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center justify-between gap-1.5 text-[10px] font-black uppercase tracking-wider">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[var(--muted)]">{getCategoryLabel(place.category, place.tags)}</span>
+                              <span className="h-1 w-1 rounded-full bg-[var(--muted)]" />
+                              <span className={cn("font-black", hasHours ? (open ? "text-emerald-400" : "text-rose-400") : "text-slate-400")}>
+                                {hasHours ? (open ? "Open" : "Closed") : "Unknown"}
+                              </span>
+                            </div>
+                            {capabilityTag && (
+                              <span className={cn("rounded px-1.5 py-0.2 text-[8px] font-black tracking-wide border shrink-0", capabilityTag.className)}>
+                                {capabilityTag.text}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <h3 className="font-black text-[var(--foreground)] text-sm line-clamp-1 tracking-tight leading-tight">{place.title}</h3>
+                          <p className="text-xs font-semibold text-[var(--muted-strong)] line-clamp-1">{formatPlaceArea(place)}</p>
+ 
+                          <div className="pt-1 flex items-center gap-2 text-[11px] font-bold text-[var(--muted-strong)]">
+                            <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
+                              <MapPin size={11} className="shrink-0" />
+                              {formatDistance(place.distance)}
+                            </span>
+                            <span className="text-slate-600 font-normal">•</span>
+                            <span className="inline-flex items-center gap-1 text-amber-300 font-semibold">
+                              <Star size={11} className="fill-amber-300 text-amber-300 shrink-0" />
+                              {place.rating}
+                            </span>
+                            <span className="text-slate-600 font-normal">•</span>
+                            <span className="text-slate-400 font-semibold">{place.priceRange ?? "Varies"}</span>
+                          </div>
                         </div>
                       </button>
-
+ 
                       {active && (
                         <div className="mt-3 flex gap-2">
                           <button
@@ -1666,6 +1879,15 @@ export default function MapPage() {
                     </div>
                   );
                 })}
+                {sortedPlaces.length > visiblePlacesCount && (
+                  <button
+                    type="button"
+                    onClick={() => setVisiblePlacesCount((prev) => prev + 15)}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] py-3 text-center text-xs font-black uppercase tracking-widest text-[var(--muted-strong)] hover:text-white hover:border-teal-500/30 transition duration-150 cursor-pointer"
+                  >
+                    Show More (+{sortedPlaces.length - visiblePlacesCount} spots)
+                  </button>
+                )}
               </div>
             </>
           ) : (
@@ -2252,8 +2474,10 @@ export default function MapPage() {
               </button>
             </div>
           </div>
+          </div>
         </aside>
       </div>
+    </div>
 
       <PlaceDetailModal place={detailsPlace} onClose={() => setDetailsPlace(null)} />
       <SuggestPlaceModal
@@ -2664,6 +2888,6 @@ export default function MapPage() {
           </motion.div>
         </motion.div>
       )}
-    </div>
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { DiscoveryCard } from "@/components/cards/DiscoveryCard";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { Place } from "@/types";
+import { usePathname } from "next/navigation";
 
 interface ChatMessage {
   id: string;
@@ -27,6 +28,8 @@ const suggestions = [
 export const AiAssistant: React.FC = () => {
   const { selectedCity } = useCitySelection();
   const { savedPlaceIds, toggleSave } = useSavedPlaces();
+  const pathname = usePathname();
+  const isMapPage = pathname === "/map";
   
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -206,7 +209,9 @@ export const AiAssistant: React.FC = () => {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
         onClick={() => setIsOpen((prev) => !prev)}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] right-4 z-[9980] flex h-14 w-14 items-center justify-center rounded-full bg-slate-950/90 border border-teal-500/30 text-slate-200 shadow-2xl shadow-teal-500/20 hover:shadow-teal-400/40 outline-none transition cursor-pointer md:bottom-6 md:right-6 overflow-hidden p-0.5"
+        className={`fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] right-4 z-[9980] flex h-14 w-14 items-center justify-center rounded-full bg-slate-950/90 border border-teal-500/30 text-slate-200 shadow-2xl shadow-teal-500/20 hover:shadow-teal-400/40 outline-none transition cursor-pointer overflow-hidden p-0.5 ${
+          isMapPage ? "md:bottom-6 md:left-6 md:right-auto" : "md:bottom-6 md:right-6 md:left-auto"
+        }`}
         aria-label="Toggle AI Assistant"
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.94 }}
@@ -253,7 +258,9 @@ export const AiAssistant: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-[9970] flex h-[calc(100dvh-4rem)] flex-col overflow-hidden rounded-t-lg border-t border-[var(--border)] bg-slate-950/90 shadow-2xl backdrop-blur-xl md:bottom-24 md:right-6 md:left-auto md:h-[580px] md:max-h-[calc(100vh-120px)] md:w-[420px] md:rounded-2xl md:border"
+            className={`fixed bottom-0 left-0 right-0 z-[9970] flex h-[calc(100dvh-4rem)] flex-col overflow-hidden rounded-t-lg border-t border-[var(--border)] bg-slate-950/90 shadow-2xl backdrop-blur-xl md:bottom-24 md:h-[580px] md:max-h-[calc(100vh-120px)] md:w-[420px] md:rounded-2xl md:border ${
+              isMapPage ? "md:left-6 md:right-auto" : "md:right-6 md:left-auto"
+            }`}
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-[var(--border)] bg-slate-900/60 px-4 py-3 md:px-5">

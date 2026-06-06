@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { Place, UserLocation } from "@/types";
 import { motion } from "framer-motion";
 import { cn, formatDistance, getCategoryLabel, isOpenNow } from "@/lib/utils";
@@ -20,6 +19,7 @@ interface MapProps {
   tripRoutePath?: { latitude: number; longitude: number }[] | null;
   simulationActive?: boolean;
   simulationCoord?: { latitude: number; longitude: number } | null;
+  scrollWheelZoom?: boolean;
 }
 
 const categoryColor: Record<string, string> = {
@@ -159,13 +159,22 @@ export const MapView: React.FC<MapProps> = ({
   tripRoutePath = null,
   simulationActive = false,
   simulationCoord = null,
+  scrollWheelZoom = false,
 }) => {
+  const [mapZoom, setMapZoom] = useState(14);
   const mapContainer = useRef<HTMLDivElement>(null);
   const leaflet = useRef<typeof import("leaflet") | null>(null);
   const map = useRef<Leaflet.Map | null>(null);
   const markersRef = useRef<Record<string, Leaflet.Marker>>({});
   const polylineRef = useRef<Leaflet.Polyline | null>(null);
+  const userLocationMarkerRef = useRef<Leaflet.Marker | null>(null);
+  const lastFlownLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const lastFlownSelectedPlaceRef = useRef<string | null>(null);
+  // Use a ref so async init always reads the latest scrollWheelZoom value
+  const scrollWheelZoomRef = useRef(scrollWheelZoom);
+  scrollWheelZoomRef.current = scrollWheelZoom;
 
+  // Initialize Map exactly once on mount
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
@@ -177,14 +186,23 @@ export const MapView: React.FC<MapProps> = ({
 
       leaflet.current = L;
 
+      // Clean up container if it was previously used by Leaflet (avoids "Map container already initialized" crash)
+      if (mapContainer.current) {
+        const container = mapContainer.current as any;
+        if (container._leaflet_id) {
+          delete container._leaflet_id;
+        }
+        container.innerHTML = "";
+      }
+
       const initialLat = userLocation?.latitude ?? PUNE_CENTER.latitude;
       const initialLng = userLocation?.longitude ?? PUNE_CENTER.longitude;
 
       const nextMap = L.map(mapContainer.current, {
         zoomControl: false,
         attributionControl: true,
-        scrollWheelZoom: false,
-        dragging: tripMode ? !L.Browser.mobile : true,
+        scrollWheelZoom: scrollWheelZoomRef.current,
+        dragging: true,
       }).setView([initialLat, initialLng], 14);
       map.current = nextMap;
 
@@ -199,12 +217,10 @@ export const MapView: React.FC<MapProps> = ({
         east: initialBounds.getEast(),
       });
 
-      nextMap.on("move", () => {
+      nextMap.on("moveend", () => {
         const center = nextMap.getCenter();
         onCenterChange?.({ latitude: center.lat, longitude: center.lng });
-      });
-
-      nextMap.on("moveend", () => {
+        
         const bounds = nextMap.getBounds();
         onBoundsChange?.({
           south: bounds.getSouth(),
@@ -216,6 +232,10 @@ export const MapView: React.FC<MapProps> = ({
 
       nextMap.on("click", () => {
         onMarkerClick?.(null);
+      });
+
+      nextMap.on("zoomend", () => {
+        setMapZoom(nextMap.getZoom());
       });
 
       L.control.zoom({ position: "bottomright" }).addTo(nextMap);
@@ -238,20 +258,37 @@ export const MapView: React.FC<MapProps> = ({
           className: "",
         });
 
-        L.marker([userLocation.latitude, userLocation.longitude], {
+        userLocationMarkerRef.current = L.marker([userLocation.latitude, userLocation.longitude], {
           icon: userIcon,
         })
           .addTo(nextMap)
           .bindPopup("<b>Your location</b>");
       }
 
+      // Call invalidateSize at multiple intervals to handle CSS transitions / flex layout settling
       window.setTimeout(() => map.current?.invalidateSize(), 120);
+      window.setTimeout(() => map.current?.invalidateSize(), 400);
+      window.setTimeout(() => map.current?.invalidateSize(), 800);
+
+      // Watch container size changes (e.g. sidebar panel open/close)
+      if (mapContainer.current && typeof ResizeObserver !== "undefined") {
+        const ro = new ResizeObserver(() => {
+          map.current?.invalidateSize();
+        });
+        ro.observe(mapContainer.current);
+        (mapContainer.current as HTMLDivElement & { _ro?: ResizeObserver })._ro = ro;
+      }
     };
 
     initializeMap();
 
     return () => {
       cancelled = true;
+       const container = mapContainer.current as (HTMLDivElement & { _ro?: ResizeObserver }) | null;
+      if (container?._ro) {
+        container._ro.disconnect();
+        delete container._ro;
+      }
       if (map.current) {
         map.current.remove();
         map.current = null;
@@ -260,8 +297,53 @@ export const MapView: React.FC<MapProps> = ({
         polylineRef.current.remove();
         polylineRef.current = null;
       }
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.remove();
+        userLocationMarkerRef.current = null;
+      }
     };
+  }, []);
+
+  // Update user location marker and pan/fly to position on changes
+  useEffect(() => {
+    const L = leaflet.current;
+    if (!map.current || !L || !userLocation) return;
+
+    if (userLocationMarkerRef.current) {
+      userLocationMarkerRef.current.remove();
+      userLocationMarkerRef.current = null;
+    }
+
+    const userIcon = L.divIcon({
+      html: `
+        <div style="position:relative;width:28px;height:28px;display:grid;place-items:center;">
+          <div style="position:absolute;width:28px;height:28px;border-radius:999px;background:rgba(56,189,248,.22);box-shadow:0 0 0 8px rgba(56,189,248,.08);"></div>
+          <div style="width:12px;height:12px;border-radius:999px;background:#38bdf8;border:2px solid #fff;box-shadow:0 8px 20px rgba(0,0,0,.35);"></div>
+        </div>
+      `,
+      iconSize: [28, 28],
+      className: "",
+    });
+
+    userLocationMarkerRef.current = L.marker([userLocation.latitude, userLocation.longitude], {
+      icon: userIcon,
+    })
+      .addTo(map.current)
+      .bindPopup("<b>Your location</b>");
+
+    const lastFlown = lastFlownLocationRef.current;
+    const isSameLocation = lastFlown && 
+      lastFlown.latitude === userLocation.latitude && 
+      lastFlown.longitude === userLocation.longitude;
+
+    if (!isSameLocation) {
+      lastFlownLocationRef.current = { latitude: userLocation.latitude, longitude: userLocation.longitude };
+      map.current.flyTo([userLocation.latitude, userLocation.longitude], Math.max(map.current.getZoom(), 13), {
+        duration: 0.85,
+      });
+    }
   }, [userLocation]);
+
 
   useEffect(() => {
     const L = leaflet.current;
@@ -270,8 +352,7 @@ export const MapView: React.FC<MapProps> = ({
     Object.values(markersRef.current).forEach((marker) => marker.remove());
     markersRef.current = {};
 
-    places.forEach((place) => {
-      const isSelected = selectedPlace?.id === place.id;
+    const renderSinglePlaceMarker = (place: Place, isSelected: boolean) => {
       const isNightDrive = place.tags.includes("night-drive");
       
       let color = isNightDrive ? "#ec4899" : (categoryColor[place.category] ?? "#94a3b8");
@@ -325,15 +406,160 @@ export const MapView: React.FC<MapProps> = ({
             <b>${place.title}</b><br/>
             ${getCategoryLabel(place.category, place.tags)} - ${formatDistance(place.distance)}
           </div>
-        `);
+        `)
+        .bindTooltip(`
+          <div class="font-black text-[10px] leading-tight text-white flex items-center gap-1">
+            <span>${place.title}</span>
+            <span class="text-amber-400 font-bold shrink-0">★${place.rating}</span>
+          </div>
+        `, {
+          direction: "top",
+          offset: [0, -14],
+          opacity: 0.96,
+          className: "custom-map-tooltip",
+        });
 
       marker.on("click", () => {
         onMarkerClick?.(place);
       });
 
       markersRef.current[place.id] = marker;
+    };
+
+    const renderClusterMarker = (cluster: { center: [number, number]; places: Place[] }, index: number) => {
+      const count = cluster.places.length;
+      
+      const markerIcon = L.divIcon({
+        html: `
+          <div style="position:relative;display:grid;place-items:center;width:40px;height:40px;">
+            <div class="marker-pulse-glow" style="position:absolute;width:100%;height:100%;border-radius:999px;--pulse-color-glow:rgba(45,212,191,0.45);"></div>
+            <div style="display:grid;place-items:center;width:100%;height:100%;border-radius:999px;background:#0f172a;border:2.5px solid #2dd4bf;box-shadow:0 6px 16px rgba(0,0,0,.5);color:#2dd4bf;font-weight:900;font-size:13px;">
+              ${count}
+            </div>
+          </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        className: "",
+      });
+
+      const clusterPopupHtml = `
+        <div style="padding:8px 6px;min-width:190px;color:#f8fafc;font-family:inherit;background:#0f172a;border-radius:8px;">
+          <b style="color:#2dd4bf;font-size:12px;display:block;margin-bottom:6px;border-bottom:1px solid rgba(45,212,191,0.2);padding-bottom:4px;">${count} Spots in this area</b>
+          <div style="margin:4px 0 6px 0;max-height:140px;overflow-y:auto;padding-right:2px;">
+            ${cluster.places.map((p) => `
+              <div style="margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:4px;cursor:pointer;" onclick="window._onClusterItemClick?.('${p.id}')">
+                <div style="font-weight:800;font-size:11px;color:#f1f5f9;">${p.title}</div>
+                <div style="font-size:9px;color:#94a3b8;margin-top:1px;">${getCategoryLabel(p.category, p.tags)} · ${formatDistance(p.distance)}</div>
+              </div>
+            `).join("")}
+          </div>
+          <div style="font-size:9px;color:#94a3b8;font-weight:700;text-align:center;margin-top:4px;">Click marker to zoom in 🔍</div>
+        </div>
+      `;
+
+      // Expose a global callback for cluster items selection if clicked in popup
+      if (typeof window !== "undefined") {
+        (window as any)._onClusterItemClick = (placeId: string) => {
+          const matchedPlace = cluster.places.find(p => p.id === placeId);
+          if (matchedPlace) {
+            onMarkerClick?.(matchedPlace);
+          }
+        };
+      }
+
+      const marker = L.marker(cluster.center, {
+        icon: markerIcon,
+        bubblingMouseEvents: false,
+      })
+        .addTo(map.current!)
+        .bindPopup(clusterPopupHtml, {
+          className: "cluster-popup",
+          maxWidth: 240,
+        })
+        .bindTooltip(`
+          <div class="font-black text-[10px] leading-tight text-cyan-300">
+            ${count} spots here
+          </div>
+        `, {
+          direction: "top",
+          offset: [0, -12],
+          opacity: 0.96,
+          className: "custom-map-tooltip",
+        });
+
+      marker.on("click", () => {
+        map.current?.flyTo(cluster.center, Math.min(map.current.getZoom() + 2, 18), {
+          duration: 0.5,
+        });
+      });
+
+      markersRef.current[`cluster-${index}`] = marker;
+    };
+
+    // Calculate proximity clustering
+    let clusterRadius = 0;
+    if (mapZoom < 10) clusterRadius = 0.08;
+    else if (mapZoom === 10) clusterRadius = 0.04;
+    else if (mapZoom === 11) clusterRadius = 0.025;
+    else if (mapZoom === 12) clusterRadius = 0.015;
+    else if (mapZoom === 13) clusterRadius = 0.008;
+    else if (mapZoom === 14) clusterRadius = 0.004;
+    else if (mapZoom === 15) clusterRadius = 0.002;
+    else if (mapZoom === 16) clusterRadius = 0.0008;
+    else if (mapZoom >= 17) clusterRadius = 0.0002;
+
+    const placesToCluster = selectedPlace
+      ? places.filter((p) => p.id !== selectedPlace.id)
+      : places;
+
+    const clusters: { center: [number, number]; places: Place[] }[] = [];
+
+    placesToCluster.forEach((place) => {
+      let found = false;
+      for (const cluster of clusters) {
+        const [lat, lng] = cluster.center;
+        const dx = place.longitude - lng;
+        const dy = place.latitude - lat;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < clusterRadius) {
+          cluster.places.push(place);
+          const count = cluster.places.length;
+          cluster.center = [
+            (lat * (count - 1) + place.latitude) / count,
+            (lng * (count - 1) + place.longitude) / count,
+          ];
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        clusters.push({
+          center: [place.latitude, place.longitude],
+          places: [place],
+        });
+      }
     });
-  }, [places, selectedPlace, onMarkerClick]);
+
+    // Render clusters
+    clusters.forEach((cluster, idx) => {
+      if (cluster.places.length === 1) {
+        renderSinglePlaceMarker(cluster.places[0], false);
+      } else {
+        renderClusterMarker(cluster, idx);
+      }
+    });
+
+    // Render selected place individually if present
+    if (selectedPlace) {
+      const matched = places.find((p) => p.id === selectedPlace.id);
+      if (matched) {
+        renderSinglePlaceMarker(matched, true);
+      }
+    }
+  }, [places, selectedPlace, onMarkerClick, mapZoom]);
 
   useEffect(() => {
     const L = leaflet.current;
@@ -346,11 +572,19 @@ export const MapView: React.FC<MapProps> = ({
       polylineRef.current = null;
     }
 
-    if (!selectedPlace || tripMode) return;
+    if (!selectedPlace) {
+      lastFlownSelectedPlaceRef.current = null;
+      return;
+    }
 
-    map.current.flyTo([selectedPlace.latitude, selectedPlace.longitude], Math.max(map.current.getZoom(), 15), {
-      duration: 0.7,
-    });
+    if (tripMode) return;
+
+    if (lastFlownSelectedPlaceRef.current !== selectedPlace.id) {
+      lastFlownSelectedPlaceRef.current = selectedPlace.id;
+      map.current.flyTo([selectedPlace.latitude, selectedPlace.longitude], Math.max(map.current.getZoom(), 15), {
+        duration: 0.7,
+      });
+    }
 
     if (selectedPlace.routeWaypoints && selectedPlace.routeWaypoints.length >= 2) {
       const getScenicRoute = async () => {
@@ -534,7 +768,7 @@ export const MapView: React.FC<MapProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.42 }}
       ref={mapContainer}
-      className={cn("h-96 min-h-[400px] w-full overflow-hidden rounded-lg border border-[var(--border)] shadow-2xl", className)}
+      className={cn("h-full w-full overflow-hidden rounded-lg border border-[var(--border)] shadow-2xl", className)}
     />
   );
 };

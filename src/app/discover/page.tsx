@@ -21,7 +21,11 @@ import {
   X,
   Plane,
   ShoppingBag,
-  Bed
+  Bed,
+  CloudRain,
+  Sun,
+  ThermometerSnowflake,
+  Cloud
 } from "lucide-react";
 import Link from "next/link";
 import { Header } from "@/components/common/Header";
@@ -46,6 +50,7 @@ import { getMoodLabel, getTopMoodRecommendations, inferMoodProfile, getMoodMatch
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
   ssr: false,
@@ -340,6 +345,15 @@ export default function DiscoverPage() {
     return scores;
   }, [allPlaces, selectedMood, now]);
 
+  const weather = useMemo(() => {
+    const city = (activeCity || "Pune") as any;
+    return getCityWeather(city, now);
+  }, [activeCity, now]);
+
+  const weatherPicks = useMemo(() => {
+    return filterPlacesByWeather(allPlaces, weather.condition).slice(0, 12);
+  }, [allPlaces, weather.condition]);
+
   const hasFilters =
     Boolean(query.trim()) ||
     activeCategory !== "all" ||
@@ -491,7 +505,7 @@ export default function DiscoverPage() {
     }
   }, [allPlaces, selectedPlace?.id]);
 
-  const defaultSections = [
+  const defaultSections = useMemo(() => [
     ...(savedPlacesInCity.length > 0
       ? [
         {
@@ -507,6 +521,15 @@ export default function DiscoverPage() {
           title: `Picked for your ${getMoodLabel(selectedMood).toLowerCase()} mood`,
           description: `Top ${activeCity} matches for how you're feeling — cafes, events, food, and time-pass plans.`,
           places: moodPicks,
+        },
+      ]
+      : []),
+    ...(weatherPicks.length > 0
+      ? [
+        {
+          title: `Weather Picks: Cozy for a ${weather.label.toLowerCase()}`,
+          description: `Curated spots matching the current ${weather.condition.toLowerCase()} weather in ${activeCity}.`,
+          places: weatherPicks,
         },
       ]
       : []),
@@ -572,7 +595,7 @@ export default function DiscoverPage() {
       description: "Late plans, cocktails, and louder rooms.",
       places: allPlaces.filter((place) => ["bar", "nightlife"].includes(place.category)).slice(0, 9),
     },
-  ];
+  ], [savedPlacesInCity, activeCity, selectedMood, moodPicks, query, usingLivePlaces, allPlaces, weatherPicks, weather]);
 
   return (
     <div className="w-full max-w-full min-h-screen overflow-x-hidden">
@@ -672,6 +695,32 @@ export default function DiscoverPage() {
               requestLocation();
             }}
           />
+
+          {/* Weather Widget */}
+          <div className="mt-3 rounded-xl border border-[var(--border)] bg-gradient-to-br from-[var(--panel)] to-[var(--panel-soft)] p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                {weather.condition === "Rainy" && <CloudRain size={20} className="animate-bounce text-cyan-400" />}
+                {weather.condition === "Hot" && <Sun size={20} className="animate-spin text-amber-400" style={{ animationDuration: "12s" }} />}
+                {weather.condition === "Cozy" && <ThermometerSnowflake size={20} className="animate-pulse text-sky-400" />}
+                {weather.condition === "Pleasant" && <Cloud size={20} className="animate-pulse text-teal-300" />}
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-black uppercase tracking-wider text-teal-400">Current weather in {activeCity}</span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                  <h4 className="text-sm font-black text-[var(--foreground)] leading-none">
+                    {weather.label} · {weather.temp}°C
+                  </h4>
+                  <span className="text-[10px] text-[var(--muted)] font-bold">
+                    (💧 {weather.humidity}% humidity · 💨 {weather.windSpeed} km/h wind)
+                  </span>
+                </div>
+                <p className="text-xs font-semibold text-[var(--muted-strong)] mt-1.5 leading-relaxed">
+                  {weather.poeticNote}
+                </p>
+              </div>
+            </div>
+          </div>
 
           <Link
             href="/trips"
@@ -850,7 +899,7 @@ export default function DiscoverPage() {
           </AnimatePresence>
 
           {/* Quick Tag Badges */}
-          <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
+          <div className="no-scrollbar scroll-fade-right mt-3 flex gap-2 overflow-x-auto pb-1">
             {([
               { id: "pet-friendly", label: "🐾 Pet Friendly" },
               { id: "family-friendly", label: "👨‍👩‍👧 Family Friendly" },
@@ -879,7 +928,7 @@ export default function DiscoverPage() {
             })}
           </div>
 
-          <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
+          <div className="no-scrollbar scroll-fade-right mt-3 flex gap-2 overflow-x-auto pb-1">
             {categories.map((category) => {
               const active = activeCategory === category.id;
               return (

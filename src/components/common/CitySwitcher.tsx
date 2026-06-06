@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, MapPin, Search, Check, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 import {
   SupportedCityName,
   CITY_DISPLAY_NAMES,
@@ -13,9 +14,10 @@ import {
 interface CitySwitcherProps {
   value: SupportedCityName;
   onChange: (city: SupportedCityName) => void;
+  className?: string;
 }
 
-export const CitySwitcher: React.FC<CitySwitcherProps> = ({ value, onChange }) => {
+export const CitySwitcher: React.FC<CitySwitcherProps> = ({ value, onChange, className }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -53,7 +55,7 @@ export const CitySwitcher: React.FC<CitySwitcherProps> = ({ value, onChange }) =
   const isTwinSelected = CITY_GROUPS.find((g) => g.id === "twins")?.cities.includes(value);
 
   return (
-    <div ref={dropdownRef} className="relative mb-3 w-full sm:max-w-xs z-20">
+    <div ref={dropdownRef} className={cn("relative z-20", className ? className : "mb-3 w-full sm:max-w-xs")}>
       {/* Dropdown Trigger */}
       <button
         type="button"

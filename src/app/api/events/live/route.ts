@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getCache, setCache } from "@/lib/redis";
-import { SupportedCityName } from "@/lib/pune-location";
+import { SupportedCityName, CITY_CENTERS } from "@/lib/pune-location";
 import { getTownEventsForCity } from "@/data/town-events";
 import { RateLimitError, serializeError } from "@/lib/server/api-errors";
 import { checkRateLimit } from "@/lib/server/rate-limit";
@@ -102,8 +102,38 @@ function getEventImage(category: string): string {
 }
 
 function generateLocalFallbackEvents(city: SupportedCityName): LiveEvent[] {
-  const cityCtx = CITY_CONTEXT[city];
-  if (!cityCtx) return [];
+  let cityCtx = CITY_CONTEXT[city];
+  if (!cityCtx) {
+    const center = CITY_CENTERS[city];
+    if (center) {
+      cityCtx = {
+        venues: [
+          `Grand Theater ${city}`,
+          `${city} Convention Centre`,
+          "Town Hall Arena",
+          "The Pavillion Cafe",
+          "Open Air Amphitheatre",
+          "Royal Club",
+          "Chamber of Commerce Hall",
+          "District Sports Complex"
+        ],
+        areas: [
+          "Downtown",
+          "Mall Road",
+          "Civil Lines",
+          "High Street",
+          "Sector 4",
+          "Kala Nagar",
+          "Lakefront",
+          "Station Road"
+        ],
+        lat: center.latitude,
+        lng: center.longitude,
+      };
+    } else {
+      return [];
+    }
+  }
 
   const categories: LiveEvent["category"][] = [
     "music", "music", "nightlife", "nightlife",
@@ -615,9 +645,37 @@ export async function GET(request: NextRequest) {
       refresh ? refreshEventsRateLimit : liveEventsRateLimit
     );
 
-    const cityCtx = CITY_CONTEXT[cityParam];
+    let cityCtx = CITY_CONTEXT[cityParam];
     if (!cityCtx) {
-      return withHeaders(Response.json({ error: "Unsupported city." }, { status: 400 }), rateLimitHeaders);
+      const center = CITY_CENTERS[cityParam];
+      if (center) {
+        cityCtx = {
+          venues: [
+            `Grand Theater ${cityParam}`,
+            `${cityParam} Convention Centre`,
+            "Town Hall Arena",
+            "The Pavillion Cafe",
+            "Open Air Amphitheatre",
+            "Royal Club",
+            "Chamber of Commerce Hall",
+            "District Sports Complex"
+          ],
+          areas: [
+            "Downtown",
+            "Mall Road",
+            "Civil Lines",
+            "High Street",
+            "Sector 4",
+            "Kala Nagar",
+            "Lakefront",
+            "Station Road"
+          ],
+          lat: center.latitude,
+          lng: center.longitude,
+        };
+      } else {
+        return withHeaders(Response.json({ error: "Unsupported city." }, { status: 400 }), rateLimitHeaders);
+      }
     }
 
     if (!allowedCategories.has(category)) {

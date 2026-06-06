@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import {
   CalendarDays,
   ChevronRight,
@@ -22,11 +23,9 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { DiscoverySection } from "@/components/cards/DiscoverySection";
-import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
-import { VibeRadar } from "@/components/common/VibeRadar";
 import { getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
@@ -43,9 +42,22 @@ import { getMoodLabel, getTopMoodRecommendations, inferMoodProfile, getMoodMatch
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { filterAndRankPlaces } from "@/lib/place-search";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { OnboardingModal } from "@/components/common/OnboardingModal";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
+
+// Lazy-load heavy components that are interaction-triggered or below the fold
+const PlaceDetailModal = dynamic(
+  () => import("@/components/cards/PlaceDetailModal").then((mod) => mod.PlaceDetailModal),
+  { ssr: false }
+);
+const OnboardingModal = dynamic(
+  () => import("@/components/common/OnboardingModal").then((mod) => mod.OnboardingModal),
+  { ssr: false }
+);
+const VibeRadar = dynamic(
+  () => import("@/components/common/VibeRadar").then((mod) => mod.VibeRadar),
+  { ssr: false }
+);
 
 type HomeFilter = "all" | "trending" | "open" | "street-food" | "ice-cream" | PlaceCategory;
 
