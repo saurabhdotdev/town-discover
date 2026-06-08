@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Medal, Star, Trophy, Zap, Search, RefreshCw, ChevronUp, Compass, Coffee, Clock } from "lucide-react";
+import Link from "next/link";
 import { CITY_CENTERS } from "@/lib/pune-location";
 import { useAuth } from "@/components/auth/AuthProvider";
 
@@ -428,12 +429,28 @@ export default function LeaderboardPage() {
 
         {/* Empty */}
         {!loading && !error && filtered.length === 0 && (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-12 text-center">
+          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-10 text-center sm:p-12">
             <Trophy size={48} className="mx-auto mb-4 text-[var(--muted)]" />
             <h2 className="text-xl font-black text-[var(--foreground)]">No explorers yet</h2>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              Be the first to earn XP and claim the top spot!
+            <p className="mx-auto mt-2 max-w-sm text-sm text-[var(--muted)]">
+              Save places, join hangouts, and submit city updates to put your name on the board.
             </p>
+            <div className="mx-auto mt-4 flex max-w-sm flex-col justify-center gap-2 sm:flex-row">
+              <Link
+                href="/discover"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-[var(--primary-foreground)]"
+              >
+                <Compass size={14} />
+                Find Spots
+              </Link>
+              <Link
+                href="/hangouts"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-xs font-black text-[var(--foreground)]"
+              >
+                <Zap size={14} />
+                Join Hangouts
+              </Link>
+            </div>
           </div>
         )}
 
@@ -529,7 +546,7 @@ export default function LeaderboardPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="mt-10 grid grid-cols-3 gap-2 sm:gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-5"
+            className="mt-10 grid grid-cols-1 gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4 sm:grid-cols-3 sm:gap-4 sm:p-5"
           >
             {[
               {
@@ -548,7 +565,7 @@ export default function LeaderboardPage() {
                 icon: <Star size={18} className="text-teal-400" />,
               },
             ].map((stat) => (
-              <div key={stat.label} className="text-center">
+              <div key={stat.label} className="rounded-lg bg-[var(--panel-soft)] p-3 text-center sm:bg-transparent sm:p-0">
                 <div className="flex justify-center mb-1">{stat.icon}</div>
                 <p className="text-xl font-black text-[var(--foreground)]">{stat.value}</p>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">{stat.label}</p>

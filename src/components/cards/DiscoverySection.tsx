@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, ChevronLeft, ChevronRight, Compass, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CrowdSummary, Place } from "@/types";
 import { DiscoveryCard } from "./DiscoveryCard";
@@ -174,11 +175,27 @@ export const DiscoverySection: React.FC<DiscoverySectionProps> = ({
           </motion.div>
         )
       ) : (
-        <div className="grid min-h-48 place-items-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-8 text-center">
-          <div>
+        <div className="grid min-h-48 place-items-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-center sm:p-8">
+          <div className="max-w-sm">
             <Search className="mx-auto mb-3 text-[var(--muted)]" size={26} />
             <p className="font-bold text-[var(--foreground)]">No matches yet</p>
-            <p className="mt-1 text-sm text-[var(--muted)]">Try a different category, query, or open-now filter.</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">Try a different filter, or jump into another city flow.</p>
+            <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+              <Link
+                href="/discover"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-black text-[var(--primary-foreground)]"
+              >
+                <Compass size={14} />
+                Discover Spots
+              </Link>
+              <Link
+                href="/events"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs font-black text-[var(--foreground)]"
+              >
+                <CalendarDays size={14} />
+                See Events
+              </Link>
+            </div>
           </div>
         </div>
       )}

@@ -278,6 +278,28 @@ CREATE INDEX IF NOT EXISTS shoutbox_messages_city_created_at_idx
 ON shoutbox_messages (city, created_at DESC);
 `,
   },
+  {
+    id: "202606080005_affiliate_clicks",
+    sql: `
+CREATE TABLE IF NOT EXISTS affiliate_clicks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT NOT NULL,
+  campaign TEXT NOT NULL,
+  target_host TEXT NOT NULL,
+  target_url TEXT NOT NULL,
+  is_premium_user BOOLEAN NOT NULL DEFAULT FALSE,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS affiliate_clicks_source_created_at_idx
+ON affiliate_clicks (source, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS affiliate_clicks_user_id_created_at_idx
+ON affiliate_clicks (user_id, created_at DESC);
+`,
+  },
 ];
 
 let migrationPromise: Promise<void> | null = null;

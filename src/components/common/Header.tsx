@@ -27,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header
       className={cn(
-        "relative z-40 border-b border-[var(--border)] bg-[var(--nav)] md:sticky md:top-16 md:backdrop-blur-xl",
+        "relative z-40 border-b border-[var(--border)] bg-[var(--background)] md:sticky md:top-16 md:backdrop-blur-xl",
         compact ? "py-1.5 md:py-2" : "",
         className
       )}
@@ -43,9 +43,9 @@ export const Header: React.FC<HeaderProps> = ({
             : "max-w-screen-xl py-3 md:py-5"
         )}
       >
-        <div className="min-w-0 flex flex-col md:flex-row md:items-center gap-2">
+        <div className="min-w-0 flex flex-col gap-2">
           {eyebrow && !compact && (
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
               <Radio size={13} />
               {eyebrow}
             </div>
@@ -64,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             )}
           </div>
-          {subtitle && !compact && <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-5 text-[var(--muted)] md:text-base md:leading-6">{subtitle}</p>}
+          {subtitle && !compact && <p className="line-clamp-2 max-w-2xl text-sm leading-5 text-[var(--muted)] md:text-base md:leading-6">{subtitle}</p>}
         </div>
 
         {showLocation && location && (

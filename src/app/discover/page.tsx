@@ -23,12 +23,13 @@ import {
   ShoppingBag,
   Bed,
   CloudRain,
+  Radio,
   Sun,
   ThermometerSnowflake,
   Cloud
 } from "lucide-react";
 import Link from "next/link";
-import { Header } from "@/components/common/Header";
+import { BrandMark } from "@/components/common/BrandMark";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
@@ -599,15 +600,29 @@ export default function DiscoverPage() {
 
   return (
     <div className="w-full max-w-full min-h-screen overflow-x-hidden">
-      <Header
-        eyebrow="Discover"
-        title="Explore Nearby"
+      <header className="relative z-10 border-b border-[var(--border)] bg-[var(--nav)]/80 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-2 px-3 py-2.5 sm:px-4 md:flex-row md:items-center md:justify-between md:px-6 md:py-3">
+          <div className="min-w-0">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
+              <Radio size={13} />
+              Discover
+            </div>
+            <div className="mt-2 flex min-w-0 items-center gap-2.5 sm:gap-3">
+              <BrandMark size="md" showWordmark={false} />
+              <h1 className="truncate text-xl font-black leading-tight tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">
+                Explore Nearby
+              </h1>
+            </div>
+          </div>
 
-        location={locationLabel}
-        showLocation
-      />
+          <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--muted-strong)] sm:text-sm">
+            <LocateFixed size={15} className="shrink-0 text-[var(--brand)]" />
+            <span className="truncate">{locationLabel}</span>
+          </div>
+        </div>
+      </header>
 
-      <div className="w-full max-w-screen-xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-6">
+      <div className="w-full max-w-screen-xl mx-auto px-3 py-3 sm:px-4 md:px-6 md:py-4">
         {/* Weekly Spotlight Slideshow */}
         {spotlightSpots.length > 0 && !hasFilters && (
           <section className="relative mb-5 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:mb-6">
@@ -620,7 +635,7 @@ export default function DiscoverPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-[var(--spotlight-overlay-from)] via-[var(--spotlight-overlay-via)] to-transparent" />
             </div>
 
-            <div className="relative z-10 flex min-h-[240px] flex-col justify-between gap-5 p-4 sm:p-8 md:min-h-[380px] md:flex-row md:items-end md:p-12">
+            <div className="relative z-10 flex min-h-[220px] flex-col justify-between gap-5 p-4 sm:min-h-[260px] sm:p-8 md:min-h-[340px] md:flex-row md:items-end md:p-10 lg:p-12">
               <div className="space-y-3 max-w-2xl">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex rounded-full bg-teal-400 text-slate-950 px-3 py-0.5 text-[10px] font-black uppercase tracking-[0.15em]">

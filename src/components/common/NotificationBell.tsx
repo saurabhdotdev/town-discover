@@ -31,16 +31,22 @@ export const NotificationBell: React.FC<{ compact?: boolean }> = ({ compact = fa
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const unreadCount = useMemo(() => notifications.filter((item) => !item.isRead).length, [notifications]);
 
   const loadNotifications = async () => {
     if (!user) return;
     setLoading(true);
+    setError("");
     try {
       const response = await fetch("/api/notifications", { cache: "no-store" });
-      const data = await response.json();
-      if (response.ok) setNotifications(data.notifications ?? []);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "Unable to load notifications.");
+      setNotifications(data.notifications ?? []);
+      if (data.warning) setError(data.warning);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load notifications.");
     } finally {
       setLoading(false);
     }
@@ -60,18 +66,34 @@ export const NotificationBell: React.FC<{ compact?: boolean }> = ({ compact = fa
 
   const markRead = async (id?: string) => {
     if (!user) return;
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(id ? { id } : { all: true }),
-    });
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(id ? { id } : { all: true }),
+      });
+      if (!response.ok) throw new Error("Unable to mark notification as read.");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update notifications.");
+      return;
+    }
+
     setNotifications((current) =>
       current.map((item) => (id && item.id !== id ? item : { ...item, isRead: true }))
     );
   };
 
   const deleteNotification = async (id: string) => {
-    await fetch(`/api/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    try {
+      const response = await fetch(`/api/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Unable to delete notification.");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete notification.");
+      return;
+    }
+
     setNotifications((current) => current.filter((item) => item.id !== id));
   };
 
@@ -148,6 +170,11 @@ export const NotificationBell: React.FC<{ compact?: boolean }> = ({ compact = fa
               </div>
 
               <div className="max-h-[58dvh] overflow-y-auto p-2">
+                {error && (
+                  <div className="mb-2 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100">
+                    {error}
+                  </div>
+                )}
                 {loading && notifications.length === 0 ? (
                   <p className="px-3 py-8 text-center text-sm font-semibold text-[var(--muted)]">Loading updates...</p>
                 ) : notifications.length === 0 ? (

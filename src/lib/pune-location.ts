@@ -34,6 +34,11 @@ export type SupportedCityName =
   | "Shimla"
   | "Srinagar"
   | "Pondicherry"
+  | "Hubli"
+  | "Dharwad"
+  | "PCMC"
+  | "Ujjain"
+  | "Secunderabad"
   | "HubliDharwad"
   | "PunePCMC"
   | "BangaloreMysore"
@@ -80,6 +85,11 @@ export const CITY_CENTERS: Record<SupportedCityName, UserLocation> = {
   Shimla: { latitude: 31.1048, longitude: 77.1734, accuracy: 50 },
   Srinagar: { latitude: 34.0837, longitude: 74.7973, accuracy: 50 },
   Pondicherry: { latitude: 11.9416, longitude: 79.8083, accuracy: 50 },
+  Hubli: { latitude: 15.3647, longitude: 75.1240, accuracy: 50 },
+  Dharwad: { latitude: 15.4589, longitude: 75.0078, accuracy: 50 },
+  PCMC: { latitude: 18.6298, longitude: 73.7997, accuracy: 50 },
+  Ujjain: { latitude: 23.1765, longitude: 75.7885, accuracy: 50 },
+  Secunderabad: { latitude: 17.4399, longitude: 78.4983, accuracy: 50 },
   // Twin Cities (centroids)
   HubliDharwad: { latitude: 15.4118, longitude: 75.0659, accuracy: 50 },
   PunePCMC: { latitude: 18.5751, longitude: 73.8282, accuracy: 50 },
@@ -130,6 +140,11 @@ export const CITY_BOUNDS: Record<
   Shimla: { minLatitude: 30.90, maxLatitude: 31.30, minLongitude: 76.97, maxLongitude: 77.37 },
   Srinagar: { minLatitude: 33.88, maxLatitude: 34.28, minLongitude: 74.59, maxLongitude: 74.99 },
   Pondicherry: { minLatitude: 11.74, maxLatitude: 12.14, minLongitude: 79.60, maxLongitude: 80.00 },
+  Hubli: { minLatitude: 15.26, maxLatitude: 15.47, minLongitude: 75.02, maxLongitude: 75.22 },
+  Dharwad: { minLatitude: 15.35, maxLatitude: 15.56, minLongitude: 74.90, maxLongitude: 75.11 },
+  PCMC: { minLatitude: 18.54, maxLatitude: 18.72, minLongitude: 73.70, maxLongitude: 73.91 },
+  Ujjain: { minLatitude: 23.07, maxLatitude: 23.28, minLongitude: 75.68, maxLongitude: 75.90 },
+  Secunderabad: { minLatitude: 17.36, maxLatitude: 17.52, minLongitude: 78.41, maxLongitude: 78.58 },
   // Twin Cities (merged bounds)
   HubliDharwad: { minLatitude: 15.30, maxLatitude: 15.52, minLongitude: 74.95, maxLongitude: 75.20 },
   PunePCMC: { minLatitude: 18.40, maxLatitude: 18.72, minLongitude: 73.65, maxLongitude: 74.05 },
@@ -174,6 +189,11 @@ export const CITY_DISPLAY_NAMES: Record<SupportedCityName, string> = {
   Shimla: "Shimla",
   Srinagar: "Srinagar",
   Pondicherry: "Pondicherry",
+  Hubli: "Hubli",
+  Dharwad: "Dharwad",
+  PCMC: "PCMC",
+  Ujjain: "Ujjain",
+  Secunderabad: "Secunderabad",
   HubliDharwad: "Hubli · Dharwad",
   PunePCMC: "Pune · PCMC",
   BangaloreMysore: "Bangalore · Mysore",
@@ -189,6 +209,12 @@ export interface CityGroup {
 }
 
 export const CITY_GROUPS: CityGroup[] = [
+  {
+    id: "twinSingles",
+    name: "Twin City Singles",
+    emoji: "🏙",
+    cities: ["Hubli", "Dharwad", "Pune", "PCMC", "Bangalore", "Mysore", "Indore", "Ujjain", "Hyderabad", "Secunderabad"]
+  },
   {
     id: "twins",
     name: "Twin & Satellite Cities",
@@ -270,6 +296,11 @@ const CITY_ALIASES: Record<SupportedCityName, string[]> = {
   Shimla: ["shimla", "slm"],
   Srinagar: ["srinagar", "sxr"],
   Pondicherry: ["pondicherry", "puducherry", "pny"],
+  Hubli: ["hubli", "hubballi", "hbl"],
+  Dharwad: ["dharwad", "dharwar"],
+  PCMC: ["pcmc", "pimpri", "chinchwad", "pimpri chinchwad"],
+  Ujjain: ["ujjain"],
+  Secunderabad: ["secunderabad"],
   HubliDharwad: ["hubli", "dharwad", "hubli dharwad", "hubli-dharwad", "hubli dharwar", "hbl"],
   PunePCMC: ["pcmc", "pimpri", "chinchwad", "pune pcmc", "pune-pcmc"],
   BangaloreMysore: ["bangalore mysore", "bangalore-mysore", "mysuru corridor"],
@@ -355,4 +386,3 @@ export const getNearestSupportedCity = (
     return currentDistance < bestDistance ? city : nearest;
   }, "Pune" as SupportedCityName);
 };
-

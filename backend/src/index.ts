@@ -34,7 +34,9 @@ const app: Application = express();
 // Background database cleanup worker state
 let cleanupInterval: NodeJS.Timeout | null = null;
 let keepAliveInterval: NodeJS.Timeout | null = null;
+let isShuttingDown = false;
 const PORT = process.env.PORT || 5000;
+const startedAt = new Date();
 const allowedOrigins = getAllowedOrigins();
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
   if (!origin) {
@@ -90,6 +92,26 @@ const hashSessionToken = (token: string) => {
 
 // Middleware setup
 app.use(compression());
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const incomingRequestId = req.headers["x-request-id"];
+  const requestId =
+    typeof incomingRequestId === "string" && incomingRequestId.length <= 80
+      ? incomingRequestId
+      : crypto.randomUUID();
+
+  res.setHeader("x-request-id", requestId);
+  (req as Request & { requestId?: string }).requestId = requestId;
+  next();
+});
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (!isShuttingDown) {
+    next();
+    return;
+  }
+
+  res.setHeader("Connection", "close");
+  res.status(503).json({ error: "Server is shutting down. Please retry shortly." });
+});
 app.use(requestLogger);
 app.use(requestTimeout(15000)); // 15-second request timeout limit
 app.disable("x-powered-by");

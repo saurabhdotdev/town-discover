@@ -700,16 +700,26 @@ export default function HangoutsPage() {
           ) : error ? (
             <p className="text-center text-sm font-semibold text-rose-400 py-12">{error}</p>
           ) : filteredHangouts.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] py-16 text-center">
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-12 text-center sm:py-16">
               <Users size={40} className="mx-auto text-slate-600 mb-3" />
               <h4 className="text-base font-black text-slate-300">No meetups match your filter</h4>
-              <p className="mt-1 text-sm text-[var(--muted)] font-medium">Be the first to organize a hangout in {selectedCity}!</p>
-              <button
-                onClick={handleOpenModal}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[var(--panel-strong)] border border-[var(--border)] px-4 py-2 text-xs font-black text-teal-300 hover:bg-[var(--panel)] cursor-pointer"
-              >
-                Plan Hangout
-              </button>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--muted)] font-medium">Open the full list or be the first to organize a hangout in {selectedCity}.</p>
+              <div className="mx-auto mt-4 flex max-w-sm flex-col justify-center gap-2 sm:flex-row">
+                {activeFilter !== "all" && (
+                  <button
+                    onClick={() => setActiveFilter("all")}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-xs font-black text-[var(--foreground)]"
+                  >
+                    Show All
+                  </button>
+                )}
+                <button
+                  onClick={handleOpenModal}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--panel-strong)] border border-[var(--border)] px-4 py-2 text-xs font-black text-teal-300 hover:bg-[var(--panel)] cursor-pointer"
+                >
+                  Plan Hangout
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2">

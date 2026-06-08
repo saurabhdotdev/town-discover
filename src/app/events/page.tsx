@@ -6,7 +6,6 @@ import {
   BellRing,
   CalendarDays,
   ChevronDown,
-  ChevronRight,
   CheckCircle,
   Clock,
   ExternalLink,
@@ -14,10 +13,12 @@ import {
   MapPin,
   Music,
   RefreshCw,
+  Search,
   Sparkles,
   Star,
   Ticket,
   Users,
+  X,
   Utensils,
   Zap,
 } from "lucide-react";
@@ -30,6 +31,7 @@ import { LazyImage } from "@/components/common/LazyImage";
 import type { LiveEvent } from "@/app/api/events/live/route";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { SUPPORTED_CITY_NAMES, SupportedCityName } from "@/lib/pune-location";
+import { buildAffiliateRedirectUrl } from "@/lib/monetization";
 
 // ---------- Category config ----------
 
@@ -75,6 +77,7 @@ const CATEGORY_BADGE: Record<string, string> = {
 // ---------- Date filter ----------
 
 type DateFilter = "all" | "today" | "tomorrow" | "weekend" | "this-week";
+type SortMode = "recommended" | "soonest" | "price-low" | "top-rated";
 
 const DATE_FILTERS: { id: DateFilter; label: string }[] = [
   { id: "all", label: "All Dates" },
@@ -82,6 +85,13 @@ const DATE_FILTERS: { id: DateFilter; label: string }[] = [
   { id: "tomorrow", label: "Tomorrow" },
   { id: "weekend", label: "This Weekend" },
   { id: "this-week", label: "This Week" },
+];
+
+const SORT_OPTIONS: { id: SortMode; label: string }[] = [
+  { id: "recommended", label: "Recommended" },
+  { id: "soonest", label: "Soonest" },
+  { id: "price-low", label: "Lowest Price" },
+  { id: "top-rated", label: "Top Rated" },
 ];
 
 function isToday(dateStr: string) {
@@ -165,12 +175,56 @@ function buildBookMyShowUrl(event: LiveEvent): string {
   return `https://in.bookmyshow.com/explore/events-${region}`;
 }
 
+function buildEventAffiliateUrl(event: LiveEvent): string {
+  return buildAffiliateRedirectUrl(buildBookMyShowUrl(event), "events", `events-${event.city.toLowerCase()}`);
+}
+
 function formatEventLocation(event: LiveEvent): string {
   const parts = [event.venue, event.locality, event.city]
     .map((part) => part?.replace(/\s+/g, " ").trim())
     .filter(Boolean);
 
   return Array.from(new Set(parts)).join(", ");
+}
+
+function getEventTimestamp(event: LiveEvent): number {
+  return new Date(`${event.date}T${event.time || "00:00"}`).getTime();
+}
+
+function getEventSearchText(event: LiveEvent): string {
+  return [
+    event.title,
+    event.description,
+    event.venue,
+    event.locality,
+    event.city,
+    event.category,
+    ...(event.artists ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function sortEvents(events: LiveEvent[], sortMode: SortMode): LiveEvent[] {
+  const list = [...events];
+
+  if (sortMode === "soonest") {
+    return list.sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
+  }
+
+  if (sortMode === "price-low") {
+    return list.sort((a, b) => a.price.min - b.price.min || getEventTimestamp(a) - getEventTimestamp(b));
+  }
+
+  if (sortMode === "top-rated") {
+    return list.sort((a, b) => b.rating - a.rating || getEventTimestamp(a) - getEventTimestamp(b));
+  }
+
+  return list.sort((a, b) => {
+    const scoreA = (a.isTrending ? 100 : 0) + a.rating * 10 - Math.max(0, getEventTimestamp(a) - Date.now()) / 86400000;
+    const scoreB = (b.isTrending ? 100 : 0) + b.rating * 10 - Math.max(0, getEventTimestamp(b) - Date.now()) / 86400000;
+    return scoreB - scoreA;
+  });
 }
 
 // ---------- Hero card (large featured event) ----------
@@ -206,7 +260,7 @@ function HeroEventCard({
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--panel-strong)] via-[var(--panel-strong)]/60 to-transparent" />
       </div>
 
-      <div className="relative z-10 p-6 sm:p-8 md:p-10 flex flex-col md:flex-row gap-6 items-start md:items-end min-h-[280px] md:min-h-[340px]">
+      <div className="relative z-10 flex min-h-[240px] flex-col items-start gap-5 p-4 sm:min-h-[280px] sm:p-8 md:min-h-[340px] md:flex-row md:items-end md:gap-6 md:p-10">
         <div className="flex-1 space-y-3">
           <div className="flex flex-wrap gap-2 items-center">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
@@ -298,7 +352,6 @@ function EventCard({
   reminderSaved: boolean;
   reminderLoading: boolean;
 }) {
-  const gradient = CATEGORY_GRADIENTS[event.category] ?? "";
   const badge = CATEGORY_BADGE[event.category] ?? "bg-white/10 text-white border-white/20";
   const location = formatEventLocation(event);
 
@@ -446,11 +499,20 @@ export default function EventsPage() {
   const [activeCategory, setActiveCategory] = useState<EventCategory>("all");
   const [activeDateFilter, setActiveDateFilter] = useState<DateFilter>("all");
   const [activeDistrict, setActiveDistrict] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("recommended");
   const [refreshing, setRefreshing] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [reminderIds, setReminderIds] = useState<Set<string>>(() => new Set());
   const [reminderLoadingId, setReminderLoadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+
+  const hasActiveFilters =
+    activeCategory !== "all" ||
+    activeDateFilter !== "all" ||
+    activeDistrict !== "all" ||
+    searchQuery.trim().length > 0 ||
+    sortMode !== "recommended";
 
   const districts = useMemo(() => {
     const list = Array.from(new Set(events.map((e) => e.locality))).filter(Boolean);
@@ -497,6 +559,14 @@ export default function EventsPage() {
     await fetchEvents(selectedCity, true);
   };
 
+  const resetFilters = () => {
+    setActiveCategory("all");
+    setActiveDateFilter("all");
+    setActiveDistrict("all");
+    setSearchQuery("");
+    setSortMode("recommended");
+  };
+
   const handleNotify = async (event: LiveEvent) => {
     if (!user) {
       setAuthRequiredMessage("Log in to save event reminders and see them in your notifications.");
@@ -522,7 +592,7 @@ export default function EventsPage() {
           link: `/events?city=${encodeURIComponent(event.city)}`,
         }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "Unable to save reminder.");
 
       setReminderIds((current) => new Set(current).add(event.id));
@@ -536,11 +606,14 @@ export default function EventsPage() {
 
   const filtered = useMemo(() => {
     let result = events;
+    const query = searchQuery.trim().toLowerCase();
+
+    if (query) result = result.filter((event) => getEventSearchText(event).includes(query));
     if (activeCategory !== "all") result = result.filter((e) => e.category === activeCategory);
     result = result.filter((e) => matchesDateFilter(e, activeDateFilter));
     if (activeDistrict !== "all") result = result.filter((e) => e.locality === activeDistrict);
-    return result;
-  }, [events, activeCategory, activeDateFilter, activeDistrict]);
+    return sortEvents(result, sortMode);
+  }, [events, activeCategory, activeDateFilter, activeDistrict, searchQuery, sortMode]);
 
   const heroEvent = filtered.find((e) => e.isTrending) ?? filtered[0] ?? null;
   const restEvents = heroEvent ? filtered.filter((e) => e.id !== heroEvent.id) : filtered;
@@ -568,15 +641,22 @@ export default function EventsPage() {
                   value={selectedCity}
                   onChange={(city) => {
                     chooseCity(city);
-                    setActiveCategory("all");
-                    setActiveDateFilter("all");
-                    setActiveDistrict("all");
+                    resetFilters();
                   }}
                 />
               </div>
+              <label className="relative block w-full min-w-0 sm:min-w-[260px] md:max-w-sm" aria-label="Search events">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={17} />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search artists, venues, areas"
+                  className="h-12 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] pl-10 pr-3 text-sm font-bold text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-teal-300"
+                />
+              </label>
               {districts.length > 0 && (
                 <div className="w-full sm:w-auto min-w-[200px]">
-                  <label className="relative mb-3 block w-full" aria-label="Choose district">
+                  <label className="relative block w-full" aria-label="Choose district">
                     <MapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rose-400" size={17} />
                     <select
                       value={activeDistrict}
@@ -594,16 +674,42 @@ export default function EventsPage() {
                   </label>
                 </div>
               )}
+              <label className="relative block w-full sm:w-auto sm:min-w-[160px]" aria-label="Sort events">
+                <select
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as SortMode)}
+                  className="h-12 w-full appearance-none rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 pr-10 text-sm font-black text-[var(--foreground)] outline-none transition focus:border-teal-300"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={18} />
+              </label>
             </div>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={loading || refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-2.5 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-50 mb-3"
-            >
-              <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
-              {refreshing ? "Generating..." : "Refresh Feed"}
-            </button>
+            <div className="flex w-full gap-2 sm:w-auto">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] sm:flex-none"
+                >
+                  <X size={15} />
+                  Reset
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading || refreshing}
+                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-50 sm:flex-none"
+              >
+                <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
+                {refreshing ? "Generating..." : "Refresh"}
+              </button>
+            </div>
           </div>
 
           {generatedAt && (
@@ -619,6 +725,7 @@ export default function EventsPage() {
           <div className="flex flex-wrap gap-2 mb-5">
             {[
               { label: "Total Events", value: events.length, color: "bg-teal-500/10 text-teal-200 border-teal-500/20" },
+              { label: "Showing", value: filtered.length, color: "bg-cyan-500/10 text-cyan-200 border-cyan-500/20" },
               { label: "Today", value: todayCount, color: "bg-rose-500/10 text-rose-200 border-rose-500/20" },
               { label: "This Weekend", value: thisWeekendCount, color: "bg-violet-500/10 text-violet-200 border-violet-500/20" },
               { label: "Free Entry", value: freeCount, color: "bg-emerald-500/10 text-emerald-200 border-emerald-500/20" },
@@ -694,7 +801,7 @@ export default function EventsPage() {
         {loading ? (
           <>
             {/* Hero skeleton */}
-            <div className="mb-6 h-[280px] rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] animate-pulse" />
+            <div className="mb-6 h-[220px] rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] animate-pulse sm:h-[280px]" />
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {Array.from({ length: 8 }).map((_, i) => <EventSkeleton key={i} index={i} />)}
             </div>
@@ -703,31 +810,40 @@ export default function EventsPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center gap-4 py-20 text-center"
+            className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-12 text-center sm:py-16"
           >
             <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--panel-soft)] text-3xl">
               🎭
             </div>
-            <div>
+            <div className="max-w-sm">
               <p className="text-lg font-black text-[var(--foreground)]">No events found</p>
-              <p className="mt-1 text-sm text-[var(--muted)]">Try a different filter or refresh the feed</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">Try another date, clear the filters, or ask the feed for a fresh set.</p>
             </div>
-            <button
-              onClick={handleRefresh}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-black text-[var(--primary-foreground)]"
-            >
-              <RefreshCw size={15} />
-              Generate New Events
-            </button>
+            <div className="flex w-full max-w-sm flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                onClick={resetFilters}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-sm font-black text-[var(--foreground)]"
+              >
+                <Sparkles size={15} />
+                Clear Filters
+              </button>
+              <button
+                onClick={handleRefresh}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-black text-[var(--primary-foreground)]"
+              >
+                <RefreshCw size={15} />
+                Generate Events
+              </button>
+            </div>
           </motion.div>
         ) : (
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             <motion.div key={`${selectedCity}-${activeCategory}-${activeDateFilter}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               {/* Hero event */}
               {heroEvent && (
                 <HeroEventCard
                   event={heroEvent}
-                  onBookClick={(event) => window.open(buildBookMyShowUrl(event), "_blank")}
+                  onBookClick={(event) => window.open(buildEventAffiliateUrl(event), "_blank", "noopener,noreferrer")}
                   onNotifyClick={handleNotify}
                   reminderSaved={reminderIds.has(heroEvent.id)}
                   reminderLoading={reminderLoadingId === heroEvent.id}
@@ -740,7 +856,14 @@ export default function EventsPage() {
                   <span className="font-black text-[var(--foreground)]">{filtered.length}</span> events in {selectedCity}
                   {activeCategory !== "all" && ` · ${CATEGORIES.find((c) => c.id === activeCategory)?.label}`}
                   {activeDateFilter !== "all" && ` · ${DATE_FILTERS.find((d) => d.id === activeDateFilter)?.label}`}
+                  {activeDistrict !== "all" && ` - ${activeDistrict}`}
+                  {searchQuery.trim() && ` - "${searchQuery.trim()}"`}
                 </p>
+                {sortMode !== "recommended" && (
+                  <p className="hidden text-xs font-bold text-[var(--muted)] sm:block">
+                    Sorted by {SORT_OPTIONS.find((option) => option.id === sortMode)?.label}
+                  </p>
+                )}
               </div>
 
               {/* Grid */}
@@ -750,7 +873,7 @@ export default function EventsPage() {
                     key={event.id}
                     event={event}
                     index={i}
-                    onBookClick={(evt) => window.open(buildBookMyShowUrl(evt), "_blank")}
+                    onBookClick={(evt) => window.open(buildEventAffiliateUrl(evt), "_blank", "noopener,noreferrer")}
                     onNotifyClick={handleNotify}
                     reminderSaved={reminderIds.has(event.id)}
                     reminderLoading={reminderLoadingId === event.id}
