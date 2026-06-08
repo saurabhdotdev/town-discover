@@ -40,6 +40,87 @@ interface TripPlan {
   creatorName?: string;
 }
 
+const SATELLITE_CENTERS: Record<string, { primary: { lat: number; lng: number }; satellite: { lat: number; lng: number } }> = {
+  HubliDharwad: {
+    primary: { lat: 15.3647, lng: 75.1240 },
+    satellite: { lat: 15.4589, lng: 75.0078 }
+  },
+  PunePCMC: {
+    primary: { lat: 18.5204, lng: 73.8567 },
+    satellite: { lat: 18.6298, lng: 73.7997 }
+  },
+  BangaloreMysore: {
+    primary: { lat: 12.9716, lng: 77.5946 },
+    satellite: { lat: 12.2958, lng: 76.6394 }
+  },
+  IndoreUjjain: {
+    primary: { lat: 22.7196, lng: 75.8577 },
+    satellite: { lat: 23.1760, lng: 75.7885 }
+  },
+  HyderabadSecunderabad: {
+    primary: { lat: 17.3850, lng: 78.4867 },
+    satellite: { lat: 17.4399, lng: 78.4983 }
+  }
+};
+
+const TRANSIT_GUIDES: Record<string, { distance: string; duration: string; highwayName: string; modes: { icon: string; name: string }[] }> = {
+  HubliDharwad: {
+    distance: "20 km",
+    duration: "30-40 mins",
+    highwayName: "AH47 Highway",
+    modes: [{ icon: "🚌", name: "BRTS Corridor" }]
+  },
+  PunePCMC: {
+    distance: "15 km",
+    duration: "25-35 mins",
+    highwayName: "Old Mumbai Highway",
+    modes: [{ icon: "🚇", name: "Metro Line 1" }]
+  },
+  BangaloreMysore: {
+    distance: "140 km",
+    duration: "2 - 2.5 hours",
+    highwayName: "NH 275 Expressway",
+    modes: [{ icon: "🚂", name: "Vande Bharat" }]
+  },
+  IndoreUjjain: {
+    distance: "55 km",
+    duration: "1 - 1.2 hours",
+    highwayName: "SH 27 Highway",
+    modes: [{ icon: "🚌", name: "Chartered Bus" }]
+  },
+  HyderabadSecunderabad: {
+    distance: "10 km",
+    duration: "20-30 mins",
+    highwayName: "Tank Bund Rd",
+    modes: [{ icon: "🚇", name: "Green Line" }]
+  }
+};
+
+const getStopSubCity = (stop: Place): string => {
+  const city = stop.city;
+  const twins = SATELLITE_CENTERS[city];
+  if (!twins) return city;
+
+  const distToPrimary = Math.hypot(stop.latitude - twins.primary.lat, stop.longitude - twins.primary.lng);
+  const distToSatellite = Math.hypot(stop.latitude - twins.satellite.lat, stop.longitude - twins.satellite.lng);
+  
+  if (distToPrimary <= distToSatellite) {
+    if (city === "HubliDharwad") return "Hubli";
+    if (city === "PunePCMC") return "Pune";
+    if (city === "BangaloreMysore") return "Bangalore";
+    if (city === "IndoreUjjain") return "Indore";
+    if (city === "HyderabadSecunderabad") return "Hyderabad";
+  } else {
+    if (city === "HubliDharwad") return "Dharwad";
+    if (city === "PunePCMC") return "PCMC";
+    if (city === "BangaloreMysore") return "Mysore";
+    if (city === "IndoreUjjain") return "Ujjain";
+    if (city === "HyderabadSecunderabad") return "Secunderabad";
+  }
+  
+  return city;
+};
+
 export default function TripPage({
   params,
 }: {
@@ -195,15 +276,17 @@ export default function TripPage({
   // Main Trip Page
 
   return (
-    <div className="min-h-screen pb-28">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden pb-28">
       {/* Hero Header */}
-      <motion.header
-        initial={{ opacity: 0, y: -18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.42, ease: "easeOut" }}
-        className="sticky top-14 z-30 border-b border-[var(--border)] bg-[var(--nav)] backdrop-blur-xl md:top-16"
+      <header
+        className="relative z-40 border-b border-[var(--border)] bg-[var(--nav)] md:sticky md:top-16 md:backdrop-blur-xl"
       >
-        <div className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5">
+        <motion.div
+          initial={{ opacity: 0, y: -18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.42, ease: "easeOut" }}
+          className="mx-auto flex max-w-screen-xl flex-col gap-3 px-3 py-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6 md:py-5"
+        >
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
               <Route size={13} />
@@ -235,8 +318,8 @@ export default function TripPage({
               Share
             </button>
           </div>
-        </div>
-      </motion.header>
+        </motion.div>
+      </header>
 
       <div className="mx-auto max-w-screen-xl px-3 py-5 sm:px-4 md:px-6 md:py-8">
         {/* Trip stats strip */}
@@ -413,97 +496,130 @@ export default function TripPage({
 
             {plan.stops.map((stop, index) => {
               const isExpanded = selectedStop === stop.id;
-              return (
-                <motion.div
-                  key={stop.id}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.05 * Math.min(index, 20), duration: 0.32 }}
-                  className="relative pl-12 sm:pl-14"
-                >
-                  {/* Timeline dot */}
-                  <div className="absolute left-3.5 top-5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-teal-400 shadow-sm shadow-teal-400/30 sm:left-4.5 sm:h-4 sm:w-4">
-                    {index === 0 && (
-                      <span className="absolute h-full w-full animate-ping rounded-full bg-teal-400/50" />
-                    )}
-                  </div>
+              const currentSubCity = getStopSubCity(stop);
+              const prevStop = index > 0 ? plan.stops[index - 1] : null;
+              const prevSubCity = prevStop ? getStopSubCity(prevStop) : null;
+              const showCrossing = prevSubCity && currentSubCity !== prevSubCity;
+              const transitDetails = showCrossing ? TRANSIT_GUIDES[stop.city] : null;
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedStop(isExpanded ? null : stop.id)
-                    }
-                    className={cn(
-                      "w-full rounded-xl border p-4 text-left transition-all mb-3",
-                      isExpanded
-                        ? "border-cyan-400/40 bg-cyan-400/[0.06] shadow-lg"
-                        : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)] hover:border-[var(--border)]"
-                    )}
-                  >
-                    {/* Stop number badge */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--panel)] text-[9px] font-black text-[var(--muted-strong)] border border-[var(--border)]">
-                            {index + 1}
-                          </span>
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
-                            {getCategoryLabel(stop.category, stop.tags)}
-                          </span>
-                        </div>
-                        <h3 className="mt-1.5 line-clamp-1 text-sm font-black text-[var(--foreground)] sm:text-base">
-                          {stop.title}
-                        </h3>
-                        <p className="mt-0.5 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">
-                          {formatPlaceArea(stop)}
-                        </p>
+              return (
+                <div key={stop.id}>
+                  {showCrossing && transitDetails && (
+                    <div className="relative pl-12 sm:pl-14 my-4 flex gap-3 group">
+                      <div className="absolute left-5 top-0 bottom-0 w-px border-l-2 border-dashed border-teal-400/40 sm:left-6" />
+                      <div className="absolute left-2.5 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 border border-teal-500/30 text-teal-400 sm:left-3.5 shadow-md">
+                        🌉
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-400 border border-amber-400/20">
-                          <Star
-                            size={10}
-                            className="fill-amber-400 text-amber-400"
-                          />
-                          {stop.rating}
-                        </span>
-                        {stop.priceRange && (
-                          <span className="text-[10px] font-bold text-[var(--muted)]">
-                            {stop.priceRange}
-                          </span>
-                        )}
+                      <div className="flex-1 rounded-xl border border-teal-500/20 bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-transparent p-3 text-left">
+                        <div className="flex justify-between items-center gap-2">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-teal-400">Transit Corridor crossing</p>
+                            <p className="text-xs font-black text-[var(--foreground)] mt-0.5">
+                              Crossing over from {prevSubCity} to {currentSubCity}
+                            </p>
+                            <p className="text-[10px] text-[var(--muted)] mt-0.5">
+                              Approx. {transitDetails.distance} travel via {transitDetails.highwayName} ({transitDetails.duration})
+                            </p>
+                          </div>
+                          <div className="flex gap-1 text-xs text-teal-400/80 font-bold shrink-0 bg-teal-500/10 px-1.5 py-0.5 rounded">
+                            <span>{transitDetails.modes[0]?.icon}</span>
+                            <span>{transitDetails.modes[0]?.name}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    {/* Expanded details */}
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-3 space-y-2.5 border-t border-[var(--border)] pt-3">
-                            <p className="text-xs leading-5 text-[var(--muted-strong)]">
-                              {stop.description}
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {stop.tags.slice(0, 6).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[9px] font-bold text-[var(--muted)] border border-[var(--border)]"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.05 * Math.min(index, 20), duration: 0.32 }}
+                    className="relative pl-12 sm:pl-14 animate-fade-in"
+                  >
+                    {/* Timeline dot */}
+                    <div className="absolute left-3.5 top-5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-teal-400 shadow-sm shadow-teal-400/30 sm:left-4.5 sm:h-4 sm:w-4">
+                      {index === 0 && (
+                        <span className="absolute h-full w-full animate-ping rounded-full bg-teal-400/50" />
                       )}
-                    </AnimatePresence>
-                  </button>
-                </motion.div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedStop(isExpanded ? null : stop.id)
+                      }
+                      className={cn(
+                        "w-full rounded-xl border p-4 text-left transition-all mb-3",
+                        isExpanded
+                          ? "border-cyan-400/40 bg-cyan-400/[0.06] shadow-lg"
+                          : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)] hover:border-[var(--border)]"
+                      )}
+                    >
+                      {/* Stop number badge */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--panel)] text-[9px] font-black text-[var(--muted-strong)] border border-[var(--border)]">
+                              {index + 1}
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+                              {getCategoryLabel(stop.category, stop.tags)}
+                            </span>
+                          </div>
+                          <h3 className="mt-1.5 line-clamp-1 text-sm font-black text-[var(--foreground)] sm:text-base">
+                            {stop.title}
+                          </h3>
+                          <p className="mt-0.5 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">
+                            {formatPlaceArea(stop)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-400 border border-amber-400/20">
+                            <Star
+                              size={10}
+                              className="fill-amber-400 text-amber-400"
+                            />
+                            {stop.rating}
+                          </span>
+                          {stop.priceRange && (
+                            <span className="text-[10px] font-bold text-[var(--muted)]">
+                              {stop.priceRange}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expanded details */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mt-3 space-y-2.5 border-t border-[var(--border)] pt-3">
+                              <p className="text-xs leading-5 text-[var(--muted-strong)]">
+                                {stop.description}
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {stop.tags.slice(0, 6).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[9px] font-bold text-[var(--muted)] border border-[var(--border)]"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </button>
+                  </motion.div>
+                </div>
               );
             })}
 

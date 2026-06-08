@@ -42,6 +42,16 @@ const CITY_META: Record<SupportedCityName, { emoji: string; tagline: string }> =
   Shimla:    { emoji: "❄", tagline: "Snowy ridges & colonial walks" },
   Srinagar:  { emoji: "🛶", tagline: "Dal Lake houseboats & wazwan" },
   Pondicherry:{ emoji: "🏖", tagline: "French quarter ocean strolls" },
+  Hubli:     { emoji: "🏙", tagline: "Markets, food streets & railway energy" },
+  Dharwad:   { emoji: "🏙", tagline: "Music, campuses & pedha trails" },
+  PCMC:      { emoji: "🏙", tagline: "Auto hubs, IT parks & cafe pockets" },
+  Ujjain:    { emoji: "🏙", tagline: "Mahakal darshan & old-city snacks" },
+  Secunderabad: { emoji: "🏙", tagline: "Lake walks, bazaars & twin-city classics" },
+  HubliDharwad: { emoji: "🔀", tagline: "Twin heritage & pedha sweets" },
+  PunePCMC:  { emoji: "🎓", tagline: "IT parks, auto hubs & cafes" },
+  BangaloreMysore: { emoji: "🌿", tagline: "High-tech to royal heritage corridor" },
+  IndoreUjjain: { emoji: "🍲", tagline: "Cleanest street food & holy ghats" },
+  HyderabadSecunderabad: { emoji: "🕌", tagline: "Twin cities, lake walk & biryani" },
 };
 
 // ─── Interest chips ────────────────────────────────────────────────────────────
@@ -161,7 +171,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete }) 
                   transition={{ duration: 0.22 }}
                 >
                   {/* City Grid */}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="max-h-[50dvh] sm:max-h-[380px] overflow-y-auto pr-1 grid grid-cols-2 gap-2 sm:grid-cols-4 no-scrollbar pb-2">
                     {SUPPORTED_CITY_NAMES.map((city) => {
                       const meta = CITY_META[city];
                       const active = selectedCity === city;
@@ -228,7 +238,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete }) 
                   </div>
 
                   {/* Interest Grid */}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="max-h-[50dvh] sm:max-h-[380px] overflow-y-auto pr-1 grid grid-cols-2 gap-2 sm:grid-cols-4 no-scrollbar pb-2">
                     {INTERESTS.map(({ id, label, emoji, desc }) => {
                       const active = selectedInterests.has(id);
                       return (

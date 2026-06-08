@@ -12,7 +12,7 @@ export const errorHandler = (
     path: req.path,
     method: req.method,
     message: err.message || err,
-    stack: err.stack,
+    ...(process.env.NODE_ENV !== "production" ? { stack: err.stack } : {}),
   });
 
   // Check if headers have already been sent

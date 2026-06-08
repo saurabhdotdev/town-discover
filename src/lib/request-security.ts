@@ -13,11 +13,14 @@ const normalizeOrigin = (value: string | null | undefined) => {
 };
 
 const getAllowedOrigins = (request: NextRequest) => {
-  const origins = new Set<string>([request.nextUrl.origin]);
+  const origins = new Set<string>();
 
   for (const value of [
     process.env.FRONTEND_URL,
     process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
   ]) {
     const origin = normalizeOrigin(value);
@@ -25,6 +28,7 @@ const getAllowedOrigins = (request: NextRequest) => {
   }
 
   if (process.env.NODE_ENV !== "production") {
+    origins.add(request.nextUrl.origin);
     origins.add("http://localhost:3000");
     origins.add("http://localhost:3001");
     origins.add("http://127.0.0.1:3000");

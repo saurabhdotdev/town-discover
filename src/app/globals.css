@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 :root {
   color-scheme: light;
@@ -201,6 +202,8 @@ img {
 .leaflet-container {
   background: var(--map-background);
   color: #111827;
+  height: 100% !important;
+  width: 100% !important;
 }
 
 .leaflet-popup-content-wrapper,
@@ -211,13 +214,31 @@ img {
 /* Animated glowing route tracker */
 @keyframes routeDash {
   to {
-    stroke-dashoffset: -20;
+    stroke-dashoffset: -32;
   }
 }
 
 .glowing-polyline {
-  animation: routeDash 1.2s linear infinite;
-  filter: drop-shadow(0 0 4px var(--fresh));
+  animation: routeDash 1s linear infinite;
+  filter: drop-shadow(0 0 5px var(--fresh)) drop-shadow(0 0 1px var(--fresh));
+  stroke-linecap: round;
+}
+
+/* Custom Map Tooltip Styling */
+.custom-map-tooltip.leaflet-tooltip {
+  background: rgba(15, 23, 42, 0.92) !important;
+  backdrop-filter: blur(8px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+
+.custom-map-tooltip.leaflet-tooltip::before {
+  display: none !important;
 }
 
 /* Glowing ring for trending/open spots */
@@ -415,4 +436,103 @@ img {
 
 .animate-slide-down {
   animation: slideDown 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Responsive container height for map page to lock viewport with top/bottom bar heights */
+.map-page-container {
+  height: calc(100vh - 152px);
+  height: calc(100dvh - 152px);
+}
+@media (min-width: 768px) {
+  .map-page-container {
+    height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+  }
+}
+
+/* Premium Glassmorphic Zoom Controls for Leaflet */
+.leaflet-bar {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  color: #2dd4bf !important; /* Teal accent */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.leaflet-bar a:hover {
+  background-color: #2dd4bf !important;
+  color: #0f172a !important;
+}
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  font-size: 16px !important;
+}
+
+/* Premium Glassmorphic Layout Utilities */
+.glass-panel {
+  background: var(--panel) !important;
+  backdrop-filter: blur(12px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(160%) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+}
+
+.glass-panel-strong {
+  background: var(--panel-strong) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.35) !important;
+}
+
+.glass-toolbar {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08) !important;
+}
+
+.dark .glass-toolbar {
+  background: rgba(13, 17, 23, 0.76) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Premium Card hover states */
+.place-card-modern {
+  transition: all 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.place-card-modern:hover {
+  transform: translateY(-2.5px) scale(1.012) !important;
+  border-color: rgba(45, 212, 191, 0.35) !important;
+  background: var(--panel) !important;
+  box-shadow: 
+    0 12px 30px -10px rgba(0, 0, 0, 0.25),
+    0 0 15px -3px rgba(45, 212, 191, 0.08) !important;
+}
+
+@media (min-width: 768px) {
+  .resizable-map {
+    width: var(--map-width) !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+  }
+  .resizable-sidebar {
+    width: var(--sidebar-width) !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+  }
 }

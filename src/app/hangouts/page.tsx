@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, Clock, MapPin, MessageSquare, Plus, Users, X, Search, Trash2, Check, Info, Flag } from "lucide-react";
+import { Calendar, Clock, MapPin, MessageSquare, Plus, Users, X, Search, Trash2, Check, Info, Flag, Zap, Trophy, Award, ChevronRight, Sparkles } from "lucide-react";
 import { Header } from "@/components/common/Header";
 import { useCitySelection } from "@/hooks/useCitySelection";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -32,12 +32,82 @@ interface Hangout {
   flags: string[];
 }
 
+const BADGE_MAP: Record<string, { name: string; emoji: string; desc: string }> = {
+  "first-save": { name: "Wishlist Starter", emoji: "🌱", desc: "Saved first place" },
+  "collector": { name: "Collector", emoji: "📌", desc: "Saved 5 spots" },
+  "curator": { name: "Curator", emoji: "🎨", desc: "Saved 20 places" },
+  "night-rider": { name: "Night Rider", emoji: "🌙", desc: "Saved night-drive" },
+  "street-food-guru": { name: "Street Food Guru", emoji: "🍢", desc: "Saved 3 street food spots" },
+  "city-eye": { name: "City Eye", emoji: "👁", desc: "Submitted first crowd report" },
+  "signal-sender": { name: "Signal Sender", emoji: "📡", desc: "Submitted 5 crowd reports" },
+  "community-scout": { name: "Community Scout", emoji: "🗺", desc: "Suggested first place" },
+  "spot-approved": { name: "Spot Approved", emoji: "✅", desc: "Suggestion was approved" },
+  "first-review": { name: "Local Critic", emoji: "✍️", desc: "Wrote first place review" },
+  "pro-critic": { name: "Pro Critic", emoji: "📝", desc: "Wrote 5 place reviews" },
+  "elite-critic": { name: "Elite Critic", emoji: "👑", desc: "Wrote 15 place reviews" },
+};
+
 export default function HangoutsPage() {
   const { selectedCity, chooseCity } = useCitySelection();
   const { user, setAuthRequiredMessage } = useAuth();
   const [hangouts, setHangouts] = useState<Hangout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Shoutbox States
+  const [shoutboxMessages, setShoutboxMessages] = useState<any[]>([]);
+  const [shoutboxLoading, setShoutboxLoading] = useState(true);
+  const [newMessageText, setNewMessageText] = useState("");
+  const [submittingShoutout, setSubmittingShoutout] = useState(false);
+
+  const fetchShoutboxMessages = async (silent = false) => {
+    if (!silent) setShoutboxLoading(true);
+    try {
+      const res = await fetch(`/api/hangouts/shoutbox?city=${encodeURIComponent(selectedCity)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (res.ok && data.messages) {
+        setShoutboxMessages(data.messages);
+      }
+    } catch (err) {
+      console.error("Failed to load shoutbox messages:", err);
+    } finally {
+      if (!silent) setShoutboxLoading(false);
+    }
+  };
+
+  const handlePostShoutout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      setAuthRequiredMessage("Please log in to post to the Vibe Shoutbox.");
+      window.location.href = "/profile";
+      return;
+    }
+    if (!newMessageText.trim()) return;
+
+    setSubmittingShoutout(true);
+    try {
+      const res = await fetch("/api/hangouts/shoutbox", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: newMessageText.trim(),
+          city: selectedCity,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to post message.");
+
+      setNewMessageText("");
+      fetchShoutboxMessages(true);
+      window.dispatchEvent(new CustomEvent("sheher:refresh-badges"));
+    } catch (err: any) {
+      alert(err.message || "Failed to post to shoutbox.");
+    } finally {
+      setSubmittingShoutout(false);
+    }
+  };
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,6 +133,29 @@ export default function HangoutsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rsvpingId, setRsvpingId] = useState<string | null>(null);
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
+
+  // Gamification dashboard states
+  const [userStats, setUserStats] = useState<any | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const fetchStats = async () => {
+    if (!user) {
+      setUserStats(null);
+      return;
+    }
+    setLoadingStats(true);
+    try {
+      const res = await fetch("/api/gamification", { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok && data.stats) {
+        setUserStats(data.stats);
+      }
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const fetchHangouts = async () => {
     setLoading(true);
@@ -101,6 +194,14 @@ export default function HangoutsPage() {
 
   useEffect(() => {
     fetchHangouts();
+    fetchShoutboxMessages();
+  }, [selectedCity]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchShoutboxMessages(true);
+    }, 15000);
+    return () => clearInterval(interval);
   }, [selectedCity]);
 
   useEffect(() => {
@@ -108,6 +209,20 @@ export default function HangoutsPage() {
       fetchCityPlaces();
     }
   }, [isOpen, selectedCity]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [user]);
+
+  useEffect(() => {
+    const handleRefreshBadges = () => {
+      fetchStats();
+    };
+    window.addEventListener("sheher:refresh-badges", handleRefreshBadges);
+    return () => {
+      window.removeEventListener("sheher:refresh-badges", handleRefreshBadges);
+    };
+  }, [user]);
 
   const handleOpenModal = () => {
     if (!user) {
@@ -353,7 +468,7 @@ export default function HangoutsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pb-8 text-[var(--foreground)]">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden bg-[var(--background)] pb-8 text-[var(--foreground)]">
       <Header
         eyebrow="Community"
         title="Community Hangouts"
@@ -362,7 +477,7 @@ export default function HangoutsPage() {
         showLocation={true}
       />
 
-      <main className="mx-auto max-w-4xl px-4 pt-4">
+      <div className="w-full max-w-6xl mx-auto px-4 pt-4">
         {/* Hero Card */}
         <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--hero-gradient-from)] via-[var(--hero-gradient-via)] to-[var(--hero-gradient-to)] p-6 md:p-8 shadow-2xl">
           <div className="absolute inset-0 bg-teal-500/5 blur-3xl pointer-events-none" />
@@ -387,6 +502,118 @@ export default function HangoutsPage() {
             </button>
           </div>
         </section>
+ 
+        {/* Explorer Progress Dashboard */}
+        <div className="mt-6">
+          {loadingStats ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] p-6 animate-pulse space-y-4">
+              <div className="h-4 bg-slate-800 rounded w-1/3" />
+              <div className="h-6 bg-slate-800 rounded w-1/2" />
+              <div className="h-2 bg-slate-800 rounded w-full" />
+            </div>
+          ) : user && userStats ? (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-teal-500/20 bg-gradient-to-br from-teal-500/[0.04] via-cyan-500/[0.02] to-transparent p-5 md:p-6 shadow-xl relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-teal-500/[0.01] pointer-events-none" />
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                {/* Level and Title */}
+                <div className="flex items-center gap-4">
+                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-900 border-2 border-teal-400 shadow-lg shadow-teal-400/20">
+                    <span className="text-xl font-black text-teal-300">Lv.{userStats.level}</span>
+                  </div>
+                  <div>
+                    <span className="inline-flex items-center gap-1 rounded bg-teal-500/10 px-2 py-0.5 text-[10px] font-black uppercase text-teal-300 border border-teal-500/20">
+                      <Trophy size={10} /> {userStats.title}
+                    </span>
+                    <h3 className="text-lg font-black text-[var(--foreground)] mt-1">
+                      {user.fullName || "Sheher Explorer"}
+                    </h3>
+                    <p className="text-xs text-[var(--muted)] font-semibold">
+                      Total XP: <span className="text-slate-200 font-bold">{userStats.totalXp.toLocaleString()}</span> XP
+                    </p>
+                  </div>
+                </div>
+ 
+                {/* Progress bar to next level */}
+                <div className="flex-1 max-w-md w-full space-y-2">
+                  <div className="flex justify-between text-xs font-black">
+                    <span className="text-teal-300 uppercase tracking-wider">Level Progress</span>
+                    <span className="text-[var(--muted-strong)]">{userStats.totalXp} / {userStats.xpForNext} XP</span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-950 p-[1px] border border-white/5">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${userStats.progress}%` }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="h-full rounded-full bg-gradient-to-r from-teal-400 via-cyan-400 to-emerald-400"
+                    />
+                  </div>
+                </div>
+              </div>
+ 
+              {/* Earned Badges Row */}
+              <div className="mt-5 pt-4 border-t border-[var(--border)]">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+                    <Award size={13} className="text-teal-400" /> Earned Badges ({userStats.badges.length})
+                  </h4>
+                  <a
+                    href="/leaderboard"
+                    className="inline-flex items-center gap-1 text-xs font-black text-teal-400 hover:text-teal-300 hover:underline"
+                  >
+                    Leaderboard <ChevronRight size={13} />
+                  </a>
+                </div>
+                
+                {userStats.badges.length > 0 ? (
+                  <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+                    {userStats.badges.map((ub: any) => {
+                      const badge = BADGE_MAP[ub.badge_id];
+                      if (!badge) return null;
+                      return (
+                        <div
+                          key={ub.badge_id}
+                          title={`${badge.name}: ${badge.desc}`}
+                          className="shrink-0 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 hover:bg-[var(--panel)] transition-all cursor-help"
+                        >
+                          <span className="text-xl">{badge.emoji}</span>
+                          <div className="min-w-0 text-left">
+                            <p className="text-[11px] font-black text-slate-200 truncate">{badge.name}</p>
+                            <p className="text-[9px] text-[var(--muted)] font-semibold">Unlocked {new Date(ub.awarded_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs font-semibold text-[var(--muted)] py-1.5">
+                    No badges earned yet. Plan meetups, submit reviews, or save places to unlock explorer badges!
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          ) : (
+            <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-br from-slate-900/50 to-slate-950/20 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-lg">
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-slate-200 flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-amber-400" /> Unlock Explorer Progress Tracking
+                </h4>
+                <p className="text-xs text-[var(--muted)] font-semibold leading-relaxed">
+                  Log in to track your explorer rank level, earn XP rewards, unlock custom badges, and climb the local city leaderboard!
+                </p>
+              </div>
+              <a
+                href="/profile"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)] px-4 py-2.5 text-xs font-black text-teal-400 transition shrink-0 cursor-pointer"
+              >
+                Log In <ChevronRight size={13} />
+              </a>
+            </div>
+          )}
+        </div>
 
         {/* City Selector */}
         <div className="mt-8 flex flex-col items-start gap-1">
@@ -394,8 +621,11 @@ export default function HangoutsPage() {
           <CitySwitcher value={selectedCity} onChange={chooseCity} />
         </div>
 
-        {/* Search & Filters Controls */}
-        <div className="mt-4 space-y-4">
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          {/* Left Column (2/3 width): Meetups Feed */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Search & Filters Controls */}
+            <div className="mt-4 space-y-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             {/* Search Input */}
             <div className="relative flex-1">
@@ -470,19 +700,29 @@ export default function HangoutsPage() {
           ) : error ? (
             <p className="text-center text-sm font-semibold text-rose-400 py-12">{error}</p>
           ) : filteredHangouts.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] py-16 text-center">
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-12 text-center sm:py-16">
               <Users size={40} className="mx-auto text-slate-600 mb-3" />
               <h4 className="text-base font-black text-slate-300">No meetups match your filter</h4>
-              <p className="mt-1 text-sm text-[var(--muted)] font-medium">Be the first to organize a hangout in {selectedCity}!</p>
-              <button
-                onClick={handleOpenModal}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[var(--panel-strong)] border border-[var(--border)] px-4 py-2 text-xs font-black text-teal-300 hover:bg-[var(--panel)] cursor-pointer"
-              >
-                Plan Hangout
-              </button>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--muted)] font-medium">Open the full list or be the first to organize a hangout in {selectedCity}.</p>
+              <div className="mx-auto mt-4 flex max-w-sm flex-col justify-center gap-2 sm:flex-row">
+                {activeFilter !== "all" && (
+                  <button
+                    onClick={() => setActiveFilter("all")}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-xs font-black text-[var(--foreground)]"
+                  >
+                    Show All
+                  </button>
+                )}
+                <button
+                  onClick={handleOpenModal}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--panel-strong)] border border-[var(--border)] px-4 py-2 text-xs font-black text-teal-300 hover:bg-[var(--panel)] cursor-pointer"
+                >
+                  Plan Hangout
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2">
               {filteredHangouts.map((h) => {
                 const dateBadge = getRelativeDateBadge(h.eventDate);
                 const isUserRsvped = h.rsvps.some((r) => r.userId === user?.id);
@@ -646,7 +886,121 @@ export default function HangoutsPage() {
             </div>
           )}
         </div>
-      </main>
+          </div>
+
+          {/* Right Column: Vibe Shoutbox */}
+          <div className="lg:col-span-1 rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--panel-soft)] to-[var(--panel-strong)] p-5 shadow-xl space-y-4 relative overflow-hidden">
+            <div className="absolute inset-0 bg-teal-500/[0.01] pointer-events-none" />
+            <div className="relative z-10 flex items-center justify-between">
+              <h3 className="text-sm font-black tracking-tight text-[var(--foreground)] flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+                </span>
+                Vibe Shoutbox
+              </h3>
+              <span className="text-[10px] font-black uppercase text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                {selectedCity} Live
+              </span>
+            </div>
+
+            {/* Shoutout Form */}
+            {user ? (
+              <form onSubmit={handlePostShoutout} className="space-y-2 relative z-10">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={newMessageText}
+                    onChange={(e) => setNewMessageText(e.target.value.slice(0, 200))}
+                    placeholder={`What's the vibe in ${selectedCity}?`}
+                    className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--input)] text-xs font-semibold outline-none focus:border-teal-400 transition"
+                    disabled={submittingShoutout}
+                  />
+                  <button
+                    type="submit"
+                    disabled={submittingShoutout || !newMessageText.trim()}
+                    className="absolute right-2 top-1.5 bottom-1.5 flex items-center justify-center rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-2.5 cursor-pointer disabled:opacity-50 transition"
+                  >
+                    <Zap size={12} className="fill-white" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[9px] text-[var(--muted)] font-bold">
+                    {200 - newMessageText.length} characters remaining
+                  </span>
+                  <span className="text-[9px] text-teal-400 font-black flex items-center gap-0.5">
+                    +5 XP (Daily: 3 max)
+                  </span>
+                </div>
+                {/* Quick Tags */}
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {["🔥 Heavy crowd", "🙌 Good vibes", "📍 Spot check", "🍿 Cinephiles", "🍻 Happy hour"].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setNewMessageText((prev) => (prev ? `${prev} ${tag}` : tag).slice(0, 200))}
+                      className="text-[9px] font-bold px-2 py-1 rounded bg-slate-800/40 hover:bg-slate-850 text-slate-300 transition"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </form>
+            ) : (
+              <div className="rounded-xl border border-[var(--border)] bg-slate-900/50 p-4 text-center space-y-2">
+                <p className="text-[11px] font-semibold text-[var(--muted)]">
+                  Log in to post real-time vibes and earn explorer XP!
+                </p>
+                <a
+                  href="/profile"
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-teal-500/20 bg-teal-500/10 hover:bg-teal-500/20 px-3 py-1.5 text-[10px] font-black text-teal-400 transition"
+                >
+                  Join Chat <ChevronRight size={10} />
+                </a>
+              </div>
+            )}
+
+            {/* Shoutout List */}
+            <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1 no-scrollbar select-none relative z-10">
+              {shoutboxLoading ? (
+                <div className="space-y-2 py-4 animate-pulse">
+                  <div className="h-10 bg-slate-800/25 rounded-lg w-full" />
+                  <div className="h-10 bg-slate-800/25 rounded-lg w-5/6" />
+                  <div className="h-10 bg-slate-800/25 rounded-lg w-full" />
+                </div>
+              ) : shoutboxMessages.length === 0 ? (
+                <div className="text-center py-12 text-[var(--muted)]">
+                  <MessageSquare size={24} className="mx-auto text-slate-700 mb-2" />
+                  <p className="text-xs font-bold">No updates yet</p>
+                  <p className="text-[10px] font-medium mt-0.5">Share what's going on in {selectedCity}!</p>
+                </div>
+              ) : (
+                shoutboxMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="flex flex-col gap-1 rounded-xl bg-slate-900/40 border border-white/5 p-3 hover:bg-slate-900/60 transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black text-slate-200 truncate flex items-center gap-1">
+                        <span className="text-[9px] font-black uppercase text-teal-400 bg-teal-500/10 px-1 rounded border border-teal-500/20 shrink-0">
+                          Lv.{msg.level}
+                        </span>
+                        {msg.userFullName}
+                      </span>
+                      <span className="text-[9px] text-[var(--muted)] font-semibold shrink-0">
+                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-medium break-words leading-relaxed select-text">
+                      {msg.text}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Place details modal popover */}
       {selectedPlace && (

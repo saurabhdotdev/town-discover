@@ -1,9 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import dynamic from "next/dynamic";
 import "./globals.css";
 import { BottomNavigation } from "@/components/common/BottomNavigation";
 import { AuthProvider } from "@/components/auth/AuthProvider";
-import { AiAssistant } from "@/components/common/AiAssistant";
-import { ServiceWorkerRegister } from "@/components/common/ServiceWorkerRegister";
+
+// Lazy-load non-critical layout components (code-split into separate chunks)
+const AiAssistant = dynamic(
+  () => import("@/components/common/AiAssistant").then((mod) => mod.AiAssistant)
+);
+const ServiceWorkerRegister = dynamic(
+  () => import("@/components/common/ServiceWorkerRegister").then((mod) => mod.ServiceWorkerRegister)
+);
 
 export const metadata: Metadata = {
   title: "Sheher | Indian City Discovery",
@@ -46,7 +53,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <AuthProvider>
           <ServiceWorkerRegister />
-          <main className="flex-1 pb-24 pt-14 md:pb-0 md:pt-16">{children}</main>
+          <main className="flex-1 w-full max-w-full overflow-x-hidden pb-24 pt-14 md:pb-0 md:pt-16">{children}</main>
           <BottomNavigation />
           <AiAssistant />
         </AuthProvider>

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Sparkles, Zap, Bell, Check, CreditCard, Lock, X } from "lucide-react";
+import { Shield, Sparkles, Zap, Bell, Check, CreditCard, Lock, X, TicketPercent } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 interface SheherPassCardProps {
@@ -71,7 +71,7 @@ export const SheherPassCard: React.FC<SheherPassCardProps> = ({ onSuccess }) => 
           <div className="space-y-1">
             <h2 className="text-xl font-black text-[var(--foreground)]">Unlock the Pulse of the City</h2>
             <p className="text-xs text-[var(--muted-strong)] font-semibold leading-relaxed">
-              Get notified of exclusive 50% discount flash deals launched near you in real-time.
+              A paid explorer membership for private deals, premium airport perks, and better weekend/event discovery.
             </p>
           </div>
 
@@ -81,19 +81,25 @@ export const SheherPassCard: React.FC<SheherPassCardProps> = ({ onSuccess }) => 
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">
                 <Bell size={11} />
               </span>
-              <span>Instant alerts for high-value 50% flash coupons</span>
+              <span>Instant alerts for high-value flash coupons near you</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">
+                <TicketPercent size={11} />
+              </span>
+              <span>Premium airport lounge, spa, and food coupon unlocks</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">
                 <Zap size={11} />
               </span>
-              <span>VIP priority filters for trending spots & event paths</span>
+              <span>Priority event picks and curated weekend plans</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">
                 <Shield size={11} />
               </span>
-              <span>Verified crowds & premium member badges</span>
+              <span>Premium member badge for future partner redemptions</span>
             </li>
           </ul>
 

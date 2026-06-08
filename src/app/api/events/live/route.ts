@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
-import { execSync } from "child_process";
 import { getCache, setCache } from "@/lib/redis";
-import { SupportedCityName } from "@/lib/pune-location";
+import { SupportedCityName, CITY_CENTERS } from "@/lib/pune-location";
 import { getTownEventsForCity } from "@/data/town-events";
+import { RateLimitError, serializeError } from "@/lib/server/api-errors";
+import { checkRateLimit } from "@/lib/server/rate-limit";
+import { getClientIp } from "@/lib/server/request-logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,13 +86,54 @@ const CATEGORY_IMAGES: Record<string, string> = {
   tech: "https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=600&h=420&fit=crop",
 };
 
+const liveEventsRateLimit = { max: 30, windowMs: 60_000 };
+const refreshEventsRateLimit = { max: 2, windowMs: 10 * 60_000 };
+const allowedCategories = new Set(["all", ...Object.keys(CATEGORY_IMAGES)]);
+
+const withHeaders = (response: Response, headers: Record<string, string>) => {
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value);
+  }
+  return response;
+};
+
 function getEventImage(category: string): string {
   return CATEGORY_IMAGES[category] ?? "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&h=420&fit=crop";
 }
 
 function generateLocalFallbackEvents(city: SupportedCityName): LiveEvent[] {
-  const cityCtx = CITY_CONTEXT[city];
-  if (!cityCtx) return [];
+  let cityCtx = CITY_CONTEXT[city];
+  if (!cityCtx) {
+    const center = CITY_CENTERS[city];
+    if (center) {
+      cityCtx = {
+        venues: [
+          `Grand Theater ${city}`,
+          `${city} Convention Centre`,
+          "Town Hall Arena",
+          "The Pavillion Cafe",
+          "Open Air Amphitheatre",
+          "Royal Club",
+          "Chamber of Commerce Hall",
+          "District Sports Complex"
+        ],
+        areas: [
+          "Downtown",
+          "Mall Road",
+          "Civil Lines",
+          "High Street",
+          "Sector 4",
+          "Kala Nagar",
+          "Lakefront",
+          "Station Road"
+        ],
+        lat: center.latitude,
+        lng: center.longitude,
+      };
+    } else {
+      return [];
+    }
+  }
 
   const categories: LiveEvent["category"][] = [
     "music", "music", "nightlife", "nightlife",
@@ -376,8 +419,22 @@ async function scrapeBookMyShowEvents(city: string): Promise<ScrapedBmsEvent[]> 
   const url = `https://in.bookmyshow.com/explore/events-${region}`;
   
   try {
-    const cmd = `curl -s -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "${url}"`;
-    const html = execSync(cmd, { maxBuffer: 10 * 1024 * 1024, timeout: 8000 }).toString();
+    const response = await fetch(url, {
+      cache: "no-store",
+      redirect: "follow",
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; SheherEvents/1.0)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`BookMyShow request failed for ${city}:`, response.status);
+      return [];
+    }
+
+    const html = await response.text();
     
     if (!html || html.length < 1000) {
       console.error(`Scraped html is empty or too short for ${city}`);
@@ -417,7 +474,7 @@ async function scrapeBookMyShowEvents(city: string): Promise<ScrapedBmsEvent[]> 
     
     return scrapedEvents;
   } catch (err) {
-    console.error(`Scraping BookMyShow failed for ${city} using curl:`, err);
+    console.error(`Fetching BookMyShow events failed for ${city}:`, err);
     return [];
   }
 }
@@ -576,14 +633,53 @@ Return ONLY the JSON array, no explanation.`;
 }
 
 export async function GET(request: NextRequest) {
+  let rateLimitHeaders: Record<string, string> = {};
+
   try {
     const cityParam = (request.nextUrl.searchParams.get("city") ?? "Pune") as SupportedCityName;
     const category = request.nextUrl.searchParams.get("category") ?? "all";
     const refresh = request.nextUrl.searchParams.get("refresh") === "true";
+    rateLimitHeaders = checkRateLimit(
+      getClientIp(request),
+      refresh ? "GET:/api/events/live:refresh" : "GET:/api/events/live",
+      refresh ? refreshEventsRateLimit : liveEventsRateLimit
+    );
 
-    const cityCtx = CITY_CONTEXT[cityParam];
+    let cityCtx = CITY_CONTEXT[cityParam];
     if (!cityCtx) {
-      return Response.json({ error: `City "${cityParam}" not supported` }, { status: 400 });
+      const center = CITY_CENTERS[cityParam];
+      if (center) {
+        cityCtx = {
+          venues: [
+            `Grand Theater ${cityParam}`,
+            `${cityParam} Convention Centre`,
+            "Town Hall Arena",
+            "The Pavillion Cafe",
+            "Open Air Amphitheatre",
+            "Royal Club",
+            "Chamber of Commerce Hall",
+            "District Sports Complex"
+          ],
+          areas: [
+            "Downtown",
+            "Mall Road",
+            "Civil Lines",
+            "High Street",
+            "Sector 4",
+            "Kala Nagar",
+            "Lakefront",
+            "Station Road"
+          ],
+          lat: center.latitude,
+          lng: center.longitude,
+        };
+      } else {
+        return withHeaders(Response.json({ error: "Unsupported city." }, { status: 400 }), rateLimitHeaders);
+      }
+    }
+
+    if (!allowedCategories.has(category)) {
+      return withHeaders(Response.json({ error: "Unsupported event category." }, { status: 400 }), rateLimitHeaders);
     }
 
     const cacheKey = `live-events:${cityParam.toLowerCase()}:v2`;
@@ -636,15 +732,27 @@ export async function GET(request: NextRequest) {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
-    return Response.json({
-      city: cityParam,
-      category,
-      count: sorted.length,
-      events: sorted,
-      generatedAt: new Date().toISOString(),
+    return withHeaders(
+      Response.json({
+        city: cityParam,
+        category,
+        count: sorted.length,
+        events: sorted,
+        generatedAt: new Date().toISOString(),
+      }),
+      rateLimitHeaders
+    );
+  } catch (error) {
+    const { status, body } = serializeError(error);
+    if (status >= 500) {
+      console.error("Live events error:", error instanceof Error ? error.message : error);
+    }
+    if (error instanceof RateLimitError) {
+      rateLimitHeaders["Retry-After"] = String(error.retryAfterSeconds);
+    }
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json", ...rateLimitHeaders },
     });
-  } catch (error: any) {
-    console.error("Live events error:", error);
-    return Response.json({ error: error.message ?? "Failed to generate events" }, { status: 500 });
   }
 }

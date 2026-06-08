@@ -1,6 +1,49 @@
 import { UserLocation } from "@/types";
 
-export type SupportedCityName = "Pune" | "Mumbai" | "Kolhapur" | "Nashik" | "Bangalore" | "Chennai" | "Delhi" | "CherryHill" | "Hyderabad" | "Kolkata" | "Ahmedabad" | "Jaipur" | "Lucknow" | "Kochi" | "Panaji" | "Chandigarh" | "Udaipur" | "Agra" | "Varanasi" | "Amritsar" | "Surat" | "Patna" | "Bhubaneswar" | "Visakhapatnam" | "Indore" | "Nagpur" | "Guwahati" | "Coimbatore" | "Mysore" | "Dehradun" | "Shimla" | "Srinagar" | "Pondicherry";
+export type SupportedCityName =
+  | "Pune"
+  | "Mumbai"
+  | "Kolhapur"
+  | "Nashik"
+  | "Bangalore"
+  | "Chennai"
+  | "Delhi"
+  | "CherryHill"
+  | "Hyderabad"
+  | "Kolkata"
+  | "Ahmedabad"
+  | "Jaipur"
+  | "Lucknow"
+  | "Kochi"
+  | "Panaji"
+  | "Chandigarh"
+  | "Udaipur"
+  | "Agra"
+  | "Varanasi"
+  | "Amritsar"
+  | "Surat"
+  | "Patna"
+  | "Bhubaneswar"
+  | "Visakhapatnam"
+  | "Indore"
+  | "Nagpur"
+  | "Guwahati"
+  | "Coimbatore"
+  | "Mysore"
+  | "Dehradun"
+  | "Shimla"
+  | "Srinagar"
+  | "Pondicherry"
+  | "Hubli"
+  | "Dharwad"
+  | "PCMC"
+  | "Ujjain"
+  | "Secunderabad"
+  | "HubliDharwad"
+  | "PunePCMC"
+  | "BangaloreMysore"
+  | "IndoreUjjain"
+  | "HyderabadSecunderabad";
 
 export const PUNE_CENTER: UserLocation = {
   latitude: 18.5204,
@@ -42,6 +85,17 @@ export const CITY_CENTERS: Record<SupportedCityName, UserLocation> = {
   Shimla: { latitude: 31.1048, longitude: 77.1734, accuracy: 50 },
   Srinagar: { latitude: 34.0837, longitude: 74.7973, accuracy: 50 },
   Pondicherry: { latitude: 11.9416, longitude: 79.8083, accuracy: 50 },
+  Hubli: { latitude: 15.3647, longitude: 75.1240, accuracy: 50 },
+  Dharwad: { latitude: 15.4589, longitude: 75.0078, accuracy: 50 },
+  PCMC: { latitude: 18.6298, longitude: 73.7997, accuracy: 50 },
+  Ujjain: { latitude: 23.1765, longitude: 75.7885, accuracy: 50 },
+  Secunderabad: { latitude: 17.4399, longitude: 78.4983, accuracy: 50 },
+  // Twin Cities (centroids)
+  HubliDharwad: { latitude: 15.4118, longitude: 75.0659, accuracy: 50 },
+  PunePCMC: { latitude: 18.5751, longitude: 73.8282, accuracy: 50 },
+  BangaloreMysore: { latitude: 12.6337, longitude: 77.1170, accuracy: 50 },
+  IndoreUjjain: { latitude: 22.9478, longitude: 75.8231, accuracy: 50 },
+  HyderabadSecunderabad: { latitude: 17.4125, longitude: 78.4925, accuracy: 50 },
 };
 
 export const CITY_BOUNDS: Record<
@@ -86,9 +140,127 @@ export const CITY_BOUNDS: Record<
   Shimla: { minLatitude: 30.90, maxLatitude: 31.30, minLongitude: 76.97, maxLongitude: 77.37 },
   Srinagar: { minLatitude: 33.88, maxLatitude: 34.28, minLongitude: 74.59, maxLongitude: 74.99 },
   Pondicherry: { minLatitude: 11.74, maxLatitude: 12.14, minLongitude: 79.60, maxLongitude: 80.00 },
+  Hubli: { minLatitude: 15.26, maxLatitude: 15.47, minLongitude: 75.02, maxLongitude: 75.22 },
+  Dharwad: { minLatitude: 15.35, maxLatitude: 15.56, minLongitude: 74.90, maxLongitude: 75.11 },
+  PCMC: { minLatitude: 18.54, maxLatitude: 18.72, minLongitude: 73.70, maxLongitude: 73.91 },
+  Ujjain: { minLatitude: 23.07, maxLatitude: 23.28, minLongitude: 75.68, maxLongitude: 75.90 },
+  Secunderabad: { minLatitude: 17.36, maxLatitude: 17.52, minLongitude: 78.41, maxLongitude: 78.58 },
+  // Twin Cities (merged bounds)
+  HubliDharwad: { minLatitude: 15.30, maxLatitude: 15.52, minLongitude: 74.95, maxLongitude: 75.20 },
+  PunePCMC: { minLatitude: 18.40, maxLatitude: 18.72, minLongitude: 73.65, maxLongitude: 74.05 },
+  BangaloreMysore: { minLatitude: 12.09, maxLatitude: 13.20, minLongitude: 76.43, maxLongitude: 77.85 },
+  IndoreUjjain: { minLatitude: 22.50, maxLatitude: 23.30, minLongitude: 75.60, maxLongitude: 76.10 },
+  HyderabadSecunderabad: { minLatitude: 17.18, maxLatitude: 17.60, minLongitude: 78.28, maxLongitude: 78.70 },
 };
 
 export const SUPPORTED_CITY_NAMES = Object.keys(CITY_CENTERS) as SupportedCityName[];
+
+export const CITY_DISPLAY_NAMES: Record<SupportedCityName, string> = {
+  Pune: "Pune",
+  Mumbai: "Mumbai",
+  Kolhapur: "Kolhapur",
+  Nashik: "Nashik",
+  Bangalore: "Bangalore",
+  Chennai: "Chennai",
+  CherryHill: "Cherry Hill",
+  Delhi: "Delhi",
+  Hyderabad: "Hyderabad",
+  Kolkata: "Kolkata",
+  Ahmedabad: "Ahmedabad",
+  Jaipur: "Jaipur",
+  Lucknow: "Lucknow",
+  Kochi: "Kochi",
+  Panaji: "Panaji",
+  Chandigarh: "Chandigarh",
+  Udaipur: "Udaipur",
+  Agra: "Agra",
+  Varanasi: "Varanasi",
+  Amritsar: "Amritsar",
+  Surat: "Surat",
+  Patna: "Patna",
+  Bhubaneswar: "Bhubaneswar",
+  Visakhapatnam: "Visakhapatnam",
+  Indore: "Indore",
+  Nagpur: "Nagpur",
+  Guwahati: "Guwahati",
+  Coimbatore: "Coimbatore",
+  Mysore: "Mysore",
+  Dehradun: "Dehradun",
+  Shimla: "Shimla",
+  Srinagar: "Srinagar",
+  Pondicherry: "Pondicherry",
+  Hubli: "Hubli",
+  Dharwad: "Dharwad",
+  PCMC: "PCMC",
+  Ujjain: "Ujjain",
+  Secunderabad: "Secunderabad",
+  HubliDharwad: "Hubli · Dharwad",
+  PunePCMC: "Pune · PCMC",
+  BangaloreMysore: "Bangalore · Mysore",
+  IndoreUjjain: "Indore · Ujjain",
+  HyderabadSecunderabad: "Hyderabad · Secunderabad",
+};
+
+export interface CityGroup {
+  id: string;
+  name: string;
+  emoji: string;
+  cities: SupportedCityName[];
+}
+
+export const CITY_GROUPS: CityGroup[] = [
+  {
+    id: "twinSingles",
+    name: "Twin City Singles",
+    emoji: "🏙",
+    cities: ["Hubli", "Dharwad", "Pune", "PCMC", "Bangalore", "Mysore", "Indore", "Ujjain", "Hyderabad", "Secunderabad"]
+  },
+  {
+    id: "twins",
+    name: "Twin & Satellite Cities",
+    emoji: "🔀",
+    cities: ["HubliDharwad", "PunePCMC", "BangaloreMysore", "IndoreUjjain", "HyderabadSecunderabad"]
+  },
+  {
+    id: "metros",
+    name: "Metros",
+    emoji: "🏙️",
+    cities: ["Delhi", "Mumbai", "Bangalore", "Chennai", "Kolkata", "Hyderabad", "Pune"]
+  },
+  {
+    id: "heritage",
+    name: "Heritage & Cultural",
+    emoji: "🏰",
+    cities: ["Jaipur", "Udaipur", "Agra", "Varanasi", "Amritsar", "Lucknow", "Kolhapur", "Patna"]
+  },
+  {
+    id: "coastal",
+    name: "Coastal & Escapes",
+    emoji: "🏖️",
+    cities: ["Panaji", "Kochi", "Pondicherry", "Visakhapatnam"]
+  },
+  {
+    id: "others",
+    name: "Other Major Towns",
+    emoji: "🏢",
+    cities: [
+      "Ahmedabad",
+      "Nashik",
+      "Chandigarh",
+      "Surat",
+      "Bhubaneswar",
+      "Indore",
+      "Nagpur",
+      "Guwahati",
+      "Coimbatore",
+      "Mysore",
+      "Dehradun",
+      "Shimla",
+      "Srinagar",
+      "CherryHill"
+    ]
+  }
+];
 
 const CITY_ALIASES: Record<SupportedCityName, string[]> = {
   Pune: ["pune"],
@@ -97,8 +269,8 @@ const CITY_ALIASES: Record<SupportedCityName, string[]> = {
   Nashik: ["nashik", "nasik"],
   Bangalore: ["bangalore", "bengaluru", "blr"],
   Chennai: ["chennai", "madras"],
-  Delhi: ["delhi", "new delhi", "ncr", "noida", "gurgaon"],
   CherryHill: ["cherryhill", "cherry hill"],
+  Delhi: ["delhi", "new delhi", "ncr", "noida", "gurgaon"],
   Hyderabad: ["hyderabad", "hyd"],
   Kolkata: ["kolkata", "calcutta", "ccu"],
   Ahmedabad: ["ahmedabad", "amd"],
@@ -124,6 +296,16 @@ const CITY_ALIASES: Record<SupportedCityName, string[]> = {
   Shimla: ["shimla", "slm"],
   Srinagar: ["srinagar", "sxr"],
   Pondicherry: ["pondicherry", "puducherry", "pny"],
+  Hubli: ["hubli", "hubballi", "hbl"],
+  Dharwad: ["dharwad", "dharwar"],
+  PCMC: ["pcmc", "pimpri", "chinchwad", "pimpri chinchwad"],
+  Ujjain: ["ujjain"],
+  Secunderabad: ["secunderabad"],
+  HubliDharwad: ["hubli", "dharwad", "hubli dharwad", "hubli-dharwad", "hubli dharwar", "hbl"],
+  PunePCMC: ["pcmc", "pimpri", "chinchwad", "pune pcmc", "pune-pcmc"],
+  BangaloreMysore: ["bangalore mysore", "bangalore-mysore", "mysuru corridor"],
+  IndoreUjjain: ["indore ujjain", "indore-ujjain", "ujjain"],
+  HyderabadSecunderabad: ["secunderabad", "hyderabad secunderabad", "hyderabad-secunderabad"],
 };
 
 export const getCityFromQuery = (query: string): SupportedCityName | null => {

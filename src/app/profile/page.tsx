@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Bell, Bookmark, ChevronRight, Compass, Lock, LogOut, Mail, MapPin, Shield, Sparkles, Star, User, Folder, Plus, X, Check, Trash2 } from "lucide-react";
+import { Bell, Bookmark, ChevronRight, Compass, Lock, LogOut, Mail, MapPin, Radio, Shield, Sparkles, Star, User, Folder, Plus, X, Check, Trash2 } from "lucide-react";
 import { Header } from "@/components/common/Header";
-import { getPlacesWithDistance } from "@/data/mock-places";
+import { BrandMark } from "@/components/common/BrandMark";
+import Link from "next/link";
+import { getPlacesWithDistance, MOCK_PLACES } from "@/data/mock-places";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { Place } from "@/types";
 import { formatDistance, formatPlaceArea, getCategoryLabel, getInitials } from "@/lib/utils";
@@ -18,6 +20,47 @@ import { XPProgressBar } from "@/components/profile/XPProgressBar";
 import { clearOnboarding } from "@/hooks/useOnboarding";
 import { SheherPassCard } from "@/components/profile/SheherPassCard";
 import { useRouter } from "next/navigation";
+import { ExplorerPassport } from "@/components/profile/ExplorerPassport";
+import { AffiliateOffersCard } from "@/components/profile/AffiliateOffersCard";
+
+interface PrivateDiscoveryBrief {
+  summary: {
+    savedCount: number;
+    collectionCount: number;
+    primaryCity: string;
+    primaryCategory: string | null;
+    isPremium: boolean;
+    privacy: string;
+  };
+  insights: string[];
+  quickPicks: Array<{
+    id: string;
+    title: string;
+    category: Place["category"];
+    city: string;
+    locality: string;
+    rating: number;
+    priceRange: string;
+    image: string;
+    reason: string;
+    privateSignal: string;
+  }>;
+  premiumUnlocks: Array<{
+    id: string;
+    title: string;
+    category: Place["category"];
+    city: string;
+    locality: string;
+    rating: number;
+    priceRange: string;
+    image: string;
+    reason: string;
+    privateSignal: string;
+  }>;
+  nextMoves: string[];
+}
+
+const MOCK_PLACES_BY_ID = new Map(MOCK_PLACES.map((place) => [place.id, place]));
 
 export default function ProfilePage() {
   const { location } = useGeolocation();
@@ -25,7 +68,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [privateMode, setPrivateMode] = useState(false);
+  const [privateMode, setPrivateMode] = useState(true);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -36,9 +79,12 @@ export default function ProfilePage() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [errorSuggestions, setErrorSuggestions] = useState("");
+  const [privateBrief, setPrivateBrief] = useState<PrivateDiscoveryBrief | null>(null);
+  const [privateBriefLoading, setPrivateBriefLoading] = useState(false);
+  const [privateBriefError, setPrivateBriefError] = useState("");
     const [newSuggestion, setNewSuggestion] = useState("");
     const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
-  const { stats: gamificationStats } = useBadges(!!user);
+  const { stats: gamificationStats, refresh: refreshGamificationStats } = useBadges(!!user);
 
   // Admin Management Modal states
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -64,6 +110,28 @@ export default function ProfilePage() {
   );
   const savedCities = useMemo(() => Array.from(new Set(savedPlaces.map((place) => place.city))), [savedPlaces]);
   const topSavedCity = savedCities[0] ?? "No city yet";
+  const privatePickPlaces = useMemo(() => {
+    if (!privateBrief) return [];
+    return privateBrief.quickPicks
+      .map((pick) => MOCK_PLACES_BY_ID.get(pick.id))
+      .filter((place): place is Place => Boolean(place));
+  }, [privateBrief]);
+
+  const fetchPrivateBrief = async () => {
+    if (!user) return;
+    setPrivateBriefLoading(true);
+    setPrivateBriefError("");
+    try {
+      const response = await fetch("/api/private-discovery", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error?.message ?? data.error ?? "Unable to build private discovery.");
+      setPrivateBrief(data);
+    } catch (err) {
+      setPrivateBriefError(err instanceof Error ? err.message : "Unable to build private discovery.");
+    } finally {
+      setPrivateBriefLoading(false);
+    }
+  };
 
   const fetchFolders = async () => {
     try {
@@ -82,6 +150,17 @@ export default function ProfilePage() {
       fetchFolders();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !privateMode) {
+      setPrivateBrief(null);
+      setPrivateBriefError("");
+      return;
+    }
+
+    fetchPrivateBrief();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, privateMode, rawSavedPlaces.length, folders.length]);
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,7 +353,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[var(--background)] pb-8 text-[var(--foreground)]">
+      <div className="w-full max-w-full min-h-screen overflow-x-hidden bg-[var(--background)] pb-8 text-[var(--foreground)]">
         {authRequiredMessage ? (
           <Header eyebrow="Profile" title="Explorer Profile" subtitle={authRequiredMessage} showLocation={false} />
         ) : mode === "signup" ? (
@@ -366,15 +445,33 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pb-8 text-[var(--foreground)]">
-      <Header eyebrow="Profile" title="Sheher Explorer Profile" subtitle="Saved places, collections, and your account overview." showLocation={false} />
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden bg-[var(--background)] pb-8 text-[var(--foreground)]">
+      <header className="relative z-10 border-b border-[var(--border)] bg-[var(--nav)]/80 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-2 px-3 py-2.5 sm:px-4 md:px-6 md:py-3">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--fresh)]">
+            <Radio size={13} />
+            Profile
+          </div>
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <BrandMark size="md" showWordmark={false} />
+            <div className="min-w-0">
+              <h1 className="text-xl font-black leading-tight tracking-tight text-[var(--foreground)] sm:text-2xl md:text-3xl">
+                Sheher Explorer Profile
+              </h1>
+              <p className="mt-0.5 max-w-2xl text-xs leading-5 text-[var(--muted)] sm:text-sm">
+                Saved places, collections, and your account overview.
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      <div className="mx-auto grid max-w-screen-xl gap-6 px-3 py-4 sm:px-4 md:grid-cols-[280px_minmax(0,1fr)] md:px-6 md:py-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="w-full max-w-screen-xl mx-auto grid gap-6 px-3 py-3 sm:px-4 md:grid-cols-[280px_minmax(0,1fr)] md:px-6 md:py-4 xl:grid-cols-[320px_minmax(0,1fr)]">
         <motion.aside
           initial={{ opacity: 0, x: -18 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.42 }}
-          className="space-y-5"
+          className="min-w-0 space-y-5"
         >
           <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5">
             <div className="flex items-center gap-3.5">
@@ -397,7 +494,7 @@ export default function ProfilePage() {
                 { label: "Cities", value: savedCities.length.toString() },
               ].map((stat) => (
                 <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-2 text-center sm:p-3">
-                  <p className="text-lg font-black text-[var(--foreground)] sm:text-xl">{stat.value}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl font-black text-[var(--foreground)] truncate px-0.5">{stat.value}</p>
                   <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">{stat.label}</p>
                 </div>
               ))}
@@ -489,9 +586,186 @@ export default function ProfilePage() {
           </div>
 
           <SheherPassCard />
+          <AffiliateOffersCard />
         </motion.aside>
 
-        <main className="space-y-5">
+        <main className="min-w-0 space-y-5">
+          <motion.section
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.42, delay: 0.03 }}
+            className="rounded-lg border border-teal-300/20 bg-[var(--panel)] p-4 sm:p-5"
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-teal-200">
+                  <Lock size={13} />
+                  Private Discovery
+                </p>
+                <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">
+                  Your Personal City Brief
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[var(--muted)]">
+                  {privateMode
+                    ? privateBrief?.summary.privacy ?? "Computed privately from your saved places and collections."
+                    : "Turn this on to see picks shaped by your saved places and collections."}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPrivateMode((current) => !current)}
+                  className={`inline-flex h-10 items-center justify-center rounded-lg px-3 text-xs font-black transition ${
+                    privateMode
+                      ? "bg-teal-300 text-slate-950"
+                      : "border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)]"
+                  }`}
+                >
+                  {privateMode ? "Private On" : "Turn On"}
+                </button>
+                {privateMode && (
+                  <button
+                    type="button"
+                    onClick={fetchPrivateBrief}
+                    disabled={privateBriefLoading}
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)] disabled:opacity-50"
+                  >
+                    {privateBriefLoading ? "Updating..." : "Refresh"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!privateMode ? (
+              <div className="mt-5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-sm font-semibold text-[var(--muted)]">
+                Private discovery is paused. Your saved places still stay in your account.
+              </div>
+            ) : privateBriefLoading && !privateBrief ? (
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-32 animate-pulse rounded-lg bg-[var(--panel-soft)]" />
+                ))}
+              </div>
+            ) : privateBriefError ? (
+              <div className="mt-5 rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-sm font-semibold text-rose-200">
+                {privateBriefError}
+              </div>
+            ) : privateBrief ? (
+              <div className="mt-5 space-y-5">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { label: "Saved signal", value: privateBrief.summary.savedCount.toString() },
+                    { label: "Collections", value: privateBrief.summary.collectionCount.toString() },
+                    { label: "Best city", value: privateBrief.summary.primaryCity },
+                  ].map((stat) => (
+                    <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+                      <p className="truncate text-lg font-black text-[var(--foreground)]">{stat.value}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[1fr_0.78fr]">
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-black text-[var(--foreground)]">Private picks to try next</h3>
+                      <Link href="/discover" className="inline-flex items-center gap-1 text-xs font-black text-teal-300">
+                        Discover
+                        <ChevronRight size={14} />
+                      </Link>
+                    </div>
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {privatePickPlaces.length > 0 ? (
+                        privateBrief.quickPicks.map((pick) => {
+                          const place = MOCK_PLACES_BY_ID.get(pick.id);
+                          if (!place) return null;
+
+                          return (
+                            <button
+                              key={pick.id}
+                              type="button"
+                              onClick={() => setSelectedPlace(place)}
+                              className="group grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 text-left transition hover:border-teal-300/40"
+                            >
+                              <div className="relative h-20 overflow-hidden rounded-md bg-slate-900">
+                                <Image
+                                  src={place.image}
+                                  alt={place.title}
+                                  fill
+                                  sizes="72px"
+                                  className="object-cover transition duration-500 group-hover:scale-105"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+                                  {getCategoryLabel(place.category)}
+                                </p>
+                                <h4 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{pick.title}</h4>
+                                <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--muted)]">{pick.reason}</p>
+                                <p className="mt-1 flex items-center gap-2 text-[11px] font-bold text-[var(--muted-strong)]">
+                                  <MapPin size={11} className="text-cyan-300" />
+                                  {pick.locality}
+                                  <Star size={11} className="fill-yellow-300 text-yellow-300" />
+                                  {pick.rating}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-sm font-semibold text-[var(--muted)] xl:col-span-2">
+                          Save a few places first and this will become a personal shortlist.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                      <h3 className="text-sm font-black text-[var(--foreground)]">Signals</h3>
+                      <div className="mt-3 space-y-2">
+                        {privateBrief.insights.map((insight) => (
+                          <p key={insight} className="rounded-md bg-[var(--panel)] px-3 py-2 text-xs font-semibold leading-5 text-[var(--muted-strong)]">
+                            {insight}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-amber-300/20 bg-amber-300/8 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-black text-[var(--foreground)]">Explorer Pass value</h3>
+                        {!user.isPremiumPass && <Lock size={15} className="text-amber-300" />}
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {privateBrief.premiumUnlocks.slice(0, 2).map((pick) => (
+                          <div key={pick.id} className="rounded-md border border-amber-300/10 bg-[var(--panel)] p-3">
+                            <p className="text-xs font-black text-amber-200">{pick.title}</p>
+                            <p className="mt-1 text-[11px] font-semibold leading-5 text-[var(--muted)]">
+                              {user.isPremiumPass ? pick.privateSignal : "Hidden matching reason, deal readiness, and extended shortlist."}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                      <h3 className="text-sm font-black text-[var(--foreground)]">Next moves</h3>
+                      <div className="mt-3 space-y-2">
+                        {privateBrief.nextMoves.map((move) => (
+                          <p key={move} className="flex gap-2 text-xs font-semibold leading-5 text-[var(--muted-strong)]">
+                            <Sparkles size={13} className="mt-0.5 shrink-0 text-teal-300" />
+                            {move}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </motion.section>
+
           <motion.section
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
@@ -499,7 +773,7 @@ export default function ProfilePage() {
             className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Saved collection</p>
                 <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Places To Try Next</h2>
               </div>
@@ -581,7 +855,7 @@ export default function ProfilePage() {
               </div>
             )}
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="mt-5 grid gap-3 xl:grid-cols-2">
               {displayedSavedPlaces.length > 0 ? displayedSavedPlaces.map((place) => (
                 <div
                   key={place.id}
@@ -725,8 +999,27 @@ export default function ProfilePage() {
                   </AnimatePresence>
                 </div>
               )) : (
-                <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-sm font-semibold text-[var(--muted)] md:col-span-2">
-                  No saved places found. Browse the home or discover page and tap the bookmark on any card.
+                <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-center text-sm font-semibold text-[var(--muted)] xl:col-span-2">
+                  <Bookmark size={28} className="mx-auto mb-3 text-teal-300" />
+                  <p className="text-base font-black text-[var(--foreground)]">No saved places yet</p>
+                  <p className="mx-auto mt-1 max-w-sm">Start a shortlist from Discover, then group your favorite spots into collections.</p>
+                  <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+                    <Link
+                      href="/discover"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-[var(--primary-foreground)]"
+                    >
+                      <Compass size={14} />
+                      Explore Places
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateFolderModal(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-xs font-black text-[var(--foreground)]"
+                    >
+                      <Plus size={14} />
+                      Create Collection
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -822,6 +1115,23 @@ export default function ProfilePage() {
               </div>
             )}
           </motion.section>
+
+          {/* ── Explorer Passport & City Stamps ── */}
+          {user && (
+            <motion.section
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.42, delay: 0.14 }}
+            >
+              <ExplorerPassport
+                savedPlaces={rawSavedPlaces}
+                onStampClaimed={() => {
+                  refreshGamificationStats();
+                  window.dispatchEvent(new Event("sheher:refresh-badges"));
+                }}
+              />
+            </motion.section>
+          )}
 
           {user?.role === "super_admin" && (
             <motion.section
@@ -969,7 +1279,7 @@ export default function ProfilePage() {
       {/* Create Folder Modal */}
       <AnimatePresence>
         {showCreateFolderModal && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-8 backdrop-blur-sm sm:items-center">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1016,7 +1326,7 @@ export default function ProfilePage() {
       {/* Super Admin Management Modal */}
       <AnimatePresence>
         {showAdminModal && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-8 backdrop-blur-sm sm:items-center">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}

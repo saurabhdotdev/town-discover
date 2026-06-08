@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import {
   CalendarDays,
   ChevronRight,
@@ -22,11 +23,9 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { DiscoverySection } from "@/components/cards/DiscoverySection";
-import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
-import { VibeRadar } from "@/components/common/VibeRadar";
 import { getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
@@ -43,9 +42,22 @@ import { getMoodLabel, getTopMoodRecommendations, inferMoodProfile, getMoodMatch
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { filterAndRankPlaces } from "@/lib/place-search";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { OnboardingModal } from "@/components/common/OnboardingModal";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
+
+// Lazy-load heavy components that are interaction-triggered or below the fold
+const PlaceDetailModal = dynamic(
+  () => import("@/components/cards/PlaceDetailModal").then((mod) => mod.PlaceDetailModal),
+  { ssr: false }
+);
+const OnboardingModal = dynamic(
+  () => import("@/components/common/OnboardingModal").then((mod) => mod.OnboardingModal),
+  { ssr: false }
+);
+const VibeRadar = dynamic(
+  () => import("@/components/common/VibeRadar").then((mod) => mod.VibeRadar),
+  { ssr: false }
+);
 
 type HomeFilter = "all" | "trending" | "open" | "street-food" | "ice-cream" | PlaceCategory;
 
@@ -765,13 +777,13 @@ export default function Home() {
     "bg-teal-500/10 text-teal-400";
 
   return (
-    <div className="min-h-screen">
-      <section className="mx-auto grid max-w-screen-xl gap-5 px-3 py-4 sm:px-4 md:min-h-[calc(100vh-5rem)] md:grid-cols-[minmax(0,1fr)_380px] md:px-6 md:py-10">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
+      <section className="w-full max-w-screen-xl mx-auto grid gap-5 px-3 py-4 sm:px-4 md:min-h-[calc(100vh-5rem)] lg:grid-cols-[minmax(0,1fr)_380px] md:grid-cols-[minmax(0,1fr)_320px] md:px-6 md:py-10">
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col justify-center gap-5 pt-3 md:gap-6 md:pt-0"
+          className="flex flex-col gap-5 pt-3 md:gap-6 md:pt-0 w-full min-w-0"
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -867,12 +879,28 @@ export default function Home() {
               { label: "Top Picks", value: allPlaces.filter((place) => place.isTrending).length.toString() },
               { label: "Near You", value: nearbyPlaces.length.toString() },
             ].map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 sm:p-4">
+              <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-2 sm:p-4 text-center sm:text-left">
                 <p className="text-xl font-black text-[var(--foreground)] sm:text-2xl">{stat.value}</p>
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] sm:text-xs sm:tracking-[0.14em]">{stat.label}</p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] sm:text-xs sm:tracking-[0.14em] truncate">{stat.label}</p>
               </div>
             ))}
           </div>
+
+          <Link
+            href="/trips"
+            className="flex items-center justify-between rounded-xl border border-teal-500/25 bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-transparent px-4 py-3 sm:px-5 sm:py-4 transition-all duration-300 hover:-translate-y-1 hover:border-teal-400/50 hover:from-teal-500/10 hover:to-cyan-500/10 hover:shadow-[0_8px_30px_rgba(20,184,166,0.12)]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-400">
+                <Sparkles size={18} className="animate-pulse" />
+              </div>
+              <div className="text-left min-w-0">
+                <p className="text-sm font-black text-[var(--foreground)]">Twin-City Route Planner 🔀</p>
+                <p className="text-[10px] sm:text-xs font-semibold text-[var(--muted)] truncate">Itinerary builder for Hubli-Dharwad, Pune-PCMC, Bangalore-Mysore...</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-teal-400" />
+          </Link>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
@@ -899,458 +927,20 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Spontaneous City Planner Widget */}
-          <div className={`app-surface rounded-lg p-5 border transition-all duration-300 bg-[var(--panel-soft)] relative overflow-hidden group shadow-lg ${themeGlowClass}`}>
-            {/* Ambient subtle glowing borders/backgrounds */}
-            <div className="absolute top-0 right-0 h-40 w-40 bg-teal-500/10 rounded-full blur-3xl pointer-events-none transition duration-500 group-hover:bg-teal-500/15" />
-            <div className="absolute bottom-0 left-0 h-40 w-40 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none transition duration-500 group-hover:bg-cyan-500/15" />
-
-            <div className="flex items-center gap-2.5 mb-4 relative z-10">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-300 ${themeIconBg}`}>
-                <Compass size={18} className="animate-pulse" />
-              </div>
-              <div className="text-left">
-                <h3 className="text-base font-black text-[var(--foreground)]">Spontaneous City Planner</h3>
-                <p className="text-[11px] font-semibold text-[var(--muted)]">Plan routes or explore local hubs within your time budget</p>
-              </div>
-            </div>
-
-            {/* Tab Selector */}
-            <div className="flex border-b border-white/5 mb-4 relative z-10">
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePlannerTab("route");
-                  setWidgetPreviewStops(null);
-                  setWidgetPreviewStats(null);
-                }}
-                className={`flex-1 pb-2.5 text-xs font-black uppercase tracking-wider text-center border-b-2 transition duration-200 cursor-pointer ${
-                  activePlannerTab === "route"
-                    ? "border-teal-400 text-teal-300 font-black"
-                    : "border-transparent text-[var(--muted)] hover:text-slate-200"
-                }`}
-              >
-                🗺️ Route Path
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePlannerTab("area");
-                  setAreaPlanStops(null);
-                }}
-                className={`flex-1 pb-2.5 text-xs font-black uppercase tracking-wider text-center border-b-2 transition duration-200 cursor-pointer ${
-                  activePlannerTab === "area"
-                    ? "border-teal-400 text-teal-300 font-black"
-                    : "border-transparent text-[var(--muted)] hover:text-slate-200"
-                }`}
-              >
-                ⏱️ Area Layover Plan
-              </button>
-            </div>
-
-            <div className="space-y-4 relative z-10">
-              {/* TAB 1: ROUTE PATH PLANNER */}
-              {activePlannerTab === "route" && (
-                <div className="space-y-4 animate-fade-in text-left">
-                  {/* Row 1: Start Location Selector */}
-                  <div>
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      1. Starting Point
-                    </span>
-                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1 mb-2">
-                      {[
-                        { id: "random", label: "Random Spot" },
-                        { id: "geo", label: "My Location" },
-                        { id: "place", label: "Select Spot" },
-                      ].map((mode) => {
-                        const active = widgetStartMode === mode.id;
-                        return (
-                          <button
-                            key={mode.id}
-                            type="button"
-                            onClick={() => {
-                              setWidgetStartMode(mode.id as any);
-                              setWidgetPreviewStops(null);
-                              setWidgetPreviewStats(null);
-                            }}
-                            className={`rounded-lg py-1.5 px-2 text-[11px] font-black transition duration-205 cursor-pointer ${
-                              active
-                                ? "bg-teal-400 text-slate-950 shadow-md"
-                                : "text-slate-400 hover:text-white"
-                            }`}
-                          >
-                            {mode.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {widgetStartMode === "place" && (
-                      <div className="relative z-30 animate-fade-in">
-                        <input
-                          type="text"
-                          placeholder="Type a spot name (e.g. Zen Cafe)..."
-                          value={widgetSearchQuery}
-                          onChange={(e) => {
-                            setWidgetSearchQuery(e.target.value);
-                            setWidgetSearchFocused(true);
-                          }}
-                          onFocus={() => setWidgetSearchFocused(true)}
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3.5 py-2.5 text-xs font-semibold text-[var(--foreground)] outline-none focus:border-teal-300"
-                        />
-                        {widgetSearchFocused && (
-                          <>
-                            <div 
-                              className="fixed inset-0 z-10" 
-                              onClick={() => setWidgetSearchFocused(false)} 
-                            />
-                            <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl z-20 no-scrollbar divide-y divide-white/5">
-                              {filteredAutocompletePlaces.length > 0 ? (
-                                filteredAutocompletePlaces.map((p) => (
-                                  <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setWidgetStartPlaceId(p.id);
-                                      setWidgetSearchQuery(p.title);
-                                      setWidgetSearchFocused(false);
-                                      setWidgetPreviewStops(null);
-                                      setWidgetPreviewStats(null);
-                                    }}
-                                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold hover:bg-white/5 transition duration-150 flex items-center justify-between cursor-pointer"
-                                  >
-                                    <div className="text-left">
-                                      <span className="block font-black text-white">{p.title}</span>
-                                      <span className="block text-[10px] text-slate-400 font-medium">{p.locality}</span>
-                                    </div>
-                                    <span className="text-[9px] font-black text-teal-400 bg-teal-400/10 px-1.5 py-0.5 rounded">
-                                      {getCategoryLabel(p.category)}
-                                    </span>
-                                  </button>
-                                ))
-                              ) : (
-                                <div className="px-3.5 py-3 text-xs text-[var(--muted-strong)] font-semibold italic text-center">
-                                  No matching spots found in this city.
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {widgetStartMode === "geo" && !location && (
-                      <p className="text-[10px] text-amber-300 font-semibold mt-1">
-                        ⚠️ GPS location not available. We will use a random popular spot as fallback.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Row 2: Vibe Selector */}
-                  <div>
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      2. Choose Itinerary Vibe
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { id: "mix", label: "🎲 Surprise Mix" },
-                        { id: "cafe", label: "☕ Cafe Hop" },
-                        { id: "food", label: "🍔 Foodie Tour" },
-                        { id: "scenic", label: "🌿 Scenic & Chill" },
-                      ].map((theme) => {
-                        const active = widgetTheme === theme.id;
-                        return (
-                          <button
-                            key={theme.id}
-                            type="button"
-                            onClick={() => {
-                              setWidgetTheme(theme.id as any);
-                              setWidgetPreviewStops(null);
-                              setWidgetPreviewStats(null);
-                            }}
-                            className={`rounded-full px-3 py-1.5 text-xs font-black transition border cursor-pointer ${
-                              active
-                                ? "bg-teal-400 text-slate-950 border-teal-400 shadow-sm"
-                                : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)] hover:text-white"
-                            }`}
-                          >
-                            {theme.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Row 3: Time Budget Selector */}
-                  <div>
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      3. Select Available Time
-                    </span>
-                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
-                      {[
-                        { id: "1", label: "1 Hour", desc: "2 close spots" },
-                        { id: "3", label: "2-3 Hours", desc: "3 spots" },
-                        { id: "5", label: "5+ Hours", desc: "4 wide exploration" },
-                      ].map((t) => {
-                        const active = widgetTimeBudget === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => {
-                              setWidgetTimeBudget(t.id as any);
-                              setWidgetPreviewStops(null);
-                              setWidgetPreviewStats(null);
-                            }}
-                            className={`flex flex-col items-center justify-center rounded-lg py-2 px-1 transition duration-205 cursor-pointer ${
-                              active
-                                ? "bg-teal-400 text-slate-950 shadow-md font-black"
-                                : "text-slate-400 hover:text-white font-semibold"
-                            }`}
-                          >
-                            <span className="text-xs">{t.label}</span>
-                            <span className={`text-[9px] ${active ? "text-slate-800" : "text-slate-500"}`}>{t.desc}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Action Button: Calculate Preview */}
-                  {!widgetPreviewStops && (
-                    <button
-                      type="button"
-                      disabled={widgetGenerating}
-                      onClick={handleWidgetGenerateTrail}
-                      className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 py-3 font-black text-slate-950 transition hover:bg-teal-350 disabled:opacity-50 active:scale-98 cursor-pointer shadow-lg shadow-teal-500/20 text-xs sm:text-sm"
-                    >
-                      {widgetGenerating ? "Mapping Trail..." : "Map Out My Spontaneous Trail 🗺️"}
-                    </button>
-                  )}
-
-                  {/* Live Preview stops drawer */}
-                  {widgetPreviewStops && widgetPreviewStops.length > 0 && (
-                    <div className="mt-4 p-3 bg-slate-950/70 border border-white/5 rounded-lg animate-slide-down text-left">
-                      <div className="flex items-center justify-between mb-3.5">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-teal-300">
-                          Itinerary Preview
-                        </span>
-                        {widgetPreviewStats && (
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            🚶 Walk: {widgetPreviewStats.distance} km · {widgetPreviewStats.duration} mins
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Horizontal Scrolling stop cards */}
-                      <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-2 mb-3.5 scroll-fade-right">
-                        {widgetPreviewStops.map((stop, idx) => (
-                          <div 
-                            key={stop.id}
-                            onClick={() => setSelectedPlace(stop)}
-                            className="w-40 shrink-0 bg-slate-900 border border-white/5 hover:border-teal-400/40 p-2.5 rounded-lg transition duration-200 cursor-pointer select-none group/stop"
-                          >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[9px] font-black bg-teal-400/10 text-teal-400 px-1.5 py-0.5 rounded-full">
-                                Stop {idx + 1}
-                              </span>
-                              <span className="text-[8px] font-semibold text-slate-500 uppercase">
-                                {getCategoryLabel(stop.category)}
-                              </span>
-                            </div>
-                            <h4 className="text-[11px] font-black text-white line-clamp-1 group-hover/stop:text-teal-300 transition duration-150">
-                              {stop.title}
-                            </h4>
-                            <p className="text-[9px] text-slate-400 line-clamp-1 mt-0.5">
-                              {stop.locality || stop.city}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={handleLaunchPreviewTrail}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-400 py-2.5 text-xs font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer"
-                        >
-                          Launch Map 🚀
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleWidgetGenerateTrail}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 py-2.5 text-xs font-black text-white hover:bg-white/10 active:scale-98 cursor-pointer"
-                        >
-                          Re-roll Trail 🎲
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* TAB 2: AREA LAYOVER PLAN */}
-              {activePlannerTab === "area" && (
-                <div className="space-y-4 animate-fade-in text-left">
-                  {/* Row 1: Select Locality */}
-                  <div>
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      1. Select Locality / Area
-                    </span>
-                    <select
-                      value={selectedLocality}
-                      onChange={(e) => {
-                        setSelectedLocality(e.target.value);
-                        setAreaPlanStops(null);
-                      }}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3.5 py-2.5 text-xs font-semibold text-[var(--foreground)] outline-none focus:border-teal-300 cursor-pointer"
-                    >
-                      {uniqueLocalities.length > 0 ? (
-                        uniqueLocalities.map((loc) => (
-                          <option key={loc} value={loc} className="bg-slate-950 text-white">
-                            {loc}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled className="bg-slate-950 text-slate-500">
-                          No localities available
-                        </option>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Row 2: Select Available Time */}
-                  <div>
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      2. Available Time
-                    </span>
-                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
-                      {[
-                        { id: "1", label: "1 Hour", desc: "2 spots" },
-                        { id: "3", label: "2-3 Hours", desc: "3 spots" },
-                        { id: "5", label: "5+ Hours", desc: "4 spots" },
-                      ].map((t) => {
-                        const active = areaTimeBudget === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => {
-                              setAreaTimeBudget(t.id as any);
-                              setAreaPlanStops(null);
-                            }}
-                            className={`flex flex-col items-center justify-center rounded-lg py-2 px-1 transition duration-205 cursor-pointer ${
-                              active
-                                ? "bg-teal-400 text-slate-950 shadow-md font-black"
-                                : "text-slate-400 hover:text-white font-semibold"
-                            }`}
-                          >
-                            <span className="text-xs">{t.label}</span>
-                            <span className={`text-[9px] ${active ? "text-slate-800" : "text-slate-500"}`}>{t.desc}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Action Button: Calculate Plan */}
-                  {!areaPlanStops && (
-                    <button
-                      type="button"
-                      onClick={handleGenerateAreaPlan}
-                      className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 py-3 font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer shadow-lg shadow-teal-500/20 text-xs sm:text-sm"
-                    >
-                      Generate Area Plan ⏱️
-                    </button>
-                  )}
-
-                  {/* Area Plan stops timeline layout */}
-                  {areaPlanStops && areaPlanStops.length > 0 && (
-                    <div className="mt-4 p-3 bg-slate-950/70 border border-white/5 rounded-lg animate-slide-down text-left">
-                      <div className="flex items-center justify-between mb-3.5">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-teal-300">
-                          {selectedLocality} Area Plan
-                        </span>
-                        <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
-                          Budget: {areaPlanBudgetEstimate}
-                        </span>
-                      </div>
-
-                      {/* Timeline flow */}
-                      <div className="relative pl-4 border-l border-white/10 space-y-4 mb-4">
-                        {areaPlanStops.map((stop, idx) => {
-                          const isFree = stop.priceRange === "Free" || stop.tags.includes("free");
-                          return (
-                            <div 
-                              key={stop.id}
-                              onClick={() => setSelectedPlace(stop)}
-                              className="relative cursor-pointer group/timeline select-none"
-                            >
-                              {/* Timeline indicator node */}
-                              <span className="absolute -left-[20.5px] top-1 h-3 w-3 rounded-full border border-teal-400 bg-slate-950 ring-4 ring-slate-950 flex items-center justify-center text-[7px] font-black text-teal-300">
-                                {idx + 1}
-                              </span>
-                              <div className="pl-1 text-left">
-                                <div className="flex items-center gap-2">
-                                  <h4 className="text-[12px] font-black text-white group-hover/timeline:text-teal-300 transition duration-150 line-clamp-1">
-                                    {stop.title}
-                                  </h4>
-                                  <span className={`text-[8px] font-black uppercase px-1 rounded ${
-                                    isFree ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-400/10 text-amber-400"
-                                  }`}>
-                                    {isFree ? "Free" : "Paid"}
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                                  <span>{getCategoryLabel(stop.category)}</span>
-                                  <span>·</span>
-                                  {stop.rating && (
-                                    <span className="text-yellow-400 font-bold">★ {stop.rating}</span>
-                                  )}
-                                  <span>·</span>
-                                  <span className="font-semibold text-slate-500">{stop.priceRange || "$$"}</span>
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={handleLaunchAreaPlan}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-400 py-2.5 text-xs font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer"
-                        >
-                          Launch Map 🚀
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleGenerateAreaPlan}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 py-2.5 text-xs font-black text-white hover:bg-white/10 active:scale-98 cursor-pointer"
-                        >
-                          Re-generate 🔄
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          
         </motion.div>
 
         <motion.aside
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.08 }}
-          className="flex items-center"
+          className="flex flex-col gap-5 w-full min-w-0"
         >
           {featuredPlace ? (
             <button
               type="button"
               onClick={() => setSelectedPlace(featuredPlace)}
-              className="group relative min-h-[280px] w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] text-left shadow-2xl sm:min-h-[430px] md:min-h-[560px]"
+              className="group relative min-h-[250px] w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)] text-left shadow-2xl sm:min-h-[360px] md:min-h-[380px]"
             >
               <Image
                 src={featuredPlace.image}
@@ -1387,7 +977,7 @@ export default function Home() {
               </div>
             </button>
           ) : (
-            <div className="grid min-h-[320px] w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel)] p-6 text-center shadow-2xl sm:min-h-[430px] md:min-h-[560px]">
+            <div className="grid min-h-[250px] w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel)] p-6 text-center shadow-2xl sm:min-h-[360px] md:min-h-[380px]">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">OpenStreetMap</p>
                 <h2 className="mt-2 text-2xl font-black text-[var(--foreground)]">Search a city or place</h2>
@@ -1397,10 +987,451 @@ export default function Home() {
               </div>
             </div>
           )}
+
+
+          {/* Spontaneous City Planner Widget */}
+                    <div className={`app-surface rounded-lg p-5 border transition-all duration-300 bg-[var(--panel-soft)] relative overflow-hidden group shadow-lg ${themeGlowClass}`}>
+                      {/* Ambient subtle glowing borders/backgrounds */}
+                      <div className="absolute top-0 right-0 h-40 w-40 bg-teal-500/10 rounded-full blur-3xl pointer-events-none transition duration-500 group-hover:bg-teal-500/15" />
+                      <div className="absolute bottom-0 left-0 h-40 w-40 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none transition duration-500 group-hover:bg-cyan-500/15" />
+          
+                      <div className="flex items-center gap-2.5 mb-4 relative z-10">
+                        <div className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-300 ${themeIconBg}`}>
+                          <Compass size={18} className="animate-pulse" />
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-base font-black text-[var(--foreground)]">Spontaneous City Planner</h3>
+                          <p className="text-[11px] font-semibold text-[var(--muted)]">Plan routes or explore local hubs within your time budget</p>
+                        </div>
+                      </div>
+          
+                      {/* Tab Selector */}
+                      <div className="flex border-b border-white/5 mb-4 relative z-10">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePlannerTab("route");
+                            setWidgetPreviewStops(null);
+                            setWidgetPreviewStats(null);
+                          }}
+                          className={`flex-1 pb-2.5 text-xs font-black uppercase tracking-wider text-center border-b-2 transition duration-200 cursor-pointer ${
+                            activePlannerTab === "route"
+                              ? "border-teal-400 text-teal-300 font-black"
+                              : "border-transparent text-[var(--muted)] hover:text-slate-200"
+                          }`}
+                        >
+                          🗺️ Route Path
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePlannerTab("area");
+                            setAreaPlanStops(null);
+                          }}
+                          className={`flex-1 pb-2.5 text-xs font-black uppercase tracking-wider text-center border-b-2 transition duration-200 cursor-pointer ${
+                            activePlannerTab === "area"
+                              ? "border-teal-400 text-teal-300 font-black"
+                              : "border-transparent text-[var(--muted)] hover:text-slate-200"
+                          }`}
+                        >
+                          ⏱️ Area Layover Plan
+                        </button>
+                      </div>
+          
+                      <div className="space-y-4 relative z-10">
+                        {/* TAB 1: ROUTE PATH PLANNER */}
+                        {activePlannerTab === "route" && (
+                          <div className="space-y-4 animate-fade-in text-left">
+                            {/* Row 1: Start Location Selector */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                1. Starting Point
+                              </span>
+                              <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1 mb-2">
+                                {[
+                                  { id: "random", label: "Random Spot" },
+                                  { id: "geo", label: "My Location" },
+                                  { id: "place", label: "Select Spot" },
+                                ].map((mode) => {
+                                  const active = widgetStartMode === mode.id;
+                                  return (
+                                    <button
+                                      key={mode.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setWidgetStartMode(mode.id as any);
+                                        setWidgetPreviewStops(null);
+                                        setWidgetPreviewStats(null);
+                                      }}
+                                      className={`rounded-lg py-1.5 px-1 sm:px-2 text-[10px] sm:text-[11px] font-black transition duration-205 cursor-pointer text-center truncate ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 shadow-md"
+                                          : "text-slate-400 hover:text-white"
+                                      }`}
+                                    >
+                                      {mode.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+          
+                              {widgetStartMode === "place" && (
+                                <div className="relative z-30 animate-fade-in">
+                                  <input
+                                    type="text"
+                                    placeholder="Type a spot name (e.g. Zen Cafe)..."
+                                    value={widgetSearchQuery}
+                                    onChange={(e) => {
+                                      setWidgetSearchQuery(e.target.value);
+                                      setWidgetSearchFocused(true);
+                                    }}
+                                    onFocus={() => setWidgetSearchFocused(true)}
+                                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3.5 py-2.5 text-xs font-semibold text-[var(--foreground)] outline-none focus:border-teal-300"
+                                  />
+                                  {widgetSearchFocused && (
+                                    <>
+                                      <div 
+                                        className="fixed inset-0 z-10" 
+                                        onClick={() => setWidgetSearchFocused(false)} 
+                                      />
+                                      <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl z-20 no-scrollbar divide-y divide-white/5">
+                                        {filteredAutocompletePlaces.length > 0 ? (
+                                          filteredAutocompletePlaces.map((p) => (
+                                            <button
+                                              key={p.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setWidgetStartPlaceId(p.id);
+                                                setWidgetSearchQuery(p.title);
+                                                setWidgetSearchFocused(false);
+                                                setWidgetPreviewStops(null);
+                                                setWidgetPreviewStats(null);
+                                              }}
+                                              className="w-full text-left px-3.5 py-2.5 text-xs font-semibold hover:bg-white/5 transition duration-150 flex items-center justify-between cursor-pointer"
+                                            >
+                                              <div className="text-left">
+                                                <span className="block font-black text-white">{p.title}</span>
+                                                <span className="block text-[10px] text-slate-400 font-medium">{p.locality}</span>
+                                              </div>
+                                              <span className="text-[9px] font-black text-teal-400 bg-teal-400/10 px-1.5 py-0.5 rounded">
+                                                {getCategoryLabel(p.category)}
+                                              </span>
+                                            </button>
+                                          ))
+                                        ) : (
+                                          <div className="px-3.5 py-3 text-xs text-[var(--muted-strong)] font-semibold italic text-center">
+                                            No matching spots found in this city.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+          
+                              {widgetStartMode === "geo" && !location && (
+                                <p className="text-[10px] text-amber-300 font-semibold mt-1">
+                                  ⚠️ GPS location not available. We will use a random popular spot as fallback.
+                                </p>
+                              )}
+                            </div>
+          
+                            {/* Row 2: Vibe Selector */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                2. Choose Itinerary Vibe
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { id: "mix", label: "🎲 Surprise Mix" },
+                                  { id: "cafe", label: "☕ Cafe Hop" },
+                                  { id: "food", label: "🍔 Foodie Tour" },
+                                  { id: "scenic", label: "🌿 Scenic & Chill" },
+                                ].map((theme) => {
+                                  const active = widgetTheme === theme.id;
+                                  return (
+                                    <button
+                                      key={theme.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setWidgetTheme(theme.id as any);
+                                        setWidgetPreviewStops(null);
+                                        setWidgetPreviewStats(null);
+                                      }}
+                                      className={`rounded-full px-3 py-1.5 text-xs font-black transition border cursor-pointer ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 border-teal-400 shadow-sm"
+                                          : "bg-[var(--panel)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--panel-strong)] hover:text-white"
+                                      }`}
+                                    >
+                                      {theme.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+          
+                            {/* Row 3: Time Budget Selector */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                3. Select Available Time
+                              </span>
+                              <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
+                                {[
+                                  { id: "1", label: "1 Hour", desc: "2 close spots" },
+                                  { id: "3", label: "2-3 Hours", desc: "3 spots" },
+                                  { id: "5", label: "5+ Hours", desc: "4 wide exploration" },
+                                ].map((t) => {
+                                  const active = widgetTimeBudget === t.id;
+                                  return (
+                                    <button
+                                      key={t.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setWidgetTimeBudget(t.id as any);
+                                        setWidgetPreviewStops(null);
+                                        setWidgetPreviewStats(null);
+                                      }}
+                                      className={`flex flex-col items-center justify-center rounded-lg py-2 px-1 transition duration-205 cursor-pointer ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 shadow-md font-black"
+                                          : "text-slate-400 hover:text-white font-semibold"
+                                      }`}
+                                    >
+                                      <span className="text-xs">{t.label}</span>
+                                      <span className={`text-[9px] ${active ? "text-slate-800" : "text-slate-500"}`}>{t.desc}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+          
+                            {/* Action Button: Calculate Preview */}
+                            {!widgetPreviewStops && (
+                              <button
+                                type="button"
+                                disabled={widgetGenerating}
+                                onClick={handleWidgetGenerateTrail}
+                                className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 py-3 font-black text-slate-950 transition hover:bg-teal-350 disabled:opacity-50 active:scale-98 cursor-pointer shadow-lg shadow-teal-500/20 text-xs sm:text-sm"
+                              >
+                                {widgetGenerating ? "Mapping Trail..." : "Map Out My Spontaneous Trail 🗺️"}
+                              </button>
+                            )}
+          
+                            {/* Live Preview stops drawer */}
+                            {widgetPreviewStops && widgetPreviewStops.length > 0 && (
+                              <div className="mt-4 p-3 bg-slate-950/70 border border-white/5 rounded-lg animate-slide-down text-left">
+                                <div className="flex items-center justify-between mb-3.5">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-teal-300">
+                                    Itinerary Preview
+                                  </span>
+                                  {widgetPreviewStats && (
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                      🚶 Walk: {widgetPreviewStats.distance} km · {widgetPreviewStats.duration} mins
+                                    </span>
+                                  )}
+                                </div>
+          
+                                {/* Horizontal Scrolling stop cards */}
+                                <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-2 mb-3.5 scroll-fade-right">
+                                  {widgetPreviewStops.map((stop, idx) => (
+                                    <div 
+                                      key={stop.id}
+                                      onClick={() => setSelectedPlace(stop)}
+                                      className="w-40 shrink-0 bg-slate-900 border border-white/5 hover:border-teal-400/40 p-2.5 rounded-lg transition duration-200 cursor-pointer select-none group/stop"
+                                    >
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[9px] font-black bg-teal-400/10 text-teal-400 px-1.5 py-0.5 rounded-full">
+                                          Stop {idx + 1}
+                                        </span>
+                                        <span className="text-[8px] font-semibold text-slate-500 uppercase">
+                                          {getCategoryLabel(stop.category)}
+                                        </span>
+                                      </div>
+                                      <h4 className="text-[11px] font-black text-white line-clamp-1 group-hover/stop:text-teal-300 transition duration-150">
+                                        {stop.title}
+                                      </h4>
+                                      <p className="text-[9px] text-slate-400 line-clamp-1 mt-0.5">
+                                        {stop.locality || stop.city}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+          
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleLaunchPreviewTrail}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-400 py-2.5 text-xs font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer"
+                                  >
+                                    Launch Map 🚀
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleWidgetGenerateTrail}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 py-2.5 text-xs font-black text-white hover:bg-white/10 active:scale-98 cursor-pointer"
+                                  >
+                                    Re-roll Trail 🎲
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+          
+                        {/* TAB 2: AREA LAYOVER PLAN */}
+                        {activePlannerTab === "area" && (
+                          <div className="space-y-4 animate-fade-in text-left">
+                            {/* Row 1: Select Locality */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                1. Select Locality / Area
+                              </span>
+                              <select
+                                value={selectedLocality}
+                                onChange={(e) => {
+                                  setSelectedLocality(e.target.value);
+                                  setAreaPlanStops(null);
+                                }}
+                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3.5 py-2.5 text-xs font-semibold text-[var(--foreground)] outline-none focus:border-teal-300 cursor-pointer"
+                              >
+                                {uniqueLocalities.length > 0 ? (
+                                  uniqueLocalities.map((loc) => (
+                                    <option key={loc} value={loc} className="bg-slate-950 text-white">
+                                      {loc}
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option value="" disabled className="bg-slate-950 text-slate-500">
+                                    No localities available
+                                  </option>
+                                )}
+                              </select>
+                            </div>
+          
+                            {/* Row 2: Select Available Time */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                2. Available Time
+                              </span>
+                              <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
+                                {[
+                                  { id: "1", label: "1 Hour", desc: "2 spots" },
+                                  { id: "3", label: "2-3 Hours", desc: "3 spots" },
+                                  { id: "5", label: "5+ Hours", desc: "4 spots" },
+                                ].map((t) => {
+                                  const active = areaTimeBudget === t.id;
+                                  return (
+                                    <button
+                                      key={t.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setAreaTimeBudget(t.id as any);
+                                        setAreaPlanStops(null);
+                                      }}
+                                      className={`flex flex-col items-center justify-center rounded-lg py-2 px-1 transition duration-205 cursor-pointer ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 shadow-md font-black"
+                                          : "text-slate-400 hover:text-white font-semibold"
+                                      }`}
+                                    >
+                                      <span className="text-xs">{t.label}</span>
+                                      <span className={`text-[9px] ${active ? "text-slate-800" : "text-slate-500"}`}>{t.desc}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+          
+                            {/* Action Button: Calculate Plan */}
+                            {!areaPlanStops && (
+                              <button
+                                type="button"
+                                onClick={handleGenerateAreaPlan}
+                                className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 py-3 font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer shadow-lg shadow-teal-500/20 text-xs sm:text-sm"
+                              >
+                                Generate Area Plan ⏱️
+                              </button>
+                            )}
+          
+                            {/* Area Plan stops timeline layout */}
+                            {areaPlanStops && areaPlanStops.length > 0 && (
+                              <div className="mt-4 p-3 bg-slate-950/70 border border-white/5 rounded-lg animate-slide-down text-left">
+                                <div className="flex items-center justify-between mb-3.5">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-teal-300">
+                                    {selectedLocality} Area Plan
+                                  </span>
+                                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
+                                    Budget: {areaPlanBudgetEstimate}
+                                  </span>
+                                </div>
+          
+                                {/* Timeline flow */}
+                                <div className="relative pl-4 border-l border-white/10 space-y-4 mb-4">
+                                  {areaPlanStops.map((stop, idx) => {
+                                    const isFree = stop.priceRange === "Free" || stop.tags.includes("free");
+                                    return (
+                                      <div 
+                                        key={stop.id}
+                                        onClick={() => setSelectedPlace(stop)}
+                                        className="relative cursor-pointer group/timeline select-none"
+                                      >
+                                        {/* Timeline indicator node */}
+                                        <span className="absolute -left-[20.5px] top-1 h-3 w-3 rounded-full border border-teal-400 bg-slate-950 ring-4 ring-slate-950 flex items-center justify-center text-[7px] font-black text-teal-300">
+                                          {idx + 1}
+                                        </span>
+                                        <div className="pl-1 text-left">
+                                          <div className="flex items-center gap-2">
+                                            <h4 className="text-[12px] font-black text-white group-hover/timeline:text-teal-300 transition duration-150 line-clamp-1">
+                                              {stop.title}
+                                            </h4>
+                                            <span className={`text-[8px] font-black uppercase px-1 rounded ${
+                                              isFree ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-400/10 text-amber-400"
+                                            }`}>
+                                              {isFree ? "Free" : "Paid"}
+                                            </span>
+                                          </div>
+                                          <p className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                            <span>{getCategoryLabel(stop.category)}</span>
+                                            <span>·</span>
+                                            {stop.rating && (
+                                              <span className="text-yellow-400 font-bold">★ {stop.rating}</span>
+                                            )}
+                                            <span>·</span>
+                                            <span className="font-semibold text-slate-500">{stop.priceRange || "$$"}</span>
+                                          </p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+          
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleLaunchAreaPlan}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-400 py-2.5 text-xs font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer"
+                                  >
+                                    Launch Map 🚀
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleGenerateAreaPlan}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 py-2.5 text-xs font-black text-white hover:bg-white/10 active:scale-98 cursor-pointer"
+                                  >
+                                    Re-generate 🔄
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
         </motion.aside>
       </section>
 
-      <section className="mx-auto max-w-screen-xl px-3 pb-12 sm:px-4 md:px-6 md:pb-16">
+      <section className="w-full max-w-screen-xl mx-auto px-3 pb-12 sm:px-4 md:px-6 md:pb-16">
         {weatherRecommendations.length > 0 && !query && activeFilter === "all" && (
           <DiscoverySection
             title={`Weather Vibe: ${weather.condition} Match`}

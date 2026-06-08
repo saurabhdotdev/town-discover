@@ -18,6 +18,15 @@ const createSchema = z.object({
   link: z.string().trim().max(500).optional(),
 });
 
+const isDatabaseConnectionError = (error: unknown) => {
+  if (error instanceof AggregateError) return true;
+  if (!(error instanceof Error)) return false;
+
+  return ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET"].some((code) =>
+    error.message.includes(code)
+  );
+};
+
 // GET /api/notifications - Get current user notifications
 export async function GET(request: NextRequest) {
   try {
@@ -50,6 +59,16 @@ export async function GET(request: NextRequest) {
     return Response.json({ notifications }, { status: 200 });
   } catch (e: any) {
     console.error("Error in GET /api/notifications:", e);
+    if (isDatabaseConnectionError(e)) {
+      return Response.json(
+        {
+          notifications: [],
+          warning: "Notifications are temporarily unavailable.",
+        },
+        { status: 200 }
+      );
+    }
+
     return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
   }
 }
