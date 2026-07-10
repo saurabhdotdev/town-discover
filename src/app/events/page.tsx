@@ -440,17 +440,17 @@ function EventCard({
         </div>
 
         {/* Bottom row */}
-        <div className="flex items-center justify-between border-t border-[var(--border)] pt-3 mt-1">
-          <div>
+        <div className="flex min-w-0 items-center justify-between gap-2 border-t border-[var(--border)] pt-3 mt-1">
+          <div className="min-w-0">
             {event.price.isFree ? (
               <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-black text-emerald-300 border border-emerald-500/30">
                 Free Entry
               </span>
             ) : (
-              <span className="text-sm font-black text-[var(--foreground)]">{formatPrice(event.price)}</span>
+              <span className="block truncate text-sm font-black text-[var(--foreground)]">{formatPrice(event.price)}</span>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={() => onShowOnMap(event)}
@@ -669,9 +669,9 @@ export default function EventsPage() {
       <div className="w-full max-w-screen-xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-6">
         {/* City switcher + controls */}
         <div className="app-surface rounded-lg p-3 md:p-4 mb-5">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="w-full sm:w-auto">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(160px,auto)_minmax(220px,1fr)_minmax(180px,220px)_minmax(150px,180px)]">
+              <div className="w-full min-w-0">
                 <CitySwitcher
                   value={selectedCity}
                   onChange={(city) => {
@@ -680,7 +680,7 @@ export default function EventsPage() {
                   }}
                 />
               </div>
-              <label className="relative block w-full min-w-0 sm:min-w-[260px] md:max-w-sm" aria-label="Search events">
+              <label className="relative block w-full min-w-0" aria-label="Search events">
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={17} />
                 <input
                   value={searchQuery}
@@ -690,7 +690,7 @@ export default function EventsPage() {
                 />
               </label>
               {districts.length > 0 && (
-                <div className="w-full sm:w-auto min-w-[200px]">
+                <div className="w-full min-w-0">
                   <label className="relative block w-full" aria-label="Choose district">
                     <MapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-rose-400" size={17} />
                     <select
@@ -709,7 +709,7 @@ export default function EventsPage() {
                   </label>
                 </div>
               )}
-              <label className="relative block w-full sm:w-auto sm:min-w-[160px]" aria-label="Sort events">
+              <label className="relative block w-full min-w-0" aria-label="Sort events">
                 <select
                   value={sortMode}
                   onChange={(event) => setSortMode(event.target.value as SortMode)}
@@ -724,7 +724,7 @@ export default function EventsPage() {
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={18} />
               </label>
             </div>
-            <div className="flex w-full gap-2 sm:w-auto">
+            <div className="flex w-full min-w-0 gap-2 sm:w-auto xl:shrink-0">
               {hasActiveFilters && (
                 <button
                   type="button"
@@ -887,8 +887,8 @@ export default function EventsPage() {
               )}
 
               {/* Results count */}
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-semibold text-[var(--muted)]">
+              <div className="mb-4 flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <p className="min-w-0 break-words text-sm font-semibold text-[var(--muted)]">
                   <span className="font-black text-[var(--foreground)]">{filtered.length}</span> events in {selectedCity}
                   {activeCategory !== "all" && ` · ${CATEGORIES.find((c) => c.id === activeCategory)?.label}`}
                   {activeDateFilter !== "all" && ` · ${DATE_FILTERS.find((d) => d.id === activeDateFilter)?.label}`}
@@ -896,7 +896,7 @@ export default function EventsPage() {
                   {searchQuery.trim() && ` - "${searchQuery.trim()}"`}
                 </p>
                 {sortMode !== "recommended" && (
-                  <p className="hidden text-xs font-bold text-[var(--muted)] sm:block">
+                  <p className="shrink-0 text-xs font-bold text-[var(--muted)]">
                     Sorted by {SORT_OPTIONS.find((option) => option.id === sortMode)?.label}
                   </p>
                 )}
