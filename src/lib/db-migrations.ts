@@ -250,6 +250,24 @@ ON trip_plans (user_id, created_at DESC);
 `,
   },
   {
+    id: "202606040001_premium_pass_and_flash_deals",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium_pass BOOLEAN DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS flash_deals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  place_id TEXT NOT NULL,
+  place_title TEXT NOT NULL,
+  discount_percentage INT NOT NULL CHECK (discount_percentage > 0 AND discount_percentage <= 100),
+  description TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS flash_deals_expires_at_idx ON flash_deals (expires_at DESC);
+`,
+  },
+  {
     id: "202606040003_explorer_passport_stamps",
     sql: `
 CREATE TABLE IF NOT EXISTS user_city_stamps (
@@ -300,17 +318,71 @@ CREATE INDEX IF NOT EXISTS affiliate_clicks_user_id_created_at_idx
 ON affiliate_clicks (user_id, created_at DESC);
 `,
   },
+  {
+    id: "202606120006_add_postgis",
+    sql: `
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- place_suggestions
+ALTER TABLE place_suggestions ADD COLUMN IF NOT EXISTS location GEOMETRY(Point, 4326);
+UPDATE place_suggestions SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326) WHERE longitude IS NOT NULL AND latitude IS NOT NULL;
+CREATE INDEX IF NOT EXISTS place_suggestions_location_idx ON place_suggestions USING GIST (location);
+
+-- approved_places
+ALTER TABLE approved_places ADD COLUMN IF NOT EXISTS location GEOMETRY(Point, 4326);
+UPDATE approved_places SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326) WHERE longitude IS NOT NULL AND latitude IS NOT NULL;
+CREATE INDEX IF NOT EXISTS approved_places_location_idx ON approved_places USING GIST (location);
+`,
+  },
+  {
+    id: "202606190007_rag_embeddings",
+    sql: `
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE approved_places ADD COLUMN IF NOT EXISTS embedding vector(768);
+`,
+  },
+  {
+    id: "202606200008_add_review_mood",
+    sql: `
+ALTER TABLE approved_places ADD COLUMN IF NOT EXISTS review_mood JSONB;
+`,
+  },
+  {
+    id: "202606200009_place_visit_signals",
+    sql: `
+-- Persists crowd-report signals aggregated by hour-of-day (0-23) per place.
+-- Each row = one (place_id, hour_of_day) bucket with a rolling average crowd score.
+-- crowd_score maps: low=1, moderate=2, busy=3, very_crowded=4
+-- This lets the Gaussian model calibrate itself with real user-reported patterns.
+
+CREATE TABLE IF NOT EXISTS place_visit_signals (
+  place_id       TEXT    NOT NULL,
+  hour_of_day    SMALLINT NOT NULL CHECK (hour_of_day BETWEEN 0 AND 23),
+  sample_count   INT     NOT NULL DEFAULT 0,
+  avg_score      NUMERIC(5, 3) NOT NULL DEFAULT 0,
+  last_updated   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (place_id, hour_of_day)
+);
+
+CREATE INDEX IF NOT EXISTS place_visit_signals_place_id_idx
+ON place_visit_signals (place_id);
+`,
+  },
 ];
 
-let migrationPromise: Promise<void> | null = null;
+type GlobalWithMigration = typeof globalThis & {
+  townDiscoverMigrationPromise?: Promise<void>;
+};
 
 export const runDatabaseMigrations = async (pool: Pool) => {
-  migrationPromise ??= runDatabaseMigrationsOnce(pool).catch((error) => {
-    migrationPromise = null;
-    throw error;
-  });
-
-  await migrationPromise;
+  const g = globalThis as GlobalWithMigration;
+  if (!g.townDiscoverMigrationPromise) {
+    g.townDiscoverMigrationPromise = runDatabaseMigrationsOnce(pool).catch((error) => {
+      delete g.townDiscoverMigrationPromise;
+      throw error;
+    });
+  }
+  await g.townDiscoverMigrationPromise;
 };
 
 const runDatabaseMigrationsOnce = async (pool: Pool) => {

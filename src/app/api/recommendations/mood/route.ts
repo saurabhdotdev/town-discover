@@ -5,6 +5,7 @@ import { mergePlaces } from "@/lib/merge-places";
 import { fetchLivePlaces } from "@/lib/live-places";
 import { CITY_CENTERS, getCityFromQuery, getNearestSupportedCity } from "@/lib/pune-location";
 import { UserLocation } from "@/types";
+import { createApiHandler } from "@/lib/server/api-handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ const parseMood = (value: string | null): MoodAxis | null => {
   return MOOD_VALUES.includes(value as MoodAxis) ? (value as MoodAxis) : null;
 };
 
-export async function GET(request: NextRequest) {
+export const GET = createApiHandler({ auth: "none" }, async (request: NextRequest) => {
   const params = request.nextUrl.searchParams;
   const query = params.get("query") ?? "";
   const explicitMood = parseMood(params.get("mood"));
@@ -67,9 +68,9 @@ export async function GET(request: NextRequest) {
       dominantMood,
     })),
   });
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = createApiHandler({ auth: "none" }, async (request: NextRequest) => {
   const body = (await request.json().catch(() => ({}))) as {
     places?: unknown;
     query?: string;
@@ -92,4 +93,5 @@ export async function POST(request: NextRequest) {
     moodProfile: inferMoodProfile({ query, explicitMood }),
     recommendations,
   });
-}
+});
+

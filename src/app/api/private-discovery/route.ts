@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createApiHandler } from "@/lib/server/api-handler";
 import { RATE_LIMIT_READ } from "@/lib/server/rate-limit";
 import { MOCK_PLACES } from "@/data/mock-places";
+import { fetchOSMPlacesByIds } from "@/lib/live-places";
 import { Place } from "@/types";
 
 export const runtime = "nodejs";
@@ -22,14 +23,7 @@ const rankValues = (values: string[]): RankedValue[] => {
 };
 
 const compactPlace = (place: Place, reason: string, privateSignal: string) => ({
-  id: place.id,
-  title: place.title,
-  category: place.category,
-  city: place.city,
-  locality: place.locality,
-  rating: place.rating,
-  priceRange: place.priceRange ?? "$$",
-  image: place.image,
+  ...place,
   reason,
   privateSignal,
 });
@@ -64,8 +58,46 @@ export const GET = createApiHandler(
       [user!.id]
     );
 
-    const savedIds = new Set(savedRows.map((row) => row.placeId));
-    const savedPlaces = MOCK_PLACES.filter((place) => savedIds.has(place.id));
+    const savedIds = savedRows.map((row) => row.placeId);
+    let savedPlaces: Place[] = [];
+
+    if (savedIds.length > 0) {
+      const { rows: dbPlacesRows } = await pool.query(
+        `
+        SELECT
+          id, title, description, category, image, rating, latitude, longitude, tags, city, locality,
+          price_range AS "priceRange", phone, website, hours, review_mood AS "reviewMood"
+        FROM approved_places
+        WHERE id = ANY($1)
+        `,
+        [savedIds]
+      );
+
+      const dbPlaces = dbPlacesRows.map((row: any) => ({
+        ...row,
+        isOpen: true,
+        isTrending: false,
+        reviewCount: 0,
+        distance: 0,
+        hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
+        reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
+      }));
+
+      const foundDbIds = new Set(dbPlaces.map((p) => p.id));
+      const remainingIds = savedIds.filter((id) => !foundDbIds.has(id));
+
+      let resolvedOSM: Place[] = [];
+      const osmIds = remainingIds.filter((id) => id.startsWith("osm-"));
+      if (osmIds.length > 0) {
+        resolvedOSM = await fetchOSMPlacesByIds(osmIds);
+      }
+
+      const mockIds = remainingIds.filter((id) => !id.startsWith("osm-"));
+      const resolvedMock = MOCK_PLACES.filter((p) => mockIds.includes(p.id));
+
+      savedPlaces = [...dbPlaces, ...resolvedOSM, ...resolvedMock];
+    }
+
     const topCities = rankValues(savedPlaces.map((place) => place.city));
     const topCategories = rankValues(savedPlaces.map((place) => place.category));
     const topLocalities = rankValues(savedPlaces.map((place) => place.locality));
@@ -73,7 +105,34 @@ export const GET = createApiHandler(
     const primaryCategory = topCategories[0]?.label;
     const isPremium = Boolean(user!.isPremiumPass);
 
-    const candidatePool = MOCK_PLACES.filter((place) => !savedIds.has(place.id));
+    // Fetch candidates from approved_places database instead of MOCK_PLACES
+    const { rows: dbCandidatesRows } = await pool.query(
+      `
+      SELECT
+        id, title, description, category, image, rating, latitude, longitude, tags, city, locality,
+        price_range AS "priceRange", phone, website, hours, review_mood AS "reviewMood"
+      FROM approved_places
+      LIMIT 200
+      `
+    );
+
+    let dbCandidates = dbCandidatesRows.map((row: any) => ({
+      ...row,
+      isOpen: true,
+      isTrending: false,
+      reviewCount: 0,
+      distance: 0,
+      hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
+      reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
+    }));
+
+    if (dbCandidates.length === 0) {
+      dbCandidates = MOCK_PLACES;
+    }
+
+    const savedIdsSet = new Set(savedIds);
+    const candidatePool = dbCandidates.filter((place) => !savedIdsSet.has(place.id));
+
     const scored = candidatePool
       .map((place) => {
         const cityBoost = place.city === primaryCity ? 4 : topCities.some((city) => city.label === place.city) ? 2 : 0;
@@ -140,8 +199,16 @@ export const GET = createApiHandler(
         ...place,
         title: "Private pick locked",
         image: "",
+        description: "Private description locked",
+        locality: "Private locality locked",
+        phone: undefined,
+        website: undefined,
+        hours: undefined,
+        latitude: 0,
+        longitude: 0,
       })),
       nextMoves,
     });
   }
 );
+

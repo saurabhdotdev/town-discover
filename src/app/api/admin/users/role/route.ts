@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { ensureAuthSetup, normalizeEmail, requireCurrentUser } from "@/lib/auth";
-import { getPool } from "@/lib/postgres";
+import { createApiHandler } from "@/lib/server/api-handler";
+import { normalizeEmail } from "@/lib/auth";
 import { UserRole } from "@/types";
 
 export const runtime = "nodejs";
@@ -8,20 +8,7 @@ export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set<UserRole>(["user", "super_admin"]);
 
-export async function PATCH(request: NextRequest) {
-  const pool = getPool();
-  if (!pool) {
-    return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-  }
-
-  await ensureAuthSetup(pool);
-  const auth = await requireCurrentUser(pool, request);
-  if (!auth.user) return auth.response;
-
-  if (auth.user.role !== "super_admin") {
-    return Response.json({ error: "Only a super admin can change user roles." }, { status: 403 });
-  }
-
+export const PATCH = createApiHandler({ auth: "admin" }, async (request, { pool }) => {
   const body = await request.json();
   const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   const role = body.role as UserRole;
@@ -45,4 +32,4 @@ export async function PATCH(request: NextRequest) {
   }
 
   return Response.json({ user: rows[0] });
-}
+});

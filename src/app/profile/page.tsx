@@ -7,9 +7,9 @@ import { Bell, Bookmark, ChevronRight, Compass, Lock, LogOut, Mail, MapPin, Radi
 import { Header } from "@/components/common/Header";
 import { BrandMark } from "@/components/common/BrandMark";
 import Link from "next/link";
-import { getPlacesWithDistance, MOCK_PLACES } from "@/data/mock-places";
+import { getPlacesWithDistance } from "@/data/mock-places";
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { Place } from "@/types";
+import { Place, PlaceCategory } from "@/types";
 import { formatDistance, formatPlaceArea, getCategoryLabel, getInitials } from "@/lib/utils";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -22,6 +22,7 @@ import { SheherPassCard } from "@/components/profile/SheherPassCard";
 import { useRouter } from "next/navigation";
 import { ExplorerPassport } from "@/components/profile/ExplorerPassport";
 import { AffiliateOffersCard } from "@/components/profile/AffiliateOffersCard";
+import useSWR from "swr";
 
 interface PrivateDiscoveryBrief {
   summary: {
@@ -33,34 +34,47 @@ interface PrivateDiscoveryBrief {
     privacy: string;
   };
   insights: string[];
-  quickPicks: Array<{
-    id: string;
-    title: string;
-    category: Place["category"];
-    city: string;
-    locality: string;
-    rating: number;
-    priceRange: string;
-    image: string;
+  quickPicks: Array<Place & {
     reason: string;
     privateSignal: string;
   }>;
-  premiumUnlocks: Array<{
-    id: string;
-    title: string;
-    category: Place["category"];
-    city: string;
-    locality: string;
-    rating: number;
-    priceRange: string;
-    image: string;
+  premiumUnlocks: Array<Place & {
     reason: string;
     privateSignal: string;
   }>;
   nextMoves: string[];
 }
 
-const MOCK_PLACES_BY_ID = new Map(MOCK_PLACES.map((place) => [place.id, place]));
+
+interface FolderItem {
+  id: string;
+  name: string;
+  placeIds: string[];
+}
+
+interface SuggestionItem {
+  id: string;
+  title: string;
+  description: string;
+  category: PlaceCategory;
+  latitude: number;
+  longitude: number;
+  priceRange: string | null;
+  hours: string | null;
+  phone: string | null;
+  website: string | null;
+  city: string;
+  locality: string;
+  status: string;
+  createdAt: string;
+  userEmail?: string | null;
+  userFullName?: string | null;
+}
+
+const fetcher = (url: string) => fetch(url).then((res) => {
+  if (!res.ok) throw new Error("Failed to load data");
+  return res.json();
+});
 
 export default function ProfilePage() {
   const { location } = useGeolocation();
@@ -75,15 +89,9 @@ export default function ProfilePage() {
   const [password, setPassword] = useState("");
   const [authStatus, setAuthStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [authMessage, setAuthMessage] = useState("");
-  const { savedPlaces: rawSavedPlaces, toggleSave } = useSavedPlaces();
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [errorSuggestions, setErrorSuggestions] = useState("");
-  const [privateBrief, setPrivateBrief] = useState<PrivateDiscoveryBrief | null>(null);
-  const [privateBriefLoading, setPrivateBriefLoading] = useState(false);
-  const [privateBriefError, setPrivateBriefError] = useState("");
-    const [newSuggestion, setNewSuggestion] = useState("");
-    const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
+  const { savedPlaceIds, savedPlaces: rawSavedPlaces, toggleSave } = useSavedPlaces();
+  const [newSuggestion, setNewSuggestion] = useState("");
+  const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
   const { stats: gamificationStats, refresh: refreshGamificationStats } = useBadges(!!user);
 
   // Admin Management Modal states
@@ -96,13 +104,40 @@ export default function ProfilePage() {
   const [adminMessage, setAdminMessage] = useState("");
 
   // Collections (Folders) state
-  const [folders, setFolders] = useState<any[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [activeDropdownPlaceId, setActiveDropdownPlaceId] = useState<string | null>(null);
+
+  // SWR for folders
+  const { data: foldersData, mutate: mutateFolders } = useSWR<{ folders: FolderItem[] }>(
+    user ? "/api/saved-places/folders" : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+  const folders = foldersData?.folders ?? [];
+
+  // SWR for private discovery brief (re-evaluates automatically if rawSavedPlaces or folders length changes)
+  const { data: privateBriefData, error: privateBriefErr, isValidating: privateBriefValidating, mutate: mutatePrivateBrief } = useSWR<PrivateDiscoveryBrief>(
+    user && privateMode ? `/api/private-discovery?saves=${rawSavedPlaces.length}&folders=${folders.length}` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+  const privateBrief = privateBriefData ?? null;
+  const privateBriefLoading = privateBriefValidating && !privateBrief;
+  const privateBriefError = privateBriefErr ? (privateBriefErr.message || "Unable to build private discovery.") : "";
+
+  // SWR for suggestions (admin only)
+  const { data: suggestionsData, isValidating: suggestionsValidating, mutate: mutateSuggestions } = useSWR<{ suggestions: SuggestionItem[] }>(
+    user?.role === "super_admin" ? "/api/admin/suggestions" : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+  const suggestions = suggestionsData?.suggestions ?? [];
+  const loadingSuggestions = suggestionsValidating && suggestions.length === 0;
+  const errorSuggestions = ""; // SWR errors are silent / handled inline if needed
 
   const savedPlaces = useMemo(
     () => getPlacesWithDistance(rawSavedPlaces, location),
@@ -112,55 +147,8 @@ export default function ProfilePage() {
   const topSavedCity = savedCities[0] ?? "No city yet";
   const privatePickPlaces = useMemo(() => {
     if (!privateBrief) return [];
-    return privateBrief.quickPicks
-      .map((pick) => MOCK_PLACES_BY_ID.get(pick.id))
-      .filter((place): place is Place => Boolean(place));
+    return privateBrief.quickPicks;
   }, [privateBrief]);
-
-  const fetchPrivateBrief = async () => {
-    if (!user) return;
-    setPrivateBriefLoading(true);
-    setPrivateBriefError("");
-    try {
-      const response = await fetch("/api/private-discovery", { cache: "no-store" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error?.message ?? data.error ?? "Unable to build private discovery.");
-      setPrivateBrief(data);
-    } catch (err) {
-      setPrivateBriefError(err instanceof Error ? err.message : "Unable to build private discovery.");
-    } finally {
-      setPrivateBriefLoading(false);
-    }
-  };
-
-  const fetchFolders = async () => {
-    try {
-      const res = await fetch("/api/saved-places/folders");
-      const data = await res.json();
-      if (res.ok) {
-        setFolders(data.folders || []);
-      }
-    } catch (err) {
-      console.error("Failed to load folders:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchFolders();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!user || !privateMode) {
-      setPrivateBrief(null);
-      setPrivateBriefError("");
-      return;
-    }
-
-    fetchPrivateBrief();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, privateMode, rawSavedPlaces.length, folders.length]);
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,7 +165,7 @@ export default function ProfilePage() {
 
       setNewFolderName("");
       setShowCreateFolderModal(false);
-      fetchFolders();
+      mutateFolders();
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -198,7 +186,7 @@ export default function ProfilePage() {
       if (!res.ok) throw new Error(data.error || "Failed to delete collection.");
 
       setActiveFolderId(null);
-      fetchFolders();
+      mutateFolders();
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -219,7 +207,7 @@ export default function ProfilePage() {
         }
       );
       if (!res.ok) throw new Error("Failed to update folder content.");
-      fetchFolders();
+      mutateFolders();
     } catch (err: any) {
       alert(err.message);
     }
@@ -227,11 +215,15 @@ export default function ProfilePage() {
 
   // Filter saved places by active folder
   const displayedSavedPlaces = useMemo(() => {
-    if (!activeFolderId) return savedPlaces;
+    if (!activeFolderId) {
+      return savedPlaces.filter((p) => savedPlaceIds.has(p.id));
+    }
     const folder = folders.find((f) => f.id === activeFolderId);
-    if (!folder) return savedPlaces;
+    if (!folder) {
+      return savedPlaces.filter((p) => savedPlaceIds.has(p.id));
+    }
     return savedPlaces.filter((p) => folder.placeIds.includes(p.id));
-  }, [savedPlaces, activeFolderId, folders]);
+  }, [savedPlaces, activeFolderId, folders, savedPlaceIds]);
 
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -250,29 +242,6 @@ export default function ProfilePage() {
     setFullName("");
   };
 
-  useEffect(() => {
-    if (user?.role === "super_admin") {
-      fetchSuggestions();
-    }
-  }, [user]);
-
-  const fetchSuggestions = async () => {
-    setLoadingSuggestions(true);
-    setErrorSuggestions("");
-    try {
-      const res = await fetch("/api/admin/suggestions");
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to load suggestions.");
-      }
-      setSuggestions(data.suggestions || []);
-    } catch (err: any) {
-      setErrorSuggestions(err.message);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  };
-
   const handleModerateSuggestion = async (id: string, status: "approved" | "rejected") => {
     try {
       const res = await fetch("/api/admin/suggestions", {
@@ -284,7 +253,7 @@ export default function ProfilePage() {
       if (!res.ok) {
         throw new Error(data.error || `Failed to update suggestion to ${status}`);
       }
-      fetchSuggestions();
+      mutateSuggestions();
     } catch (err: any) {
       alert(err.message);
     }
@@ -626,7 +595,7 @@ export default function ProfilePage() {
                 {privateMode && (
                   <button
                     type="button"
-                    onClick={fetchPrivateBrief}
+                    onClick={() => mutatePrivateBrief()}
                     disabled={privateBriefLoading}
                     className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)] disabled:opacity-50"
                   >
@@ -676,13 +645,10 @@ export default function ProfilePage() {
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
                       {privatePickPlaces.length > 0 ? (
-                        privateBrief.quickPicks.map((pick) => {
-                          const place = MOCK_PLACES_BY_ID.get(pick.id);
-                          if (!place) return null;
-
+                        privatePickPlaces.map((place) => {
                           return (
                             <button
-                              key={pick.id}
+                              key={place.id}
                               type="button"
                               onClick={() => setSelectedPlace(place)}
                               className="group grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 text-left transition hover:border-teal-300/40"
@@ -700,13 +666,13 @@ export default function ProfilePage() {
                                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
                                   {getCategoryLabel(place.category)}
                                 </p>
-                                <h4 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{pick.title}</h4>
-                                <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--muted)]">{pick.reason}</p>
+                                <h4 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h4>
+                                <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--muted)]">{place.reason}</p>
                                 <p className="mt-1 flex items-center gap-2 text-[11px] font-bold text-[var(--muted-strong)]">
                                   <MapPin size={11} className="text-cyan-300" />
-                                  {pick.locality}
+                                  {place.locality}
                                   <Star size={11} className="fill-yellow-300 text-yellow-300" />
-                                  {pick.rating}
+                                  {place.rating}
                                 </p>
                               </div>
                             </button>
@@ -792,7 +758,7 @@ export default function ProfilePage() {
                   activeFolderId === null ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                All ({savedPlaces.length})
+                All ({savedPlaces.filter((p) => savedPlaceIds.has(p.id)).length})
                 {activeFolderId === null && (
                   <motion.div
                     layoutId="activeFolderTab"
@@ -1147,7 +1113,7 @@ export default function ProfilePage() {
                   <p className="mt-1 text-sm text-[var(--muted)]">Review suggestions from the community before publishing them live.</p>
                 </div>
                 <button
-                  onClick={fetchSuggestions}
+                  onClick={() => mutateSuggestions()}
                   className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-xs font-black text-teal-300 hover:bg-[var(--panel-strong)] cursor-pointer"
                 >
                   Refresh Queue

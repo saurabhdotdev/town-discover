@@ -29,8 +29,15 @@ const CROWD_OPTIONS = [
   { level: "very_crowded", label: "Packed", desc: "Expect wait", color: "#f87171", bg: "#7f1d1d" },
 ];
 
+interface Review {
+  id: string;
+  userFullName: string;
+  rating: number;
+  text: string;
+}
+
 export function PlaceDetailModal({ place, visible, onClose, isSaved, onToggleSave }: Props) {
-  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [crowdLevel, setCrowdLevel] = useState<string>("moderate");
   const [crowdNote, setCrowdNote] = useState("");
@@ -38,14 +45,22 @@ export function PlaceDetailModal({ place, visible, onClose, isSaved, onToggleSav
 
   useEffect(() => {
     if (visible && place) {
-      setLoadingReviews(true);
-      fetchPlaceReviews(place.id)
-        .then((data) => setReviews(data))
-        .catch((err) => console.log("Error loading reviews on mobile:", err))
-        .finally(() => setLoadingReviews(false));
-    } else {
-      setReviews([]);
+      const timer = setTimeout(() => {
+        setLoadingReviews(true);
+        fetchPlaceReviews(place.id)
+          .then((data: Review[]) => {
+            setLoadingReviews(false);
+            setReviews(data);
+          })
+          .catch((err) => {
+            console.log("Error loading reviews on mobile:", err);
+            setLoadingReviews(false);
+          });
+      }, 0);
+      return () => clearTimeout(timer);
     }
+    const t = setTimeout(() => setReviews([]), 0);
+    return () => clearTimeout(t);
   }, [visible, place]);
 
   if (!place) return null;
@@ -210,11 +225,11 @@ export function PlaceDetailModal({ place, visible, onClose, isSaved, onToggleSav
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#020617" },
-  hero: { height: 280, position: "relative" },
+  hero: { height: 290, position: "relative" },
   heroImage: { width: "100%", height: "100%", resizeMode: "cover" },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2, 6, 23, 0.45)",
+    backgroundColor: "rgba(2, 6, 23, 0.55)",
   },
   topBar: {
     position: "absolute",
@@ -229,7 +244,7 @@ const styles = StyleSheet.create({
     height: 40,
     width: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -237,7 +252,7 @@ const styles = StyleSheet.create({
   },
   heroContent: {
     position: "absolute",
-    bottom: 20,
+    bottom: 24,
     left: 16,
     right: 16,
   },
@@ -246,55 +261,62 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   title: {
     color: "#f8fafc",
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "900",
-    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
-  metaRow: { flexDirection: "row", alignItems: "center", marginTop: 6, flexWrap: "wrap" },
+  metaRow: { flexDirection: "row", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 2 },
   metaText: { color: "#cbd5e1", fontSize: 13, fontWeight: "600", marginLeft: 4 },
-  divider: { color: "#64748b", marginHorizontal: 8 },
-  detailsScroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 40 },
+  divider: { color: "#64748b", marginHorizontal: 6 },
+  detailsScroll: { flex: 1, backgroundColor: "#020617" },
+  scrollContent: { padding: 16, paddingBottom: 48 },
   section: {
-    marginBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
-    paddingBottom: 20,
+    backgroundColor: "#0f172a",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#1e293b",
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  sectionTitle: { color: "#f1f5f9", fontSize: 16, fontWeight: "800", marginBottom: 10 },
-  sectionSub: { color: "#94a3b8", fontSize: 12, fontWeight: "600", marginBottom: 12 },
-  descText: { color: "#94a3b8", fontSize: 14, lineHeight: 22, fontWeight: "500" },
-  tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 12 },
+  sectionTitle: { color: "#f8fafc", fontSize: 15, fontWeight: "800", marginBottom: 8, letterSpacing: 0.3 },
+  sectionSub: { color: "#94a3b8", fontSize: 11, fontWeight: "500", marginBottom: 14 },
+  descText: { color: "#94a3b8", fontSize: 13, lineHeight: 20, fontWeight: "500" },
+  tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 14 },
   tag: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: "#1e293b",
+    backgroundColor: "rgba(51, 65, 85, 0.4)",
     borderWidth: 1,
     borderColor: "#334155",
   },
-  tagText: { color: "#cbd5e1", fontSize: 11, fontWeight: "700" },
+  tagText: { color: "#cbd5e1", fontSize: 10, fontWeight: "600" },
   crowdRow: { flexDirection: "row", justifyContent: "space-between", gap: 6, marginBottom: 12 },
   crowdBtn: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: "#1e293b",
-    backgroundColor: "#0f172a",
+    backgroundColor: "#090d16",
     borderRadius: 8,
   },
-  crowdLabel: { fontSize: 12, fontWeight: "800" },
+  crowdLabel: { fontSize: 11, fontWeight: "800" },
   crowdSub: { fontSize: 8, color: "#64748b", marginTop: 2, fontWeight: "700" },
   input: {
-    backgroundColor: "#0f172a",
+    backgroundColor: "#090d16",
     borderWidth: 1,
     borderColor: "#1e293b",
     borderRadius: 8,
@@ -302,7 +324,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: "#f8fafc",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
+    marginTop: 4,
     marginBottom: 12,
   },
   submitBtn: {
@@ -317,18 +340,18 @@ const styles = StyleSheet.create({
   submitBtnText: { color: "#020617", fontSize: 13, fontWeight: "800" },
   emptyReviews: { color: "#64748b", fontSize: 12, fontStyle: "italic", marginTop: 4 },
   revCard: {
-    backgroundColor: "#0f172a",
+    backgroundColor: "#090d16",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#1e293b",
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   revHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
   avatar: {
-    height: 24,
-    width: 24,
-    borderRadius: 12,
+    height: 26,
+    width: 26,
+    borderRadius: 13,
     backgroundColor: "#2dd4bf",
     alignItems: "center",
     justifyContent: "center",

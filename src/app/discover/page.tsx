@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarDays,
@@ -26,7 +26,8 @@ import {
   Radio,
   Sun,
   ThermometerSnowflake,
-  Cloud
+  Cloud,
+  Zap
 } from "lucide-react";
 import Link from "next/link";
 import { BrandMark } from "@/components/common/BrandMark";
@@ -52,6 +53,7 @@ import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
+import { SwipeVibeMode } from "@/components/common/SwipeVibeMode";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
   ssr: false,
@@ -290,6 +292,34 @@ export default function DiscoverPage() {
   const [isAirportGuideOpen, setIsAirportGuideOpen] = useState(false);
   const [selectedAirportCode, setSelectedAirportCode] = useState<string>("BOM");
   const [layoverTimeBucket, setLayoverTimeBucket] = useState<"quick" | "medium" | "long">("quick");
+  
+  // Swipe & Vibe Mode
+  const [swipeMode, setSwipeMode] = useState(false);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleFocusSearch = () => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+        searchInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+
+    window.addEventListener("focus-discover-search", handleFocusSearch);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("focus") === "true") {
+      const timer = setTimeout(() => {
+        handleFocusSearch();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+
+    return () => {
+      window.removeEventListener("focus-discover-search", handleFocusSearch);
+    };
+  }, []);
 
   const activeCity = getCityFromQuery(query) ?? (!hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity);
   const activeAirportCode = getCityIATA(activeCity);
@@ -761,6 +791,7 @@ export default function DiscoverPage() {
             <label className="relative block flex-1">
               <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={19} />
               <input
+                ref={searchInputRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={`Search cafes, food, events in ${activeCity}`}
@@ -769,7 +800,7 @@ export default function DiscoverPage() {
             </label>
 
             {/* Controls — row on mobile too, but smaller */}
-            <div className="no-scrollbar flex w-full items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 sm:overflow-visible sm:pb-0">
+            <div className="no-scrollbar flex w-full sm:w-auto shrink-0 items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 sm:overflow-visible sm:pb-0">
               {/* Sort Dropdown */}
               <select
                 value={sortMode}
@@ -828,6 +859,18 @@ export default function DiscoverPage() {
                     {(selectedRating > 0 ? 1 : 0) + (selectedPrice !== "all" ? 1 : 0) + selectedTags.size}
                   </span>
                 )}
+              </button>
+
+              {/* Swipe & Vibe Button */}
+              <button
+                type="button"
+                onClick={() => setSwipeMode(true)}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition whitespace-nowrap sm:h-12 sm:gap-2 sm:px-4 sm:text-sm bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-lg shadow-teal-500/20 hover:from-teal-400 hover:to-emerald-400 active:scale-95"
+              >
+                <Zap size={14} strokeWidth={2.5} className="sm:hidden" />
+                <Zap size={16} strokeWidth={2.5} className="hidden sm:block" />
+                <span className="hidden sm:inline">Swipe Mode</span>
+                <span className="sm:hidden">Vibe</span>
               </button>
             </div>
           </div>
@@ -1022,25 +1065,129 @@ export default function DiscoverPage() {
         <div className="py-4">
           {hasFilters ? (
             <>
-              <DiscoverySection
-                title="Filtered Results"
-                description="Your current search and filters, sorted the way you chose."
-                places={filteredPlaces}
-                loading={livePlacesLoading}
-                onPlaceClick={setSelectedPlace}
-                onSavePlace={toggleSave}
-                savedPlaceIds={savedPlaceIds}
-                vibeScores={vibeScores}
-              />
-              {hasMore && (
-                <div className="mt-6 flex justify-center">
-                  <button
-                    onClick={handleLoadMore}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-6 py-3 text-sm font-bold hover:bg-[var(--panel)]"
-                  >
-                    Load More
-                  </button>
-                </div>
+              {filteredPlaces.length > 0 ? (
+                <>
+                  <DiscoverySection
+                    title="Filtered Results"
+                    description="Your current search and filters, sorted the way you chose."
+                    places={filteredPlaces}
+                    loading={livePlacesLoading}
+                    onPlaceClick={setSelectedPlace}
+                    onSavePlace={toggleSave}
+                    savedPlaceIds={savedPlaceIds}
+                    vibeScores={vibeScores}
+                  />
+                  {hasMore && (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        onClick={handleLoadMore}
+                        className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-6 py-3 text-sm font-bold hover:bg-[var(--panel)]"
+                      >
+                        Load More
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="relative mt-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--panel-strong)] via-[var(--panel)] to-[var(--panel-soft)] p-6 sm:p-10 text-center shadow-2xl"
+                >
+                  {/* Decorative background blurs */}
+                  <div className="pointer-events-none absolute -top-20 -right-20 h-60 w-60 rounded-full bg-rose-500/8 blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-20 -left-20 h-60 w-60 rounded-full bg-teal-500/8 blur-3xl" />
+
+                  <div className="relative z-10 mx-auto max-w-md space-y-4">
+                    {/* Animated search icon */}
+                    <motion.div
+                      initial={{ scale: 0.8 }}
+                      animate={{ scale: 1 }}
+                      transition={{ duration: 0.3, delay: 0.15 }}
+                      className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] shadow-lg"
+                    >
+                      <Search size={28} className="text-[var(--muted)] opacity-50" />
+                    </motion.div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-black text-[var(--foreground)] sm:text-xl">
+                        No places found
+                        {query.trim() && (
+                          <span className="block mt-1 text-sm font-bold text-[var(--muted)]">
+                            for &ldquo;<span className="text-teal-400">{query.trim()}</span>&rdquo;
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-sm leading-relaxed text-[var(--muted)]">
+                        We couldn&apos;t find any matching places in <span className="font-bold text-[var(--muted-strong)]">{activeCity}</span>. Try adjusting your search or filters.
+                      </p>
+                    </div>
+
+                    {/* Helpful tips */}
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)]/60 p-4 text-left">
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--muted)]">💡 Suggestions</p>
+                      <ul className="space-y-1.5 text-xs font-semibold text-[var(--muted-strong)]">
+                        <li className="flex items-start gap-2"><span className="shrink-0 text-teal-400">•</span> Try broader terms like &ldquo;cafe&rdquo;, &ldquo;restaurant&rdquo;, or &ldquo;street food&rdquo;</li>
+                        <li className="flex items-start gap-2"><span className="shrink-0 text-teal-400">•</span> Check the spelling of the place name</li>
+                        <li className="flex items-start gap-2"><span className="shrink-0 text-teal-400">•</span> Remove filters like Open Now, Veg Only, or price range</li>
+                        <li className="flex items-start gap-2"><span className="shrink-0 text-teal-400">•</span> Search by area name like &ldquo;Koregaon Park&rdquo; or &ldquo;FC Road&rdquo;</li>
+                      </ul>
+                    </div>
+
+                    {/* Quick actions */}
+                    <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery("");
+                          setActiveCategory("all");
+                          setOpenOnly(false);
+                          setVegOnly(false);
+                          setSelectedRating(0);
+                          setSelectedPrice("all");
+                          setSelectedTags(new Set());
+                          setSortMode("recommended");
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-500 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-teal-500/15 transition hover:bg-teal-400 active:scale-95"
+                      >
+                        <X size={14} />
+                        Clear All Filters
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery("");
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-2.5 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel)]"
+                      >
+                        <Search size={14} />
+                        Clear Search
+                      </button>
+                    </div>
+
+                    {/* Quick category browse */}
+                    <div className="pt-2">
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--muted)]">Browse by category</p>
+                      <div className="flex flex-wrap justify-center gap-1.5">
+                        {categories.map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setQuery("");
+                              setActiveCategory(cat.id);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-xs font-bold text-[var(--muted-strong)] transition hover:border-teal-400/40 hover:bg-teal-500/10 hover:text-teal-300"
+                          >
+                            {cat.icon}
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
               )}
             </>
           ) : (
@@ -1278,6 +1425,19 @@ export default function DiscoverPage() {
       </AnimatePresence>
 
       <PlaceDetailModal place={selectedPlace} onClose={() => setSelectedPlace(null)} />
+
+      {/* ── Swipe & Vibe Mode ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {swipeMode && (
+          <SwipeVibeMode
+            places={allPlaces}
+            onOpenPlace={(place) => {
+              setSelectedPlace(place);
+            }}
+            onClose={() => setSwipeMode(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

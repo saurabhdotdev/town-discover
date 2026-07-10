@@ -233,12 +233,14 @@ function HeroEventCard({
   event,
   onBookClick,
   onNotifyClick,
+  onShowOnMap,
   reminderSaved,
   reminderLoading,
 }: {
   event: LiveEvent;
   onBookClick: (event: LiveEvent) => void;
   onNotifyClick: (event: LiveEvent) => void;
+  onShowOnMap: (event: LiveEvent) => void;
   reminderSaved: boolean;
   reminderLoading: boolean;
 }) {
@@ -322,6 +324,17 @@ function HeroEventCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              onShowOnMap(event);
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] hover:scale-[1.02]"
+          >
+            <MapPin size={16} className="text-rose-400" />
+            Show on Map
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
               onBookClick(event);
             }}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] hover:shadow-teal-500/30"
@@ -342,6 +355,7 @@ function EventCard({
   index,
   onBookClick,
   onNotifyClick,
+  onShowOnMap,
   reminderSaved,
   reminderLoading,
 }: {
@@ -349,6 +363,7 @@ function EventCard({
   index: number;
   onBookClick: (event: LiveEvent) => void;
   onNotifyClick: (event: LiveEvent) => void;
+  onShowOnMap: (event: LiveEvent) => void;
   reminderSaved: boolean;
   reminderLoading: boolean;
 }) {
@@ -436,6 +451,15 @@ function EventCard({
             )}
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onShowOnMap(event)}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)] transition hover:bg-[var(--panel)]"
+              aria-label="Show event venue on map"
+              title="Show on Map"
+            >
+              <MapPin size={14} className="text-rose-400" />
+            </button>
             <button
               type="button"
               onClick={() => onNotifyClick(event)}
@@ -602,6 +626,17 @@ export default function EventsPage() {
     } finally {
       setReminderLoadingId(null);
     }
+  };
+
+  const handleShowOnMap = (event: LiveEvent) => {
+    const params = new URLSearchParams({
+      eventLat: String(event.latitude),
+      eventLng: String(event.longitude),
+      eventTitle: event.title,
+      eventVenue: formatEventLocation(event),
+      eventCategory: event.category,
+    });
+    router.push(`/map?${params.toString()}`);
   };
 
   const filtered = useMemo(() => {
@@ -845,6 +880,7 @@ export default function EventsPage() {
                   event={heroEvent}
                   onBookClick={(event) => window.open(buildEventAffiliateUrl(event), "_blank", "noopener,noreferrer")}
                   onNotifyClick={handleNotify}
+                  onShowOnMap={handleShowOnMap}
                   reminderSaved={reminderIds.has(heroEvent.id)}
                   reminderLoading={reminderLoadingId === heroEvent.id}
                 />
@@ -875,6 +911,7 @@ export default function EventsPage() {
                     index={i}
                     onBookClick={(evt) => window.open(buildEventAffiliateUrl(evt), "_blank", "noopener,noreferrer")}
                     onNotifyClick={handleNotify}
+                    onShowOnMap={handleShowOnMap}
                     reminderSaved={reminderIds.has(event.id)}
                     reminderLoading={reminderLoadingId === event.id}
                   />

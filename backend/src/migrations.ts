@@ -229,6 +229,96 @@ CREATE TABLE IF NOT EXISTS flash_deals (
 CREATE INDEX IF NOT EXISTS flash_deals_expires_at_idx ON flash_deals (expires_at DESC);
 `,
   },
+  {
+    id: "202606040003_explorer_passport_stamps",
+    sql: `
+CREATE TABLE IF NOT EXISTS user_city_stamps (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  city_name TEXT NOT NULL,
+  stamped_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, city_name)
+);
+
+CREATE INDEX IF NOT EXISTS user_city_stamps_user_id_idx ON user_city_stamps (user_id);
+`,
+  },
+  {
+    id: "202606060004_vibe_shoutbox",
+    sql: `
+CREATE TABLE IF NOT EXISTS shoutbox_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  city TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS shoutbox_messages_city_created_at_idx ON shoutbox_messages (city, created_at DESC);
+`,
+  },
+  {
+    id: "202606080005_affiliate_clicks",
+    sql: `
+CREATE TABLE IF NOT EXISTS affiliate_clicks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT NOT NULL,
+  campaign TEXT NOT NULL,
+  target_host TEXT NOT NULL,
+  target_url TEXT NOT NULL,
+  is_premium_user BOOLEAN NOT NULL DEFAULT FALSE,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS affiliate_clicks_source_created_at_idx ON affiliate_clicks (source, created_at DESC);
+CREATE INDEX IF NOT EXISTS affiliate_clicks_user_id_created_at_idx ON affiliate_clicks (user_id, created_at DESC);
+`,
+  },
+  {
+    id: "202606120006_add_postgis",
+    sql: `
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- place_suggestions
+ALTER TABLE place_suggestions ADD COLUMN IF NOT EXISTS location GEOMETRY(Point, 4326);
+UPDATE place_suggestions SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326) WHERE longitude IS NOT NULL AND latitude IS NOT NULL;
+CREATE INDEX IF NOT EXISTS place_suggestions_location_idx ON place_suggestions USING GIST (location);
+
+-- approved_places
+ALTER TABLE approved_places ADD COLUMN IF NOT EXISTS location GEOMETRY(Point, 4326);
+UPDATE approved_places SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326) WHERE longitude IS NOT NULL AND latitude IS NOT NULL;
+CREATE INDEX IF NOT EXISTS approved_places_location_idx ON approved_places USING GIST (location);
+`,
+  },
+  {
+    id: "202606190007_rag_embeddings",
+    sql: `
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE approved_places ADD COLUMN IF NOT EXISTS embedding vector(768);
+`,
+  },
+  {
+    id: "202606200008_add_review_mood",
+    sql: `
+ALTER TABLE approved_places ADD COLUMN IF NOT EXISTS review_mood JSONB;
+`,
+  },
+  {
+    id: "202606200009_place_visit_signals",
+    sql: `
+CREATE TABLE IF NOT EXISTS place_visit_signals (
+  place_id       TEXT    NOT NULL,
+  hour_of_day    SMALLINT NOT NULL CHECK (hour_of_day BETWEEN 0 AND 23),
+  sample_count   INT     NOT NULL DEFAULT 0,
+  avg_score      NUMERIC(5, 3) NOT NULL DEFAULT 0,
+  last_updated   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (place_id, hour_of_day)
+);
+
+CREATE INDEX IF NOT EXISTS place_visit_signals_place_id_idx ON place_visit_signals (place_id);
+`,
+  },
 ];
 
 export const runDatabaseMigrations = async (pool: Pool) => {

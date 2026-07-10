@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, Send, Loader2, Compass, MessageSquare } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useCitySelection } from "@/hooks/useCitySelection";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { DiscoveryCard } from "@/components/cards/DiscoveryCard";
@@ -323,10 +324,20 @@ export const AiAssistant: React.FC = () => {
                     {/* Interactive Place Card Carousel */}
                     {isModel && resolvedPlaces.length > 0 && (
                       <div className="mt-3 w-full overflow-hidden">
-                        <p className="mb-1.5 flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-teal-400">
-                          <Compass size={12} />
-                          Explore Recommended Spots:
-                        </p>
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-teal-400">
+                            <Compass size={12} className="shrink-0" />
+                            Explore Recommended Spots:
+                          </p>
+                          {resolvedPlaces.length >= 2 && (
+                            <Link
+                              href={`/map?stops=${message.placeIds?.join(",")}&sourceName=${encodeURIComponent(resolvedPlaces[0].locality || resolvedPlaces[0].city)}&destName=${encodeURIComponent(resolvedPlaces[resolvedPlaces.length - 1].locality || resolvedPlaces[resolvedPlaces.length - 1].city)}&trailName=${encodeURIComponent("AI Spontaneous Walk")}`}
+                              className="inline-flex items-center gap-1 rounded-full border border-teal-400/30 bg-teal-400/10 hover:bg-teal-400 hover:text-slate-950 px-2.5 py-1 text-[10px] font-black text-teal-300 transition duration-200 cursor-pointer shadow-md"
+                            >
+                              🚶 Walk this Trail
+                            </Link>
+                          )}
+                        </div>
                         <div className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar -mx-2 px-2 scroll-smooth">
                           {resolvedPlaces.map((place) => (
                             <div key={place.id} className="w-[260px] shrink-0 transform scale-98 hover:scale-100 transition duration-200">

@@ -3,6 +3,7 @@ import { createApiHandler } from "@/lib/server/api-handler";
 import { z } from "zod";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
 import { BadRequestError } from "@/lib/server/api-errors";
+import { reviewClassifier } from "@/lib/server/review-classifier";
 
 const postSchema = z.object({
   placeId: z.string().min(1, { message: "placeId cannot be empty" }).max(200).trim(),
@@ -90,6 +91,38 @@ export const POST = createApiHandler(
       `,
       [user!.id, placeId, rating, text, imageUrls]
     );
+
+    // Option B: Multinomial Naive Bayes Review Classification & Dynamic Mood Tagging
+    try {
+      const { rows: allReviews } = await pool.query<{ text: string }>(
+        `SELECT text FROM place_reviews WHERE place_id = $1`,
+        [placeId]
+      );
+      
+      const avgProfile: Record<string, number> = {
+        chill: 0, adventurous: 0, social: 0, foodie: 0,
+        romantic: 0, cultural: 0, energetic: 0, budget: 0
+      };
+
+      if (allReviews.length > 0) {
+        for (const r of allReviews) {
+          const profile = reviewClassifier.classify(r.text);
+          for (const key of Object.keys(avgProfile)) {
+            avgProfile[key] += profile[key as keyof typeof profile];
+          }
+        }
+        for (const key of Object.keys(avgProfile)) {
+          avgProfile[key] = parseFloat((avgProfile[key] / allReviews.length).toFixed(3));
+        }
+        
+        await pool.query(
+          `UPDATE approved_places SET review_mood = $1 WHERE id = $2`,
+          [JSON.stringify(avgProfile), placeId]
+        );
+      }
+    } catch (classifyErr) {
+      console.error("[reviews-post] Failed to classify and update place mood:", classifyErr);
+    }
 
     let newBadges: string[] = [];
     if (isNew) {

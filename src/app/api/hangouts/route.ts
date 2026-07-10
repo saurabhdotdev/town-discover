@@ -4,6 +4,7 @@ import { z } from "zod";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
 import { BadRequestError, NotFoundError, ForbiddenError } from "@/lib/server/api-errors";
 import { RateLimitError } from "@/lib/server/api-errors";
+import { PoolClient } from "pg";
 
 const hangoutSchema = z.object({
   placeId: z.string().min(1, { message: "placeId cannot be empty" }).max(200).trim(),
@@ -91,6 +92,9 @@ export const POST = createApiHandler(
 
     // 1. Enforce Event Date Validation (min 30 min in future, max 30 days ahead)
     const parsedDate = new Date(eventDate);
+    if (isNaN(parsedDate.getTime())) {
+      throw new BadRequestError("Please enter a valid date and time.");
+    }
     const now = new Date();
     const minFuture = new Date(now.getTime() + 30 * 60 * 1000);
     const maxFuture = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -113,22 +117,37 @@ export const POST = createApiHandler(
       throw new RateLimitError(3600, "Rate limit reached. You can only plan up to 2 hangouts per 24 hours to prevent spam.");
     }
 
-    const { rows } = await pool.query(
-      `
-      INSERT INTO place_hangouts (user_id, place_id, title, description, event_date, whatsapp_link, city)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id
-      `,
-      [user!.id, placeId, title, description, parsedDate, whatsappLink, city]
-    );
+    const client = await pool.connect();
+    let hangoutId = "";
+    let newBadges: string[] = [];
+    try {
+      await client.query("BEGIN");
 
-    // Award +30 XP for organizing a community hangout event
-    await awardXP(pool, user!.id, "organize_hangout", 30);
-    const newBadges = await checkAndGrantBadges(pool, user!.id);
+      const { rows } = await client.query(
+        `
+        INSERT INTO place_hangouts (user_id, place_id, title, description, event_date, whatsapp_link, city)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id
+        `,
+        [user!.id, placeId, title, description, parsedDate, whatsappLink, city]
+      );
+      hangoutId = rows[0].id;
+
+      // Award +30 XP for organizing a community hangout event
+      await awardXP(client, user!.id, "organize_hangout", 30);
+      newBadges = await checkAndGrantBadges(client, user!.id);
+
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     return Response.json({
       success: true,
-      hangoutId: rows[0].id,
+      hangoutId,
       newBadges,
     }, { status: 201 });
   }

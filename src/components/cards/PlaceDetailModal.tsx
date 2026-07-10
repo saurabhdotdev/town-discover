@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import { LazyImage } from "@/components/common/LazyImage";
 
-import { Clock, Download, ExternalLink, MapPin, Navigation, Share2, Sparkles, Star, Train, Users, X, UtensilsCrossed, ChevronLeft } from "lucide-react";
+import { Clock, Download, ExternalLink, ImageIcon, MapPin, Navigation, Share2, Sparkles, Star, Train, Users, X, UtensilsCrossed, ChevronLeft, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
 import { API_URL, formatDistance, formatHours, formatPlaceArea, formatTime, getCategoryLabel, getInitials, isOpenNow } from "@/lib/utils";
@@ -13,6 +13,9 @@ import { getCategoryFallbackImage } from "@/lib/place-images";
 import { SupportedCityName } from "@/lib/pune-location";
 import { io } from "socket.io-client";
 import { getMetroAccess } from "@/lib/geo";
+import { getVisitTimeProfile } from "@/lib/visit-time-model";
+import { PostcardCustomizer } from "@/components/common/PostcardCustomizer";
+
 
 interface PlaceDetailModalProps {
   place: Place | null;
@@ -117,6 +120,53 @@ const drawRoundRect = (
   context.roundRect(x, y, width, height, radius);
 };
 
+const getCategoryBadgeStyle = (category: string): string => {
+  const cat = category?.toLowerCase();
+  switch (cat) {
+    case "cafe":
+      return "bg-amber-500/25 text-amber-200 border border-amber-500/30";
+    case "restaurant":
+      return "bg-emerald-500/25 text-emerald-200 border border-emerald-500/30";
+    case "bar":
+    case "nightlife":
+      return "bg-fuchsia-500/25 text-fuchsia-200 border border-fuchsia-500/30";
+    case "street-food":
+    case "food-stall":
+      return "bg-orange-500/25 text-orange-200 border border-orange-500/30";
+    case "dessert":
+      return "bg-pink-500/25 text-pink-200 border border-pink-500/30";
+    case "event":
+      return "bg-rose-500/25 text-rose-200 border border-rose-500/30";
+    case "heritage":
+    case "monument":
+      return "bg-yellow-500/25 text-yellow-200 border border-yellow-500/30";
+    case "nature":
+    case "scenic":
+      return "bg-sky-500/25 text-sky-200 border border-sky-500/30";
+    default:
+      return "bg-teal-500/25 text-teal-200 border border-teal-500/30";
+  }
+};
+
+const getAvatarColors = (name: string) => {
+  const colors = [
+    { bg: "bg-teal-500/15", text: "text-teal-300" },
+    { bg: "bg-amber-500/15", text: "text-amber-300" },
+    { bg: "bg-emerald-500/15", text: "text-emerald-300" },
+    { bg: "bg-fuchsia-500/15", text: "text-fuchsia-300" },
+    { bg: "bg-orange-500/15", text: "text-orange-300" },
+    { bg: "bg-pink-500/15", text: "text-pink-300" },
+    { bg: "bg-rose-500/15", text: "text-rose-300" },
+    { bg: "bg-sky-500/15", text: "text-sky-300" },
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
+
 export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClose }) => {
   const { user, setAuthRequiredMessage } = useAuth();
   const [activePlace, setActivePlace] = useState<Place | null>(null);
@@ -154,6 +204,10 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState("");
   const [reviewImages, setReviewImages] = useState<string[]>([]);
+  const [visitSignals, setVisitSignals] = useState<import("@/lib/visit-time-model").RealSignal[]>([]);
+  const [activeTab, setActiveTab] = useState<"overview" | "reviews" | "map">("overview");
+  const [copiedShare, setCopiedShare] = useState(false);
+  const [postcardOpen, setPostcardOpen] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
@@ -206,6 +260,22 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
       setLoadingReviews(false);
     }
   };
+
+  useEffect(() => {
+    if (!activePlace) return;
+    const controller = new AbortController();
+    fetch(`/api/visit-time?placeId=${encodeURIComponent(activePlace.id)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.signals) setVisitSignals(data.signals);
+        else setVisitSignals([]);
+      })
+      .catch(() => setVisitSignals([]));
+    return () => controller.abort();
+  }, [activePlace?.id]);
 
   useEffect(() => {
     if (!activePlace) return;
@@ -671,6 +741,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
   };
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -687,14 +758,16 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
         exit={{ y: 48, opacity: 0, scale: 0.98 }}
         transition={{ type: "spring", damping: 32, stiffness: 320 }}
         onClick={(event) => event.stopPropagation()}
-        className="max-h-[calc(100dvh-1rem)] w-full overflow-y-auto rounded-t-lg border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:max-h-[90vh] md:max-w-2xl md:rounded-lg"
+        className="max-h-[calc(100dvh-1rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--panel-strong)] shadow-2xl md:max-h-[92vh] md:max-w-2xl md:rounded-2xl"
       >
-        <div className="relative h-56 overflow-hidden bg-slate-900 sm:h-64">
+        {/* ── Full-bleed hero ── */}
+        <div className="relative h-72 overflow-hidden bg-slate-900 sm:h-80">
           <Image
             src={imageSrc || activePlace.image}
             alt={`${activePlace.title} in ${activePlace.locality}`}
             fill
             sizes="(max-width: 768px) 100vw, 672px"
+            className="object-cover transition-transform duration-700 hover:scale-105"
             onError={() => {
               const fallback = getCategoryFallbackImage(activePlace.city as SupportedCityName, activePlace.category, activePlace.title);
               if (imageSrc !== fallback) {
@@ -702,36 +775,114 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               }
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#10151d] via-[#10151d]/24 to-black/20" />
-          
-          {placeHistory.length > 0 && (
+          {/* Cinematic gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#080b0f] via-[#080b0f]/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-transparent" />
+
+          {/* Top bar actions */}
+          <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
+            {placeHistory.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-2 text-xs font-black uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-black/70 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <ChevronLeft size={15} />
+                Back
+              </button>
+            ) : <div />}
             <button
               type="button"
-              onClick={handleBack}
-              className="absolute left-4 top-4 flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-xs font-black uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-black/70 z-50 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={onClose}
+              aria-label="Close place details"
+              className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70 hover:scale-[1.05]"
             >
-              <ChevronLeft size={16} />
-              Back
+              <X size={18} />
             </button>
-          )}
+          </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close place details"
-            className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70"
-          >
-            <X size={20} />
-          </button>
-          <div className="absolute bottom-4 left-4 right-4">
-            <span className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-slate-950">
-              {getCategoryLabel(activePlace.category, activePlace.tags)}
-            </span>
-            <h2 className="line-clamp-2 text-2xl font-black tracking-tight text-white sm:text-3xl">{activePlace.title}</h2>
-            <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-300">{outletLocation}</p>
+          {/* Bottom overlay: badges + title */}
+          <div className="absolute bottom-0 left-0 right-0 p-4">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.16em] backdrop-blur-md ${getCategoryBadgeStyle(activePlace.category)}`}>
+                {getCategoryLabel(activePlace.category, activePlace.tags)}
+              </span>
+              {open && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/25 border border-emerald-500/35 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 backdrop-blur-md">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Open now
+                </span>
+              )}
+              {activePlace.isTrending && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 border border-rose-500/35 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-300 backdrop-blur-md">
+                  🔥 Trending
+                </span>
+              )}
+            </div>
+            <h2 className="line-clamp-2 text-2xl font-black tracking-tight text-white sm:text-3xl drop-shadow-lg">{activePlace.title}</h2>
+            <div className="mt-1.5 flex items-center gap-3">
+              <p className="flex items-center gap-1 text-sm font-semibold text-slate-300">
+                <MapPin size={12} className="text-teal-400" />
+                {outletLocation}
+              </p>
+              {activePlace.rating > 0 && (
+                <span className="flex items-center gap-1 text-sm font-black text-amber-400">
+                  <Star size={12} className="fill-amber-400" />
+                  {activePlace.rating}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
+        {/* ── Tab Navigation ── */}
+        <div className="relative flex border-b border-[var(--border)] bg-[var(--panel-strong)] px-4 sticky top-0 z-20 backdrop-blur-xl">
+          {(["overview", "reviews", "map"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`relative py-3 px-4 text-xs font-black uppercase tracking-widest transition-colors ${
+                activeTab === tab ? "text-teal-300" : "text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {tab === "overview" ? "Overview" : tab === "reviews" ? "Reviews" : "Map"}
+              {activeTab === tab && (
+                <motion.div
+                  layoutId="tab-indicator"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-teal-400"
+                />
+              )}
+            </button>
+          ))}
+          {/* Share button in tab bar */}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(placeUrl).then(() => {
+                  setCopiedShare(true);
+                  setTimeout(() => setCopiedShare(false), 2000);
+                });
+              }}
+              className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--muted-strong)] transition hover:border-teal-400/40 hover:text-teal-300"
+            >
+              {copiedShare ? (
+                <motion.span
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="text-emerald-400 flex items-center gap-1"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Copied!
+                </motion.span>
+              ) : (
+                <>
+                  <Share2 size={11} /> Share
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "overview" && (
         <div className="space-y-4 p-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] md:space-y-5 md:p-6">
           <p className="text-sm leading-6 text-[var(--muted-strong)] sm:text-base sm:leading-7">{activePlace.description}</p>
 
@@ -897,7 +1048,109 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
             </div>
           </div>
 
+          {/* ── Smart Visit Time Heatmap ─────────────────────────── */}
+          {(() => {
+            const vtp = getVisitTimeProfile(activePlace, new Date(), visitSignals);
+            const intensityBar: Record<string, string> = {
+              quiet:    "bg-emerald-500",
+              moderate: "bg-amber-400",
+              busy:     "bg-orange-500",
+              peak:     "bg-rose-600",
+            };
+            const intensityGlow: Record<string, string> = {
+              quiet:    "shadow-[0_0_6px_rgba(16,185,129,0.6)]",
+              moderate: "shadow-[0_0_6px_rgba(251,191,36,0.6)]",
+              busy:     "shadow-[0_0_6px_rgba(249,115,22,0.6)]",
+              peak:     "shadow-[0_0_6px_rgba(225,29,72,0.7)]",
+            };
+            const headerColors: Record<string, string> = {
+              quiet:    "text-emerald-300",
+              moderate: "text-amber-300",
+              busy:     "text-orange-300",
+              peak:     "text-rose-400",
+            };
+            const currentColor = headerColors[vtp.currentIntensity];
+            return (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                      <TrendingUp size={13} />
+                      Best Time to Visit
+                      {vtp.hasRealData && (
+                        <span className="ml-1 rounded-full bg-teal-500/15 border border-teal-500/25 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-teal-400">
+                          From real data
+                        </span>
+                      )}
+                    </p>
+                    <p className={`mt-1 text-sm font-black ${currentColor}`}>
+                      {{
+                        quiet:    "🟢 Quiet — Great time now",
+                        moderate: "🟡 Moderate crowd right now",
+                        busy:     "🟠 Getting busy now",
+                        peak:     "🔴 Peak hours — might be crowded",
+                      }[vtp.currentIntensity]}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Best time</p>
+                    <p className="mt-0.5 text-sm font-black text-teal-300">{vtp.bestLabel}</p>
+                    <p className="text-[10px] font-semibold text-[var(--muted)]">{vtp.bestDayLabel}</p>
+                  </div>
+                </div>
+
+                {/* Hourly bar chart */}
+                <div className="space-y-1.5">
+                  <div className="flex items-end gap-[3px] h-12">
+                    {vtp.hourlySlots.map((slot) => (
+                      <div
+                        key={slot.hour}
+                        className="relative flex-1 flex flex-col items-center justify-end group/slot"
+                        title={`${slot.label}: ${slot.intensity}`}
+                      >
+                        <div
+                          className={`w-full rounded-sm transition-all duration-300 ${
+                            intensityBar[slot.intensity]
+                          } ${slot.isNow ? intensityGlow[slot.intensity] : "opacity-60 group-hover/slot:opacity-80"}`}
+                          style={{ height: `${Math.max(10, slot.score * 100)}%` }}
+                        />
+                        {slot.isNow && (
+                          <span className="absolute -top-4 left-1/2 -translate-x-1/2 flex h-3 w-3 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+                          </span>
+                        )}
+                        {slot.isRealData && !slot.isNow && (
+                          <span className="absolute -top-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-teal-300 opacity-80" />
+                        )}
+                      </div>
+                    ))}
+
+                  </div>
+                  {/* Hour labels — show every 3rd */}
+                  <div className="flex items-center gap-[3px]">
+                    {vtp.hourlySlots.map((slot, idx) => (
+                      <div
+                        key={slot.hour}
+                        className={`flex-1 text-center text-[8px] font-bold leading-none ${
+                          slot.isNow ? "text-white" : "text-[var(--muted)]"
+                        }`}
+                      >
+                        {idx % 3 === 0 ? slot.label : ""}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-[11px] font-semibold leading-relaxed text-[var(--muted)]">
+                  {vtp.tip}
+                </p>
+              </div>
+            );
+          })()}
+
           <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+
             <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Today</p>
@@ -1225,68 +1478,79 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
                 ) : reviews.length === 0 ? (
                   <p className="text-xs font-semibold text-[var(--muted)] italic">No reviews yet. Be the first to share the vibe!</p>
                 ) : (
-                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
-                    {reviews.map((r) => (
-                      <div key={r.id} className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2.5 space-y-1 text-xs">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-500/10 text-[9px] font-black text-teal-300">
-                              {getInitials(r.userFullName)}
-                            </div>
-                            <span className="font-bold text-[var(--foreground)]">{r.userFullName}</span>
-                          </div>
-                          <span className="text-[10px] text-[var(--muted)]">{formatReportTime(r.createdAt)}</span>
-                        </div>
-                        <div className="flex items-center gap-0.5 text-amber-400">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              size={10}
-                              fill={i < r.rating ? "currentColor" : "none"}
-                              className={i < r.rating ? "" : "text-slate-600"}
-                            />
-                          ))}
-                        </div>
-                        <p className="text-[var(--muted-strong)] font-medium leading-relaxed break-words">{r.text}</p>
-                        {r.imageUrls && r.imageUrls.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {r.imageUrls.map((url: string, imgIdx: number) => (
-                              <div key={imgIdx} className="relative h-16 w-16 overflow-hidden rounded-lg cursor-pointer border border-[var(--border)] hover:border-[var(--muted)] transition">
-                                <a href={url} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
-                                  <LazyImage src={url} alt={`Review photo ${imgIdx + 1}`} />
-                                </a>
+                  <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin">
+                    {reviews.map((r) => {
+                      const avatarColors = getAvatarColors(r.userFullName || "");
+                      return (
+                        <div key={r.id} className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 space-y-1.5 text-xs transition duration-200 hover:border-slate-700/60 hover:bg-slate-900/35">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <div className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black ${avatarColors.bg} ${avatarColors.text}`}>
+                                {getInitials(r.userFullName)}
                               </div>
+                              <span className="font-bold text-[var(--foreground)]">{r.userFullName}</span>
+                            </div>
+                            <span className="text-[10px] text-[var(--muted)]">{formatReportTime(r.createdAt)}</span>
+                          </div>
+                          <div className="flex items-center gap-0.5 text-amber-400">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                size={10}
+                                fill={i < r.rating ? "currentColor" : "none"}
+                                className={i < r.rating ? "" : "text-slate-600"}
+                              />
                             ))}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          <p className="text-[var(--muted-strong)] font-medium leading-relaxed break-words">{r.text}</p>
+                          {r.imageUrls && r.imageUrls.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {r.imageUrls.map((url: string, imgIdx: number) => (
+                                <div key={imgIdx} className="relative h-16 w-16 overflow-hidden rounded-lg cursor-pointer border border-[var(--border)] hover:border-[var(--muted)] transition">
+                                  <a href={url} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
+                                    <LazyImage src={url} alt={`Review photo ${imgIdx + 1}`} />
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                  )}
               </div>
             </div>
           </div>
 
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
               <Share2 size={14} />
               Share this place
             </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setPostcardOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-4 py-3 font-black text-slate-950 transition hover:opacity-90 shadow-[0_0_16px_rgba(45,212,191,0.25)]"
+              >
+                <ImageIcon size={16} />
+                Customize Postcard
+              </button>
               <button
                 type="button"
                 onClick={shareVisualCard}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)]"
               >
-                <Download size={18} />
-                Share Visual Card
+                <Download size={16} />
+                Quick Download
               </button>
               <button
                 type="button"
                 onClick={shareOnWhatsApp}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)]"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)]"
               >
-                <Share2 size={18} />
+                <Share2 size={16} />
                 WhatsApp
               </button>
             </div>
@@ -1392,7 +1656,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               href={directionsUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90"
             >
               <Navigation size={18} />
               Directions
@@ -1401,14 +1665,180 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
               href={searchWebUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel)]"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel)]"
             >
               <ExternalLink size={18} />
               Search Web
             </a>
           </div>
         </div>
+        )}
+
+        {/* ── Reviews Tab ── */}
+        {activeTab === "reviews" && (
+          <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] md:p-6 space-y-5">
+            {loadingReviews ? (
+              <div className="space-y-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="h-24 animate-pulse rounded-xl bg-[var(--panel-soft)]" />
+                ))}
+              </div>
+            ) : reviewsError ? (
+              <div className="rounded-xl border border-rose-500/20 bg-rose-500/8 p-6 text-center">
+                <p className="text-sm font-semibold text-rose-300">{reviewsError}</p>
+              </div>
+            ) : reviews.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-8 text-center">
+                <Star size={32} className="mx-auto mb-3 text-[var(--muted)] opacity-40" />
+                <p className="font-black text-[var(--foreground)]">No reviews yet</p>
+                <p className="mt-1 text-sm text-[var(--muted)]">Be the first to review this place!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reviewsSummary && (
+                  <div className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                    <div className="text-center">
+                      <p className="text-4xl font-black text-[var(--foreground)]">{reviewsSummary.averageRating.toFixed(1)}</p>
+                      <div className="mt-1 flex items-center justify-center gap-0.5">
+                        {[1,2,3,4,5].map(s => (
+                          <Star key={s} size={12} className={s <= Math.round(reviewsSummary.averageRating) ? "fill-amber-400 text-amber-400" : "text-[var(--border)]"} />
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[10px] text-[var(--muted)]">{reviewsSummary.reviewCount} reviews</p>
+                    </div>
+                  </div>
+                )}
+                {reviews.map((review: any) => {
+                  const avatarColors = getAvatarColors(review.userFullName || review.userEmail || "U");
+                  return (
+                    <motion.div
+                      key={review.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4 space-y-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${avatarColors.bg} ${avatarColors.text} text-sm font-black`}>
+                          {getInitials(review.userFullName || review.userEmail || "U")}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate text-sm font-black text-[var(--foreground)]">{review.userFullName || "Explorer"}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="flex items-center gap-0.5">
+                              {[1,2,3,4,5].map(s => (
+                                <Star key={s} size={10} className={s <= review.rating ? "fill-amber-400 text-amber-400" : "text-[var(--border)]"} />
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-[var(--muted)]">{formatReportTime(review.createdAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-sm text-[var(--muted-strong)] leading-relaxed">{review.text}</p>
+                      {review.imageUrls?.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1">
+                          {review.imageUrls.map((url: string, i: number) => (
+                            <div key={i} className="relative h-20 w-28 shrink-0 rounded-lg overflow-hidden border border-[var(--border)]">
+                              <LazyImage src={url} alt={`Review photo ${i+1}`} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Write review */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] p-4 space-y-3">
+              <h3 className="text-sm font-black text-[var(--foreground)] flex items-center gap-2">
+                <Star size={14} className="text-amber-400" />
+                {reviews.find((r: any) => r.userEmail === user?.email) ? "Update Your Review" : "Write a Review"}
+              </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--muted)]">Rating:</span>
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map(s => (
+                    <button key={s} onClick={() => setUserRating(s)} className="transition hover:scale-125">
+                      <Star size={18} className={s <= userRating ? "fill-amber-400 text-amber-400" : "text-[var(--border)]"} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                value={reviewText}
+                onChange={e => setReviewText(e.target.value)}
+                placeholder="Share your experience..."
+                rows={3}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--input)] p-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] outline-none focus:border-teal-400/70 resize-none"
+              />
+              {reviewMessage && (
+                <p className={`text-xs font-semibold ${reviewMessage.includes("success") || reviewMessage.includes("🚀") ? "text-emerald-400" : "text-rose-400"}`}>{reviewMessage}</p>
+              )}
+              <button
+                onClick={submitReview}
+                disabled={submittingReview}
+                className="w-full rounded-xl bg-teal-500 hover:bg-teal-400 disabled:opacity-50 px-4 py-2.5 text-sm font-black text-slate-950 transition"
+              >
+                {submittingReview ? "Submitting…" : "Publish Review"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Map Tab ── */}
+        {activeTab === "map" && (
+          <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] md:p-6 space-y-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] overflow-hidden">
+              <iframe
+                title={`Map of ${activePlace.title}`}
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${activePlace.longitude - 0.005},${activePlace.latitude - 0.005},${activePlace.longitude + 0.005},${activePlace.latitude + 0.005}&layer=mapnik&marker=${activePlace.latitude},${activePlace.longitude}`}
+                className="w-full h-64 sm:h-80 border-0"
+                loading="lazy"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <a
+                href={directionsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-3 font-black text-[var(--primary-foreground)] transition hover:opacity-90"
+              >
+                <Navigation size={16} />
+                Get Directions
+              </a>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activePlace.title + " " + outletLocation)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 font-black text-[var(--foreground)] transition hover:bg-[var(--panel)]"
+              >
+                <MapPin size={16} />
+                Open in Google Maps
+              </a>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+              <div className="flex items-start gap-3">
+                <MapPin size={16} className="text-teal-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-black text-[var(--foreground)]">{activePlace.title}</p>
+                  <p className="text-xs text-[var(--muted)] mt-0.5">{outletLocation}</p>
+                  <p className="text-[10px] font-mono text-[var(--muted)] mt-1 opacity-60">
+                    {activePlace.latitude.toFixed(5)}, {activePlace.longitude.toFixed(5)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
+    <PostcardCustomizer
+      place={activePlace}
+      imageSrc={imageSrc}
+      open={postcardOpen}
+      onClose={() => setPostcardOpen(false)}
+    />
+    </>
   );
 };

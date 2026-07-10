@@ -43,9 +43,9 @@ export const POST = createApiHandler(
       `
       INSERT INTO place_suggestions (
         user_id, title, description, category, latitude, longitude,
-        price_range, hours, phone, website, city, locality
+        price_range, hours, phone, website, city, locality, location
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ST_SetSRID(ST_MakePoint($6, $5), 4326))
       RETURNING id, title, status
       `,
       [

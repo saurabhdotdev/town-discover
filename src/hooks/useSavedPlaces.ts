@@ -4,62 +4,97 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Place } from "@/types";
 
+// Global module-level state for useSavedPlaces
+let globalSavedPlaceIds: Set<string> | null = null;
+let globalSavedPlaces: Place[] | null = null;
+let globalLoadingPlaces = false;
+const savedPlacesListeners = new Set<() => void>();
+
+const updateSavedPlacesState = (ids: Set<string>, places: Place[], loading: boolean) => {
+  globalSavedPlaceIds = ids;
+  globalSavedPlaces = places;
+  globalLoadingPlaces = loading;
+  savedPlacesListeners.forEach((listener) => listener());
+};
+
 export const useSavedPlaces = () => {
   const { user, setAuthRequiredMessage } = useAuth();
-  const [savedPlaceIds, setSavedPlaceIds] = useState<Set<string>>(new Set());
-  const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
-  const [loadingPlaces, setLoadingPlaces] = useState<boolean>(false);
+  const [savedPlaceIds, setSavedPlaceIds] = useState<Set<string>>(
+    globalSavedPlaceIds ?? new Set()
+  );
+  const [savedPlaces, setSavedPlaces] = useState<Place[]>(
+    globalSavedPlaces ?? []
+  );
+  const [loadingPlaces, setLoadingPlaces] = useState<boolean>(
+    globalLoadingPlaces
+  );
 
   useEffect(() => {
+    const handleUpdate = () => {
+      setSavedPlaceIds(globalSavedPlaceIds ?? new Set());
+      setSavedPlaces(globalSavedPlaces ?? []);
+      setLoadingPlaces(globalLoadingPlaces);
+    };
+
+    savedPlacesListeners.add(handleUpdate);
+
     if (!user) {
-      setSavedPlaceIds(new Set());
-      setSavedPlaces([]);
-      return;
+      updateSavedPlacesState(new Set(), [], false);
+      savedPlacesListeners.delete(handleUpdate);
+      return () => {
+        savedPlacesListeners.delete(handleUpdate);
+      };
     }
 
-    const controller = new AbortController();
+    // Only fetch if not already loaded globally
+    if (globalSavedPlaceIds === null) {
+      const controller = new AbortController();
+      updateSavedPlacesState(new Set(), [], true);
 
-    fetch("/api/saved-places", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? "Unable to load saved places.");
-        const ids = data.placeIds ?? [];
-        setSavedPlaceIds(new Set(ids));
-
-        if (ids.length > 0) {
-          setLoadingPlaces(true);
-          fetch(`/api/places/resolve?ids=${encodeURIComponent(ids.join(","))}`, {
-            signal: controller.signal,
-          })
-            .then(async (res) => {
-              const resData = await res.json();
-              if (res.ok && !controller.signal.aborted) {
-                setSavedPlaces(resData.places ?? []);
-              }
-              if (!controller.signal.aborted) {
-                setLoadingPlaces(false);
-              }
-            })
-            .catch(() => {
-              if (!controller.signal.aborted) {
-                setLoadingPlaces(false);
-              }
-            });
-        } else {
-          setSavedPlaces([]);
-        }
+      fetch("/api/saved-places", {
+        cache: "no-store",
+        signal: controller.signal,
       })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setSavedPlaceIds(new Set());
-          setSavedPlaces([]);
-        }
-      });
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error ?? "Unable to load saved places.");
+          const ids = data.placeIds ?? [];
+          const allIds = data.allPlaceIds ?? ids;
 
-    return () => controller.abort();
+          if (allIds.length > 0) {
+            fetch(`/api/places/resolve?ids=${encodeURIComponent(allIds.join(","))}`, {
+              signal: controller.signal,
+            })
+              .then(async (res) => {
+                const resData = await res.json();
+                if (res.ok && !controller.signal.aborted) {
+                  updateSavedPlacesState(new Set(ids), resData.places ?? [], false);
+                } else {
+                  updateSavedPlacesState(new Set(), [], false);
+                }
+              })
+              .catch(() => {
+                updateSavedPlacesState(new Set(), [], false);
+              });
+          } else {
+            updateSavedPlacesState(new Set(), [], false);
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            updateSavedPlacesState(new Set(), [], false);
+          }
+        });
+
+      return () => {
+        controller.abort();
+        savedPlacesListeners.delete(handleUpdate);
+      };
+    }
+
+    return () => {
+      savedPlacesListeners.delete(handleUpdate);
+    };
   }, [user]);
 
   const toggleSave = useCallback(
@@ -71,26 +106,21 @@ export const useSavedPlaces = () => {
         return;
       }
 
-      const isSaved = savedPlaceIds.has(place.id);
+      const currentIds = globalSavedPlaceIds ?? savedPlaceIds;
+      const currentPlaces = globalSavedPlaces ?? savedPlaces;
+      const isSaved = currentIds.has(place.id);
       
-      // Optimistic updates
-      setSavedPlaceIds((current) => {
-        const next = new Set(current);
-        if (isSaved) {
-          next.delete(place.id);
-        } else {
-          next.add(place.id);
-        }
-        return next;
-      });
-
-      setSavedPlaces((current) => {
-        if (isSaved) {
-          return current.filter((p) => p.id !== place.id);
-        } else {
-          return [...current, place];
-        }
-      });
+      // Optimistic updates (Global)
+      const nextIds = new Set(currentIds);
+      let nextPlaces = [...currentPlaces];
+      if (isSaved) {
+        nextIds.delete(place.id);
+        nextPlaces = nextPlaces.filter((p) => p.id !== place.id);
+      } else {
+        nextIds.add(place.id);
+        nextPlaces.push(place);
+      }
+      updateSavedPlacesState(nextIds, nextPlaces, false);
 
       try {
         const response = await fetch(isSaved ? `/api/saved-places?placeId=${encodeURIComponent(place.id)}` : "/api/saved-places", {
@@ -103,27 +133,20 @@ export const useSavedPlaces = () => {
           throw new Error("Unable to update saved place.");
         }
       } catch {
-        // Rollback on failure
-        setSavedPlaceIds((current) => {
-          const next = new Set(current);
-          if (isSaved) {
-            next.add(place.id);
-          } else {
-            next.delete(place.id);
-          }
-          return next;
-        });
-
-        setSavedPlaces((current) => {
-          if (isSaved) {
-            return [...current, place];
-          } else {
-            return current.filter((p) => p.id !== place.id);
-          }
-        });
+        // Rollback on failure (Global)
+        const rollbackIds = new Set(nextIds);
+        let rollbackPlaces = [...nextPlaces];
+        if (isSaved) {
+          rollbackIds.add(place.id);
+          rollbackPlaces.push(place);
+        } else {
+          rollbackIds.delete(place.id);
+          rollbackPlaces = rollbackPlaces.filter((p) => p.id !== place.id);
+        }
+        updateSavedPlacesState(rollbackIds, rollbackPlaces, false);
       }
     },
-    [savedPlaceIds, setAuthRequiredMessage, user]
+    [savedPlaceIds, savedPlaces, setAuthRequiredMessage, user]
   );
 
   return {

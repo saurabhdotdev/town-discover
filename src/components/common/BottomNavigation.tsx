@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, Compass, Home, Map, Menu, Search, Trophy, User, Users, X } from "lucide-react";
+import { CalendarDays, Compass, Home, Map, Menu, Search, Trophy, User, Users, X, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ const navItems: NavItem[] = [
   { href: "/map", label: "Map", icon: <Map size={21} /> },
   { href: "/hangouts", label: "Hangouts", icon: <Users size={21} /> },
   { href: "/leaderboard", label: "Ranks", icon: <Trophy size={21} /> },
+  { href: "/stats", label: "Stats", icon: <BarChart3 size={21} /> },
   { href: "/profile", label: "Profile", icon: <User size={21} /> },
 ];
 
@@ -40,6 +41,21 @@ export const BottomNavigation = () => {
       document.body.style.overflow = "";
     };
   }, [mobileMenuOpen]);
+
+  const handleFindPlacesClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (pathname === "/discover") {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent("focus-discover-search"));
+    }
+  };
+
+  const handleMobileFindPlacesClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    setMobileMenuOpen(false);
+    if (pathname === "/discover") {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent("focus-discover-search"));
+    }
+  };
 
   return (
     <>
@@ -86,7 +102,8 @@ export const BottomNavigation = () => {
             <NotificationBell />
             <ThemeToggle />
             <Link
-              href="/discover"
+              href="/discover?focus=true"
+              onClick={handleFindPlacesClick}
               className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--primary-foreground)] transition-transform hover:-translate-y-0.5"
             >
               <Search size={16} />
@@ -165,8 +182,8 @@ export const BottomNavigation = () => {
               </div>
 
               <Link
-                href="/discover"
-                onClick={() => setMobileMenuOpen(false)}
+                href="/discover?focus=true"
+                onClick={handleMobileFindPlacesClick}
                 className="mt-5 inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-3 text-sm font-black text-[var(--primary-foreground)]"
               >
                 <Search size={17} />

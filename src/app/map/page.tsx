@@ -9,7 +9,7 @@ import dynamic from "next/dynamic";
 import { useCitySelection } from "@/hooks/useCitySelection";
 import { useLivePlacesByBounds } from "@/hooks/useLivePlacesByBounds";
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { MOCK_PLACES, getPlacesWithDistance } from "@/data/mock-places";
+import { getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { Place } from "@/types";
@@ -258,7 +258,9 @@ export default function MapPage() {
     error: locationError,
     source: locationSource,
     city: detectedCity,
+    liveTracking,
     requestLocation,
+    toggleLiveTracking,
   } = useGeolocation();
   const activeCity = !hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity;
   const activeLocation =
@@ -273,6 +275,7 @@ export default function MapPage() {
   const [focusedPlace, setFocusedPlace] = useState<Place | null>(null);
   const [hideOtherPlaces, setHideOtherPlaces] = useState(false);
   const [detailsPlace, setDetailsPlace] = useState<Place | null>(null);
+  const [injectedEventPlace, setInjectedEventPlace] = useState<Place | null>(null);
 
   useEffect(() => {
     if (!focusedPlace) {
@@ -493,6 +496,38 @@ export default function MapPage() {
         .finally(() => {
           setTripLoading(false);
         });
+    } else {
+      // Handle event venue pin from Events page (/events → Show on Map)
+      const eventLat = searchParams.get("eventLat");
+      const eventLng = searchParams.get("eventLng");
+      if (eventLat && eventLng) {
+        const lat = parseFloat(eventLat);
+        const lng = parseFloat(eventLng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          const eventTitle = searchParams.get("eventTitle") ?? "Event Venue";
+          const eventVenue = searchParams.get("eventVenue") ?? "";
+          const eventCategory = searchParams.get("eventCategory") ?? "event";
+          const syntheticPlace: Place = {
+            id: `event-pin-${lat}-${lng}`,
+            title: eventTitle,
+            description: `📍 ${eventVenue}`,
+            category: "event",
+            image: "",
+            rating: 0,
+            distance: 0,
+            tags: [eventCategory],
+            city: activeCity,
+            locality: eventVenue,
+            isOpen: true,
+            isTrending: true,
+            reviewCount: 0,
+            latitude: lat,
+            longitude: lng,
+          };
+          setInjectedEventPlace(syntheticPlace);
+          setFocusedPlace(syntheticPlace);
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1093,8 +1128,13 @@ export default function MapPage() {
       }
     });
 
-    return getPlacesWithDistance([...combined, ...extraSaved], activeLocation);
-  }, [activeLocation, curatedPlaces, livePlaces, savedPlaces, activeCity]);
+    const all = [...combined, ...extraSaved];
+    // Include pinned event marker if navigated from Events page
+    if (injectedEventPlace && !combinedIds.has(injectedEventPlace.id)) {
+      all.push(injectedEventPlace);
+    }
+    return getPlacesWithDistance(all, activeLocation);
+  }, [activeLocation, curatedPlaces, livePlaces, savedPlaces, activeCity, injectedEventPlace]);
 
   const filteredPlaces = useMemo(() => {
     return allPlaces.filter((place) => {
@@ -1289,6 +1329,8 @@ export default function MapPage() {
               source={locationSource}
               loading={locationLoading}
               error={locationError}
+              liveTracking={liveTracking}
+              onToggleTracking={toggleLiveTracking}
               onRequest={() => {
                 preferDetectedCity();
                 requestLocation();
@@ -1296,7 +1338,7 @@ export default function MapPage() {
             />
           </div>
 
-          <div className="absolute top-4 left-4 z-[500] flex items-center gap-2">
+          <div className="absolute top-4 left-4 z-[500] flex flex-wrap items-center gap-2 max-w-[calc(100%-2rem)]">
             <button
               type="button"
               onClick={() => setIsSuggestModalOpen(true)}
@@ -1305,6 +1347,31 @@ export default function MapPage() {
               <span className="flex h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
               + Add Spot
             </button>
+
+            {locationSource === "browser" && (
+              <button
+                type="button"
+                onClick={toggleLiveTracking}
+                className={cn(
+                  "flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-black tracking-wider uppercase shadow-xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer",
+                  liveTracking
+                    ? "border-teal-500/40 bg-teal-950/95 text-teal-400"
+                    : "border-slate-800 bg-slate-950/90 text-slate-400 hover:text-slate-200"
+                )}
+              >
+                <LocateFixed 
+                  size={14} 
+                  className={cn(
+                    liveTracking ? "text-teal-400 animate-pulse" : "text-slate-400"
+                  )} 
+                />
+                <span>{liveTracking ? "Live: ON" : "Live: OFF"}</span>
+                <span className={cn(
+                  "h-1.5 w-1.5 rounded-full transition-all duration-300",
+                  liveTracking ? "bg-teal-400 animate-ping" : "bg-slate-600"
+                )} />
+              </button>
+            )}
 
             {focusedPlace && (
               <button

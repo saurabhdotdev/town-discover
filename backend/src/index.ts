@@ -9,6 +9,10 @@ import { Server } from "socket.io";
 import path from "path";
 import crypto from "crypto";
 
+// Load environment variables from frontend env.local first for convenience
+dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
+dotenv.config(); // Fallback to backend .env
+
 // Import local components
 import db from "./db";
 import { runDatabaseMigrations } from "./migrations";
@@ -24,10 +28,6 @@ import {
 } from "./schemas/crowdReport";
 import { postLaunchDealSchema } from "./schemas/flashDeal";
 import { requestLogger } from "./middleware/logger";
-
-// Load environment variables from frontend env.local first for convenience
-dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
-dotenv.config(); // Fallback to backend .env
 
 const app: Application = express();
 
@@ -225,8 +225,25 @@ const getPlaceSummary = async (placeId: string) => {
 };
 
 // Health Check Route
-app.get("/api/health", (req: Request, res: Response) => {
-  res.json({ status: "Sheher API is alive ✨", realTimeConnected: io.engine.clientsCount });
+app.get("/api/health", async (req: Request, res: Response) => {
+  try {
+    // Perform a basic DB ping query to verify database connection health
+    await db.query("SELECT 1");
+    res.json({
+      status: "Sheher API is alive ✨",
+      database: "healthy",
+      realTimeConnected: io.engine.clientsCount,
+      uptimeSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000)
+    });
+  } catch (error: any) {
+    console.error("❌ Health Check Failed: Database connection is unhealthy:", error.message || error);
+    res.status(503).json({
+      status: "Sheher API is degraded ⚠️",
+      database: "unhealthy",
+      error: process.env.NODE_ENV !== "production" ? error.message : "Database connection failure",
+      realTimeConnected: io.engine.clientsCount
+    });
+  }
 });
 
 // GET crowd reports
@@ -318,6 +335,16 @@ app.post(
     const user = req.user!;
 
     try {
+      // Verify that the place exists in approved_places
+      const placeCheck = await db.query(
+        "SELECT id FROM approved_places WHERE id = $1 LIMIT 1",
+        [placeId]
+      );
+      if (placeCheck.rows.length === 0) {
+        res.status(404).json({ error: "The specified place does not exist." });
+        return;
+      }
+
       // Check Cooldown
       const recentReportResult = await db.query(
         `
@@ -353,6 +380,16 @@ app.post(
       const client = await db.connect();
       let report;
 
+      // Map crowd level to a 1-4 score for the visit signals table
+      const crowdScoreMap: Record<string, number> = {
+        low: 1,
+        moderate: 2,
+        busy: 3,
+        very_crowded: 4,
+      };
+      const crowdScore = crowdScoreMap[crowdLevel] || 2;
+      const reportHour = new Date().getHours();
+
       try {
         await client.query("BEGIN");
         await client.query(
@@ -372,6 +409,26 @@ app.post(
           `,
           [placeId, crowdLevel, note || null, user.id]
         );
+
+        // Persist signal into place_visit_signals (running average)
+        // Uses UPSERT with a weighted average: avg = (avg * n + new) / (n + 1)
+        // Capped at 500 samples so recent signals stay influential.
+        await client.query(
+          `
+          INSERT INTO place_visit_signals (place_id, hour_of_day, sample_count, avg_score, last_updated)
+          VALUES ($1, $2, 1, $3, NOW())
+          ON CONFLICT (place_id, hour_of_day) DO UPDATE SET
+            avg_score    = ROUND(
+              (place_visit_signals.avg_score * LEAST(place_visit_signals.sample_count, 500) + EXCLUDED.avg_score)
+              / (LEAST(place_visit_signals.sample_count, 500) + 1)::numeric,
+              3
+            ),
+            sample_count = LEAST(place_visit_signals.sample_count + 1, 501),
+            last_updated = NOW()
+          `,
+          [placeId, reportHour, crowdScore]
+        );
+
         await client.query("COMMIT");
         report = rows[0];
       } catch (error) {
@@ -428,6 +485,16 @@ app.post(
   async (req: Request, res: Response, next: NextFunction) => {
     const { placeId, placeTitle, discountPercentage, description } = req.body;
     try {
+      // Verify that the place exists in approved_places
+      const placeCheck = await db.query(
+        "SELECT id FROM approved_places WHERE id = $1 LIMIT 1",
+        [placeId]
+      );
+      if (placeCheck.rows.length === 0) {
+        res.status(404).json({ error: "The specified place does not exist. Cannot launch flash deal." });
+        return;
+      }
+
       const expiresAt = new Date(Date.now() + 45 * 60 * 1000); // 45 mins expiry
       const { rows } = await db.query(
         `
@@ -608,7 +675,7 @@ process.on("uncaughtException", (error) => {
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
-  shutdown("unhandledRejection");
+  // Log the rejection but do not shut down the server to maintain service availability
 });
 
 startServer().catch(async (error) => {

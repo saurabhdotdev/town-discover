@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getPool } from "@/lib/postgres";
 import { getFallbackPlacesForCity } from "@/lib/server/fallback-places";
 import { fetchLiveTownEvents } from "@/lib/town-events";
-import { fetchLivePlacesByCity } from "@/lib/live-places-by-city";
+import { fetchLivePlaces } from "@/lib/live-places";
 import { mergePlaces } from "@/lib/merge-places";
 import { CITY_CENTERS, getCityFromQuery, getNearestSupportedCity, SUPPORTED_CITY_NAMES, SupportedCityName } from "@/lib/pune-location";
 import { UserLocation } from "@/types";
@@ -75,9 +75,10 @@ export async function GET(request: NextRequest) {
             price_range AS "priceRange",
             phone,
             website,
-            hours
+            hours,
+            review_mood AS "reviewMood"
           FROM approved_places
-          WHERE latitude >= $1 AND latitude <= $2 AND longitude >= $3 AND longitude <= $4
+          WHERE location && ST_MakeEnvelope($3, $1, $4, $2, 4326)
           `,
           [south, north, west, east]
         );
@@ -87,7 +88,8 @@ export async function GET(request: NextRequest) {
           isTrending: false,
           reviewCount: 0,
           distance: 0,
-          hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined
+          hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
+          reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
         }));
       } catch (dbErr) {
         console.error("Failed to fetch approved places by bounds:", dbErr);
@@ -152,7 +154,8 @@ export async function GET(request: NextRequest) {
           price_range AS "priceRange",
           phone,
           website,
-          hours
+          hours,
+          review_mood AS "reviewMood"
         FROM approved_places
         WHERE city = $1
         `,
@@ -164,7 +167,8 @@ export async function GET(request: NextRequest) {
         isTrending: false,
         reviewCount: 0,
         distance: 0,
-        hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined
+        hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
+        reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
       }));
     } catch (dbErr) {
       console.error("Failed to fetch approved places:", dbErr);
@@ -187,7 +191,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const livePlaces = await fetchLivePlacesByCity(city);
+    const livePlaces = await fetchLivePlaces(location, request.signal);
     const places = mergePlaces([...approvedPlaces, ...livePlaces], townEvents);
     return Response.json({ places, city, source: "osm", eventsMerged: townEvents.length }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } });
   } catch (error) {

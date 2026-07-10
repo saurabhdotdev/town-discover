@@ -28,6 +28,8 @@ import { API_URL, formatDistance, formatHours, formatPlaceArea, getCategoryAccen
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
+import { getVisitTimeProfile } from "@/lib/visit-time-model";
+
 
 interface DiscoveryCardProps {
   place: Place;
@@ -273,6 +275,23 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
               </span>
             )}
           </div>
+
+          {/* Visit Time Intensity Badge */}
+          {(() => {
+            const profile = getVisitTimeProfile(place);
+            const config = {
+              quiet:    { dot: "bg-emerald-400", text: "text-emerald-300", label: "Quiet Now",    border: "border-emerald-500/30", bg: "bg-emerald-950/80" },
+              moderate: { dot: "bg-amber-400",   text: "text-amber-300",   label: "Moderate",     border: "border-amber-500/30",   bg: "bg-amber-950/80" },
+              busy:     { dot: "bg-orange-400",  text: "text-orange-300",  label: "Getting Busy", border: "border-orange-500/30",  bg: "bg-orange-950/80" },
+              peak:     { dot: "bg-rose-500",    text: "text-rose-300",    label: "Peak Hours",   border: "border-rose-500/30",    bg: "bg-rose-950/80" },
+            }[profile.currentIntensity];
+            return (
+              <div className={`absolute top-3 right-3 flex items-center gap-1.5 rounded-md border ${config.border} ${config.bg} px-2 py-1 text-[10px] font-black uppercase tracking-wider ${config.text} backdrop-blur-md z-10`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${config.dot} animate-pulse shrink-0`} />
+                {config.label}
+              </div>
+            );
+          })()}
 
 
           <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-sm font-bold text-white backdrop-blur-md">

@@ -20,7 +20,32 @@ export const getPool = () => {
         ? false
         : { rejectUnauthorized: false },
     });
+
+    globalForPg.townDiscoverPgPool.on("error", (err) => {
+      console.error("Unexpected error on idle pg client:", err);
+    });
   }
 
   return globalForPg.townDiscoverPgPool;
+};
+
+export const findPlacesNearLocation = async (
+  pool: Pool,
+  tableName: string,
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  limit: number = 50
+) => {
+  const query = `
+    SELECT *,
+      ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) AS distance_meters
+    FROM ${tableName}
+    WHERE ST_DWithin(location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3, false)
+    ORDER BY location <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
+    LIMIT $4;
+  `;
+  
+  const result = await pool.query(query, [longitude, latitude, radiusMeters, limit]);
+  return result.rows;
 };
