@@ -664,6 +664,7 @@ export default function EventsPage() {
         title="What's Happening"
         location={`${selectedCity} · AI-Powered Feed`}
         showLocation
+        className="md:!static md:!top-auto"
       />
 
       <div className="w-full max-w-screen-xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-6">
