@@ -25,7 +25,7 @@ import { AuthUser } from "@/types";
 import { ApiError, ForbiddenError, ServiceUnavailableError, UnauthorizedError, serializeError } from "./api-errors";
 import { getClientIp, logRequest } from "./request-logger";
 import { checkRateLimit, RateLimitConfig, RATE_LIMIT_READ, RATE_LIMIT_WRITE } from "./rate-limit";
-import { verifyTrustedOrigin } from "@/lib/request-security";
+import { verifyTrustedOrigin, getAllowedOrigins } from "@/lib/request-security";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,16 +66,16 @@ export interface HandlerContext {
 
 type Handler = (request: NextRequest, context: HandlerContext) => Promise<Response>;
 
-// ─── Migration Memoization ────────────────────────────────────────────────────
-
-/** We only need to run migrations once per process lifetime. */
-let migrationsDone = false;
+type GlobalWithMigrationDone = typeof globalThis & {
+  townDiscoverMigrationsDone?: boolean;
+};
 
 async function ensureMigrations(pool: Pool): Promise<void> {
-  if (migrationsDone) return;
+  const g = globalThis as GlobalWithMigrationDone;
+  if (g.townDiscoverMigrationsDone) return;
 
   await ensureAuthSetup(pool);
-  migrationsDone = true;
+  g.townDiscoverMigrationsDone = true;
 }
 
 // ─── Session Pruning Throttle ─────────────────────────────────────────────────
@@ -130,7 +130,7 @@ export function createApiHandler(options: HandlerOptions, handler: Handler): (re
 
       if (rateLimitConfig) {
         const routeKey = options.rateLimitKey ?? `${request.method}:${path}`;
-        rateLimitHeaders = checkRateLimit(ip, routeKey, rateLimitConfig);
+        rateLimitHeaders = await checkRateLimit(ip, routeKey, rateLimitConfig);
       }
 
       // ── 2. Database Pool ──────────────────────────────────────────────
@@ -171,6 +171,18 @@ export function createApiHandler(options: HandlerOptions, handler: Handler): (re
         response.headers.set(key, value);
       }
 
+      // ── CORS Headers ──────────────────────────────────────────────────
+      const origin = request.headers.get("origin");
+      if (origin) {
+        const allowedOrigins = getAllowedOrigins(request);
+        if (allowedOrigins.has(origin) || (process.env.NODE_ENV !== "production" && (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")))) {
+          response.headers.set("Access-Control-Allow-Origin", origin);
+          response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+          response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Cookie");
+          response.headers.set("Access-Control-Allow-Credentials", "true");
+        }
+      }
+
       // ── 7. Log Success ────────────────────────────────────────────────
       logRequest({
         timestamp: new Date().toISOString(),
@@ -208,6 +220,17 @@ export function createApiHandler(options: HandlerOptions, handler: Handler): (re
         "Content-Type": "application/json",
         ...rateLimitHeaders,
       };
+
+      const origin = request.headers.get("origin");
+      if (origin) {
+        const allowedOrigins = getAllowedOrigins(request);
+        if (allowedOrigins.has(origin) || (process.env.NODE_ENV !== "production" && (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")))) {
+          responseHeaders["Access-Control-Allow-Origin"] = origin;
+          responseHeaders["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
+          responseHeaders["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Cookie";
+          responseHeaders["Access-Control-Allow-Credentials"] = "true";
+        }
+      }
 
       if (error instanceof ApiError && "retryAfterSeconds" in error) {
         responseHeaders["Retry-After"] = String((error as { retryAfterSeconds: number }).retryAfterSeconds);

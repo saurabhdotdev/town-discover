@@ -97,6 +97,13 @@ const withHeaders = (response: Response, headers: Record<string, string>) => {
   return response;
 };
 
+function cleanJsonText(text: string): string {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "");
+  cleaned = cleaned.replace(/\s*```$/, "");
+  return cleaned.trim();
+}
+
 function getEventImage(category: string): string {
   return CATEGORY_IMAGES[category] ?? "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&h=420&fit=crop";
 }
@@ -467,8 +474,8 @@ async function scrapeBookMyShowEvents(city: string): Promise<ScrapedBmsEvent[]> 
             }
           }
         }
-      } catch (e) {
-        // Ignore json errors
+      } catch (_e) {
+        // Ignore json parse errors
       }
     }
     
@@ -536,7 +543,7 @@ Return ONLY the JSON array containing the enriched events, no markdown blocks, n
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 0.85,
+        temperature: 0.2,
         maxOutputTokens: 8192,
       },
     }),
@@ -550,7 +557,7 @@ Return ONLY the JSON array containing the enriched events, no markdown blocks, n
   const data = await response.json();
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
   
-  const events: LiveEvent[] = JSON.parse(rawText);
+  const events: LiveEvent[] = JSON.parse(cleanJsonText(rawText));
   return events;
 }
 
@@ -607,7 +614,7 @@ Return ONLY the JSON array, no explanation.`;
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 0.85,
+        temperature: 0.2,
         maxOutputTokens: 8192,
       },
     }),
@@ -621,7 +628,7 @@ Return ONLY the JSON array, no explanation.`;
   const data = await response.json();
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
   
-  let events: LiveEvent[] = JSON.parse(rawText);
+  let events: LiveEvent[] = JSON.parse(cleanJsonText(rawText));
 
   // Post-process: assign images based on category
   events = events.map((evt) => ({
@@ -639,7 +646,7 @@ export async function GET(request: NextRequest) {
     const cityParam = (request.nextUrl.searchParams.get("city") ?? "Pune") as SupportedCityName;
     const category = request.nextUrl.searchParams.get("category") ?? "all";
     const refresh = request.nextUrl.searchParams.get("refresh") === "true";
-    rateLimitHeaders = checkRateLimit(
+    rateLimitHeaders = await checkRateLimit(
       getClientIp(request),
       refresh ? "GET:/api/events/live:refresh" : "GET:/api/events/live",
       refresh ? refreshEventsRateLimit : liveEventsRateLimit

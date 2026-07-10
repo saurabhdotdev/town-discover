@@ -44,7 +44,8 @@ export const GET = createApiHandler(
       [city]
     );
 
-    const messages = rows.map((r: any) => {
+    interface ShoutboxRow { id: string; userId: string; text: string; city: string; createdAt: string; userFullName: string; totalXp: string; }
+    const messages = rows.map((r: ShoutboxRow) => {
       const totalXp = Number(r.totalXp);
       const levelInfo = computeLevel(totalXp);
       return {

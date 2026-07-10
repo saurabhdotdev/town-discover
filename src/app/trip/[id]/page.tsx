@@ -21,6 +21,8 @@ import { Place } from "@/types";
 import { cn, formatPlaceArea, getCategoryLabel } from "@/lib/utils";
 import { MapSkeleton } from "@/components/common/Skeleton";
 import { BrandMark } from "@/components/common/BrandMark";
+import { calculateDistance } from "@/lib/geo";
+import { Sparkles } from "lucide-react";
 
 const MapView = dynamic(
   () => import("@/components/map/MapView").then((mod) => mod.MapView),
@@ -132,6 +134,7 @@ export default function TripPage({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [selectedStop, setSelectedStop] = useState<string | null>(null);
+  const [travelMode, setTravelMode] = useState<"driving" | "walking">("driving");
 
   useEffect(() => {
     let cancelled = false;
@@ -470,173 +473,323 @@ export default function TripPage({
         </div>
 
         {/* Stops Timeline */}
-        <motion.section
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.42 }}
-          className="mt-8"
-        >
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-black text-[var(--foreground)] sm:text-xl">
-                Route Stops
-              </h2>
-              <p className="mt-0.5 text-xs font-semibold text-[var(--muted)]">
-                {plan.stops.length} pitstops discovered along this route
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-400 border border-cyan-400/20">
-              {plan.stops.length} stops
-            </span>
-          </div>
-
-          <div className="relative space-y-0">
-            {/* Timeline line */}
-            <div className="absolute left-5 top-4 bottom-4 w-px bg-gradient-to-b from-teal-400/40 via-cyan-400/20 to-transparent sm:left-6" />
-
-            {plan.stops.map((stop, index) => {
-              const isExpanded = selectedStop === stop.id;
-              const currentSubCity = getStopSubCity(stop);
-              const prevStop = index > 0 ? plan.stops[index - 1] : null;
-              const prevSubCity = prevStop ? getStopSubCity(prevStop) : null;
-              const showCrossing = prevSubCity && currentSubCity !== prevSubCity;
-              const transitDetails = showCrossing ? TRANSIT_GUIDES[stop.city] : null;
-
-              return (
-                <div key={stop.id}>
-                  {showCrossing && transitDetails && (
-                    <div className="relative pl-12 sm:pl-14 my-4 flex gap-3 group">
-                      <div className="absolute left-5 top-0 bottom-0 w-px border-l-2 border-dashed border-teal-400/40 sm:left-6" />
-                      <div className="absolute left-2.5 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 border border-teal-500/30 text-teal-400 sm:left-3.5 shadow-md">
-                        🌉
-                      </div>
-                      <div className="flex-1 rounded-xl border border-teal-500/20 bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-transparent p-3 text-left">
-                        <div className="flex justify-between items-center gap-2">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-teal-400">Transit Corridor crossing</p>
-                            <p className="text-xs font-black text-[var(--foreground)] mt-0.5">
-                              Crossing over from {prevSubCity} to {currentSubCity}
-                            </p>
-                            <p className="text-[10px] text-[var(--muted)] mt-0.5">
-                              Approx. {transitDetails.distance} travel via {transitDetails.highwayName} ({transitDetails.duration})
-                            </p>
-                          </div>
-                          <div className="flex gap-1 text-xs text-teal-400/80 font-bold shrink-0 bg-teal-500/10 px-1.5 py-0.5 rounded">
-                            <span>{transitDetails.modes[0]?.icon}</span>
-                            <span>{transitDetails.modes[0]?.name}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <motion.div
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.05 * Math.min(index, 20), duration: 0.32 }}
-                    className="relative pl-12 sm:pl-14 animate-fade-in"
-                  >
-                    {/* Timeline dot */}
-                    <div className="absolute left-3.5 top-5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-teal-400 shadow-sm shadow-teal-400/30 sm:left-4.5 sm:h-4 sm:w-4">
-                      {index === 0 && (
-                        <span className="absolute h-full w-full animate-ping rounded-full bg-teal-400/50" />
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedStop(isExpanded ? null : stop.id)
-                      }
-                      className={cn(
-                        "w-full rounded-xl border p-4 text-left transition-all mb-3",
-                        isExpanded
-                          ? "border-cyan-400/40 bg-cyan-400/[0.06] shadow-lg"
-                          : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)] hover:border-[var(--border)]"
-                      )}
-                    >
-                      {/* Stop number badge */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--panel)] text-[9px] font-black text-[var(--muted-strong)] border border-[var(--border)]">
-                              {index + 1}
-                            </span>
-                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
-                              {getCategoryLabel(stop.category, stop.tags)}
-                            </span>
-                          </div>
-                          <h3 className="mt-1.5 line-clamp-1 text-sm font-black text-[var(--foreground)] sm:text-base">
-                            {stop.title}
-                          </h3>
-                          <p className="mt-0.5 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">
-                            {formatPlaceArea(stop)}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 flex-col items-end gap-1.5">
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-400 border border-amber-400/20">
-                            <Star
-                              size={10}
-                              className="fill-amber-400 text-amber-400"
-                            />
-                            {stop.rating}
-                          </span>
-                          {stop.priceRange && (
-                            <span className="text-[10px] font-bold text-[var(--muted)]">
-                              {stop.priceRange}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Expanded details */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.25 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mt-3 space-y-2.5 border-t border-[var(--border)] pt-3">
-                              <p className="text-xs leading-5 text-[var(--muted-strong)]">
-                                {stop.description}
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {stop.tags.slice(0, 6).map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[9px] font-bold text-[var(--muted)] border border-[var(--border)]"
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </button>
-                  </motion.div>
-                </div>
-              );
-            })}
-
-            {/* End marker */}
-            <div className="relative pl-12 sm:pl-14">
-              <div className="absolute left-3.5 top-2 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-rose-400 shadow-sm sm:left-4.5 sm:h-4 sm:w-4" />
-              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-4">
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-rose-400">
-                  Destination
-                </p>
-                <p className="mt-1 text-sm font-black text-[var(--foreground)]">
-                  {plan.destination}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 mt-8">
+          {/* Timeline of Stops */}
+          <motion.section
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.42 }}
+            className="md:col-span-2"
+          >
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black text-[var(--foreground)] sm:text-xl">
+                  Route Stops
+                </h2>
+                <p className="mt-0.5 text-xs font-semibold text-[var(--muted)]">
+                  {plan.stops.length} pitstops discovered along this route
                 </p>
               </div>
+              
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex rounded-lg bg-[var(--panel-soft)] p-0.5 border border-[var(--border)] text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setTravelMode("driving")}
+                    className={`px-2 py-1 rounded-md transition ${
+                      travelMode === "driving" ? "bg-teal-500/10 text-teal-300" : "text-[var(--muted)]"
+                    }`}
+                  >
+                    🚗 Drive
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTravelMode("walking")}
+                    className={`px-2 py-1 rounded-md transition ${
+                      travelMode === "walking" ? "bg-teal-500/10 text-teal-300" : "text-[var(--muted)]"
+                    }`}
+                  >
+                    🚶 Walk
+                  </button>
+                </div>
+                
+                <span className="hidden sm:inline-flex rounded-full bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-400 border border-cyan-400/20">
+                  {plan.stops.length} stops
+                </span>
+              </div>
+            </div>
+
+            <div className="relative space-y-0">
+              {/* Timeline line */}
+              <div className="absolute left-5 top-4 bottom-4 w-px bg-gradient-to-b from-teal-400/40 via-cyan-400/20 to-transparent sm:left-6" />
+
+              {plan.stops.map((stop, index) => {
+                const isExpanded = selectedStop === stop.id;
+                const currentSubCity = getStopSubCity(stop);
+                const prevStop = index > 0 ? plan.stops[index - 1] : null;
+                const prevSubCity = prevStop ? getStopSubCity(prevStop) : null;
+                const showCrossing = prevSubCity && currentSubCity !== prevSubCity;
+                const transitDetails = showCrossing ? TRANSIT_GUIDES[stop.city] : null;
+
+                let distKm = 0;
+                let timeMins = 0;
+                if (prevStop) {
+                  distKm = calculateDistance(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude);
+                  timeMins = travelMode === "driving"
+                    ? Math.max(1, Math.round(distKm * 2.4 + 2))
+                    : Math.max(1, Math.round(distKm * 12));
+                }
+
+                return (
+                  <div key={stop.id}>
+                    {showCrossing && transitDetails && (
+                      <div className="relative pl-12 sm:pl-14 my-4 flex gap-3 group">
+                        <div className="absolute left-5 top-0 bottom-0 w-px border-l-2 border-dashed border-teal-400/40 sm:left-6" />
+                        <div className="absolute left-2.5 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 border border-teal-500/30 text-teal-400 sm:left-3.5 shadow-md">
+                          🌉
+                        </div>
+                        <div className="flex-1 rounded-xl border border-teal-500/20 bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-transparent p-3 text-left">
+                          <div className="flex justify-between items-center gap-2">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-teal-400">Transit Corridor crossing</p>
+                              <p className="text-xs font-black text-[var(--foreground)] mt-0.5">
+                                Crossing over from {prevSubCity} to {currentSubCity}
+                              </p>
+                              <p className="text-[10px] text-[var(--muted)] mt-0.5">
+                                Approx. {transitDetails.distance} travel via {transitDetails.highwayName} ({transitDetails.duration})
+                              </p>
+                            </div>
+                            <div className="flex gap-1 text-xs text-teal-400/80 font-bold shrink-0 bg-teal-500/10 px-1.5 py-0.5 rounded">
+                              <span>{transitDetails.modes[0]?.icon}</span>
+                              <span>{transitDetails.modes[0]?.name}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {prevStop && !showCrossing && (
+                      <div className="relative pl-12 sm:pl-14 my-2.5 flex items-center justify-start gap-2 text-[10px] font-semibold text-[var(--muted-strong)] animate-fade-in">
+                        <div className="absolute left-5 top-0 bottom-0 w-px bg-[var(--border)] border-dashed sm:left-6" />
+                        <span className="z-10 ml-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-2.5 py-0.5 text-[9px] text-[var(--muted)] shadow-sm font-sans flex items-center gap-1">
+                          <span>{travelMode === "driving" ? "🚗" : "🚶"}</span>
+                          <span>{distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)} km`}</span>
+                          <span>•</span>
+                          <span>{timeMins} min{timeMins > 1 ? "s" : ""}</span>
+                        </span>
+                      </div>
+                    )}
+
+                    <motion.div
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 * Math.min(index, 20), duration: 0.32 }}
+                      className="relative pl-12 sm:pl-14 animate-fade-in"
+                    >
+                      <div className="absolute left-3.5 top-5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-teal-400 shadow-sm shadow-teal-400/30 sm:left-4.5 sm:h-4 sm:w-4">
+                        {index === 0 && (
+                          <span className="absolute h-full w-full animate-ping rounded-full bg-teal-400/50" />
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedStop(isExpanded ? null : stop.id)
+                        }
+                        className={cn(
+                          "w-full rounded-xl border p-4 text-left transition-all mb-3",
+                          isExpanded
+                            ? "border-cyan-400/40 bg-cyan-400/[0.06] shadow-lg"
+                            : "border-[var(--border)] bg-[var(--panel-soft)] hover:bg-[var(--panel)] hover:border-[var(--border)]"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--panel)] text-[9px] font-black text-[var(--muted-strong)] border border-[var(--border)]">
+                                {index + 1}
+                              </span>
+                              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+                                {getCategoryLabel(stop.category, stop.tags)}
+                              </span>
+                            </div>
+                            <h3 className="mt-1.5 line-clamp-1 text-sm font-black text-[var(--foreground)] sm:text-base">
+                              {stop.title}
+                            </h3>
+                            <p className="mt-0.5 line-clamp-2 text-xs font-semibold text-[var(--muted-strong)]">
+                              {formatPlaceArea(stop)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-400 border border-amber-400/20">
+                              <Star
+                                size={10}
+                                className="fill-amber-400 text-amber-400"
+                              />
+                              {stop.rating}
+                            </span>
+                            {stop.priceRange && (
+                              <span className="text-[10px] font-bold text-[var(--muted)]">
+                                {stop.priceRange}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.25 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="mt-3 space-y-2.5 border-t border-[var(--border)] pt-3">
+                                <p className="text-xs leading-5 text-[var(--muted-strong)]">
+                                  {stop.description}
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {stop.tags.slice(0, 6).map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="rounded-full bg-[var(--panel)] px-2 py-0.5 text-[9px] font-bold text-[var(--muted)] border border-[var(--border)]"
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </button>
+                    </motion.div>
+                  </div>
+                );
+              })}
+
+              {/* End marker */}
+              <div className="relative pl-12 sm:pl-14">
+                <div className="absolute left-3.5 top-2 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-rose-400 shadow-sm sm:left-4.5 sm:h-4 sm:w-4" />
+                <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-rose-400">
+                    Destination
+                  </p>
+                  <p className="mt-1 text-sm font-black text-[var(--foreground)]">
+                    {plan.destination}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {/* Vibe Match Dashboard Card (Takes 1 col on desktop) */}
+          <div className="md:col-span-1 space-y-6">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-xl relative overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-400 to-cyan-500" />
+              <h2 className="text-xs font-black uppercase tracking-wider text-[var(--muted-strong)] mb-4 flex items-center gap-2">
+                <Sparkles size={14} className="text-teal-400 animate-pulse" />
+                Trip Vibe Profile
+              </h2>
+              {(() => {
+                let foodCount = 0;
+                let cultureCount = 0;
+                let natureCount = 0;
+                let chillCount = 0;
+
+                plan.stops.forEach((stop) => {
+                  const isFood = ["cafe", "restaurant", "street-food", "bar", "dessert", "ice-cream"].includes(stop.category);
+                  const isCulture = stop.tags.some(t => ["temple", "monument", "historic", "museum", "church", "mosque", "heritage"].includes(t.toLowerCase()));
+                  const isNature = stop.tags.some(t => ["park", "garden", "lake", "waterfall", "beach", "scenic", "viewpoint"].includes(t.toLowerCase()));
+                  const isChill = ["cafe", "ice-cream", "dessert"].includes(stop.category) || stop.tags.some(t => ["park", "chill", "relax"].includes(t.toLowerCase()));
+
+                  if (isFood) foodCount++;
+                  if (isCulture) cultureCount++;
+                  if (isNature) natureCount++;
+                  if (isChill) chillCount++;
+                });
+
+                const total = foodCount + cultureCount + natureCount + chillCount || 1;
+                const foodPct = Math.round((foodCount / total) * 100);
+                const culturePct = Math.round((cultureCount / total) * 100);
+                const naturePct = Math.round((natureCount / total) * 100);
+                const chillPct = Math.round((chillCount / total) * 100);
+
+                let dominantLabel = "Balanced Explorer";
+                let dominantColor = "text-teal-400";
+                const maxVal = Math.max(foodPct, culturePct, naturePct, chillPct);
+                if (maxVal > 0) {
+                  if (maxVal === foodPct) {
+                    dominantLabel = "Culinary Nomad";
+                    dominantColor = "text-rose-400";
+                  } else if (maxVal === culturePct) {
+                    dominantLabel = "Culture Enthusiast";
+                    dominantColor = "text-sky-400";
+                  } else if (maxVal === naturePct) {
+                    dominantLabel = "Nature Wanderer";
+                    dominantColor = "text-emerald-400";
+                  } else if (maxVal === chillPct) {
+                    dominantLabel = "Leisure Seeker";
+                    dominantColor = "text-amber-400";
+                  }
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center bg-[var(--panel-soft)] rounded-xl p-3 border border-[var(--border)]">
+                      <span className="text-[10px] font-black uppercase text-[var(--muted)]">Dominant Vibe</span>
+                      <span className={`text-xs font-black uppercase tracking-wider ${dominantColor}`}>{dominantLabel}</span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🍔 FOOD & DRINK</span>
+                          <span>{foodPct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-rose-400 rounded-full" style={{ width: `${foodPct}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🏰 CULTURE & HERITAGE</span>
+                          <span>{culturePct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-sky-400 rounded-full" style={{ width: `${culturePct}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🏞️ NATURE & ESCAPES</span>
+                          <span>{naturePct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${naturePct}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🧘 CHILL & VIBES</span>
+                          <span>{chillPct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-400 rounded-full" style={{ width: `${chillPct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
-        </motion.section>
+        </div>
       </div>
 
       {/* Floating Bottom Share Bar */}

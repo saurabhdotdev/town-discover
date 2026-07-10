@@ -1,14 +1,13 @@
 /**
- * In-memory sliding-window rate limiter for Next.js API routes.
+ * Sliding-window rate limiter for Next.js API routes.
  *
- * Tracks request counts per IP using a Map with automatic cleanup.
- * Designed for single-instance deployments (Vercel, single-node).
- *
- * For multi-instance consistency, this could be swapped to use Redis
- * via the existing `src/lib/redis.ts` module.
+ * Stores counts in Redis if process.env.REDIS_URL is configured and connected.
+ * Falls back to an in-memory sliding-window Map rate limiter for local development
+ * or standalone single-node deployments.
  */
 
 import { RateLimitError } from "./api-errors";
+import { initRedis } from "../redis";
 
 export interface RateLimitConfig {
   /** Maximum number of requests allowed in the window. */
@@ -36,18 +35,10 @@ export const RATE_LIMIT_AUTH: RateLimitConfig = { max: 5, windowMs: 10 * 60_000 
 /** Very strict limit for admin actions. */
 export const RATE_LIMIT_ADMIN: RateLimitConfig = { max: 20, windowMs: 60_000 };
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
+// ─── Local In-Memory Fallback Storage ─────────────────────────────────────────
 
-/**
- * Each unique combination of (route, ip) gets its own entry.
- * Key format: `${routeKey}::${ip}`
- */
 const store = new Map<string, RateLimitEntry>();
-
-// Periodic cleanup to prevent unbounded memory growth.
-// Runs every 5 minutes and removes all expired entries.
 const CLEANUP_INTERVAL_MS = 5 * 60_000;
-
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 function ensureCleanupTimer() {
@@ -62,21 +53,12 @@ function ensureCleanupTimer() {
     }
   }, CLEANUP_INTERVAL_MS);
 
-  // Allow the process to exit cleanly even if the timer is still active
   if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
     cleanupTimer.unref();
   }
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Checks the rate limit for a given IP and route key.
- * Throws `RateLimitError` if the limit is exceeded.
- *
- * Returns headers that should be added to the response.
- */
-export function checkRateLimit(
+function checkInMemoryRateLimit(
   ip: string,
   routeKey: string,
   config: RateLimitConfig
@@ -87,7 +69,6 @@ export function checkRateLimit(
   const now = Date.now();
   let entry = store.get(storeKey);
 
-  // If entry has expired, reset it
   if (!entry || now >= entry.resetAt) {
     entry = { count: 0, resetAt: now + config.windowMs };
     store.set(storeKey, entry);
@@ -98,7 +79,6 @@ export function checkRateLimit(
   const remaining = Math.max(0, config.max - entry.count);
   const retryAfterSeconds = Math.ceil((entry.resetAt - now) / 1000);
 
-  // Rate limit headers (RFC 6585 / draft-ietf-httpapi-ratelimit-headers)
   const headers: Record<string, string> = {
     "X-RateLimit-Limit": String(config.max),
     "X-RateLimit-Remaining": String(remaining),
@@ -112,3 +92,57 @@ export function checkRateLimit(
 
   return headers;
 }
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Checks the rate limit for a given IP and route key.
+ * Uses Redis if available, otherwise falls back to the in-memory Map store.
+ * Throws `RateLimitError` if the limit is exceeded.
+ *
+ * Returns headers that should be added to the response.
+ */
+export async function checkRateLimit(
+  ip: string,
+  routeKey: string,
+  config: RateLimitConfig
+): Promise<Record<string, string>> {
+  if (process.env.REDIS_URL) {
+    try {
+      const client = await initRedis();
+      if (client && client.isOpen) {
+        const redisKey = `ratelimit:${routeKey}:${ip}`;
+        
+        // Atomically increment request count
+        const current = await client.incr(redisKey);
+        if (current === 1) {
+          // Set TTL on the key if it was just created
+          await client.expire(redisKey, Math.ceil(config.windowMs / 1000));
+        }
+
+        const ttl = await client.ttl(redisKey);
+        const retryAfterSeconds = ttl > 0 ? ttl : Math.ceil(config.windowMs / 1000);
+        const remaining = Math.max(0, config.max - current);
+
+        const headers: Record<string, string> = {
+          "X-RateLimit-Limit": String(config.max),
+          "X-RateLimit-Remaining": String(remaining),
+          "X-RateLimit-Reset": String(Math.ceil((Date.now() + (ttl > 0 ? ttl * 1000 : config.windowMs)) / 1000)),
+        };
+
+        if (current > config.max) {
+          headers["Retry-After"] = String(retryAfterSeconds);
+          throw new RateLimitError(retryAfterSeconds);
+        }
+
+        return headers;
+      }
+    } catch (err) {
+      if (err instanceof RateLimitError) throw err;
+      console.warn("[rate-limit] Redis rate limiting failed, falling back to memory:", err);
+    }
+  }
+
+  return checkInMemoryRateLimit(ip, routeKey, config);
+}
+

@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ensureAuthSetup, requireCurrentUser } from "@/lib/auth";
-import { getPool } from "@/lib/postgres";
+import { createApiHandler } from "@/lib/server/api-handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,140 +52,121 @@ const serializePlan = (row: any) => ({
   ...(row.creatorName != null ? { creatorName: row.creatorName } : {}),
 });
 
-export async function GET(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
+export const GET = createApiHandler({ auth: "optional" }, async (request, { pool, user }) => {
+  const id = request.nextUrl.searchParams.get("id");
 
-    const id = request.nextUrl.searchParams.get("id");
-    await ensureAuthSetup(pool);
-
-    if (id) {
-      const { rows } = await pool.query(
-        `
-        SELECT
-          tp.id,
-          tp.name,
-          tp.source,
-          tp.destination,
-          tp.distance_km AS "distanceKm",
-          tp.duration_minutes AS "durationMinutes",
-          tp.route_path AS "routePath",
-          tp.stops,
-          tp.created_at AS "createdAt",
-          u.full_name AS "creatorName"
-        FROM trip_plans tp
-        LEFT JOIN users u ON u.id = tp.user_id
-        WHERE tp.id = $1
-        LIMIT 1
-        `,
-        [id]
-      );
-
-      if (rows.length === 0) {
-        return Response.json({ error: "Trip plan not found." }, { status: 404 });
-      }
-
-      return Response.json({ plan: serializePlan(rows[0]) });
-    }
-
-    const auth = await requireCurrentUser(pool, request);
-    if (!auth.user) return auth.response;
-
+  if (id) {
     const { rows } = await pool.query(
       `
       SELECT
-        id,
-        name,
-        source,
-        destination,
-        distance_km AS "distanceKm",
-        duration_minutes AS "durationMinutes",
-        route_path AS "routePath",
-        stops,
-        created_at AS "createdAt"
-      FROM trip_plans
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 12
+        tp.id,
+        tp.name,
+        tp.source,
+        tp.destination,
+        tp.distance_km AS "distanceKm",
+        tp.duration_minutes AS "durationMinutes",
+        tp.route_path AS "routePath",
+        tp.stops,
+        tp.created_at AS "createdAt",
+        u.full_name AS "creatorName"
+      FROM trip_plans tp
+      LEFT JOIN users u ON u.id = tp.user_id
+      WHERE tp.id = $1
+      LIMIT 1
       `,
-      [auth.user.id]
+      [id]
     );
 
-    return Response.json({ plans: rows.map(serializePlan) });
-  } catch (error: any) {
-    console.error("Error in GET /api/trip-plans:", error);
-    return Response.json({ error: "Internal server error", details: error.message }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-
-    await ensureAuthSetup(pool);
-    const auth = await requireCurrentUser(pool, request);
-    if (!auth.user) return auth.response;
-
-    const body = await request.json();
-    const parseResult = postSchema.safeParse(body);
-    if (!parseResult.success) {
-      return Response.json({ error: "Invalid trip plan", details: parseResult.error.format() }, { status: 400 });
+    if (rows.length === 0) {
+      return Response.json({ error: "Trip plan not found." }, { status: 404 });
     }
 
-    const plan = parseResult.data;
-    const { rows } = await pool.query(
-      `
-      INSERT INTO trip_plans (
-        user_id,
-        name,
-        source,
-        destination,
-        distance_km,
-        duration_minutes,
-        route_path,
-        stops
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
-      RETURNING
-        id,
-        name,
-        source,
-        destination,
-        distance_km AS "distanceKm",
-        duration_minutes AS "durationMinutes",
-        route_path AS "routePath",
-        stops,
-        created_at AS "createdAt"
-      `,
-      [
-        auth.user.id,
-        plan.name,
-        plan.source,
-        plan.destination,
-        plan.distanceKm ?? null,
-        plan.durationMinutes ?? null,
-        JSON.stringify(plan.routePath),
-        JSON.stringify(plan.stops),
-      ]
-    );
-
-    await pool.query(
-      `
-      INSERT INTO user_notifications (user_id, type, title, message, link)
-      VALUES ($1, 'trip_saved', 'Trip plan saved', $2, $3)
-      `,
-      [
-        auth.user.id,
-        `${plan.name} is ready with ${plan.stops.length} suggested stops.`,
-        `/trip/${rows[0].id}`,
-      ]
-    );
-
-    return Response.json({ plan: serializePlan(rows[0]) }, { status: 201 });
-  } catch (error: any) {
-    console.error("Error in POST /api/trip-plans:", error);
-    return Response.json({ error: "Internal server error", details: error.message }, { status: 500 });
+    return Response.json({ plan: serializePlan(rows[0]) });
   }
-}
+
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { rows } = await pool.query(
+    `
+    SELECT
+      id,
+      name,
+      source,
+      destination,
+      distance_km AS "distanceKm",
+      duration_minutes AS "durationMinutes",
+      route_path AS "routePath",
+      stops,
+      created_at AS "createdAt"
+    FROM trip_plans
+    WHERE user_id = $1
+    ORDER BY created_at DESC
+    LIMIT 12
+    `,
+    [user!.id]
+  );
+
+  return Response.json({ plans: rows.map(serializePlan) });
+});
+
+export const POST = createApiHandler({ auth: "required" }, async (request, { pool, user }) => {
+  const body = await request.json();
+  const parseResult = postSchema.safeParse(body);
+  if (!parseResult.success) {
+    return Response.json({ error: "Invalid trip plan", details: parseResult.error.format() }, { status: 400 });
+  }
+
+  const plan = parseResult.data;
+  const { rows } = await pool.query(
+    `
+    INSERT INTO trip_plans (
+      user_id,
+      name,
+      source,
+      destination,
+      distance_km,
+      duration_minutes,
+      route_path,
+      stops
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+    RETURNING
+      id,
+      name,
+      source,
+      destination,
+      distance_km AS "distanceKm",
+      duration_minutes AS "durationMinutes",
+      route_path AS "routePath",
+      stops,
+      created_at AS "createdAt"
+    `,
+    [
+      user!.id,
+      plan.name,
+      plan.source,
+      plan.destination,
+      plan.distanceKm ?? null,
+      plan.durationMinutes ?? null,
+      JSON.stringify(plan.routePath),
+      JSON.stringify(plan.stops),
+    ]
+  );
+
+  await pool.query(
+    `
+    INSERT INTO user_notifications (user_id, type, title, message, link)
+    VALUES ($1, 'trip_saved', 'Trip plan saved', $2, $3)
+    `,
+    [
+      user!.id,
+      `${plan.name} is ready with ${plan.stops.length} suggested stops.`,
+      `/trip/${rows[0].id}`,
+    ]
+  );
+
+  return Response.json({ plan: serializePlan(rows[0]) }, { status: 201 });
+});
+

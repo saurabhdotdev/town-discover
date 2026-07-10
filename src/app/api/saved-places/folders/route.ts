@@ -1,56 +1,36 @@
 import { NextRequest } from "next/server";
-import { getPool } from "@/lib/postgres";
-import { ensureAuthSetup, requireCurrentUser } from "@/lib/auth";
+import { createApiHandler } from "@/lib/server/api-handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // List all folders for the current user with their place IDs
-export async function GET(request: NextRequest) {
-  const pool = getPool();
-  if (!pool) {
-    return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-  }
-
-  await ensureAuthSetup(pool);
-  const auth = await requireCurrentUser(pool, request);
-  if (!auth.user) return auth.response;
-
-  // Get folders
-  const { rows: folderRows } = await pool.query(
+export const GET = createApiHandler({ auth: "required" }, async (request, { pool, user }) => {
+  const { rows: folders } = await pool.query(
     `
-    SELECT id, name FROM saved_place_folders WHERE user_id = $1 ORDER BY created_at DESC
+    SELECT 
+      f.id, 
+      f.name, 
+      COALESCE(
+        (
+          SELECT array_agg(fi.place_id) 
+          FROM saved_place_folder_items fi 
+          WHERE fi.folder_id = f.id
+        ), 
+        ARRAY[]::VARCHAR[]
+      ) AS "placeIds"
+    FROM saved_place_folders f
+    WHERE f.user_id = $1
+    ORDER BY f.created_at DESC
     `,
-    [auth.user.id]
-  );
-
-  // For each folder, fetch its place ids
-  const folders = await Promise.all(
-    folderRows.map(async (f) => {
-      const { rows } = await pool.query(
-        `
-        SELECT place_id AS "placeId" FROM saved_place_folder_items WHERE folder_id = $1
-        `,
-        [f.id]
-      );
-      return { id: f.id, name: f.name, placeIds: rows.map((r) => r.placeId) };
-    })
+    [user!.id]
   );
 
   return Response.json({ folders });
-}
+});
 
 // Create a new folder
-export async function POST(request: NextRequest) {
-  const pool = getPool();
-  if (!pool) {
-    return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-  }
-
-  await ensureAuthSetup(pool);
-  const auth = await requireCurrentUser(pool, request);
-  if (!auth.user) return auth.response;
-
+export const POST = createApiHandler({ auth: "required" }, async (request, { pool, user }) => {
   const body = await request.json();
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name) {
@@ -63,37 +43,26 @@ export async function POST(request: NextRequest) {
     VALUES ($1, $2)
     RETURNING id, name
     `,
-    [auth.user.id, name]
+    [user!.id, name]
   );
 
   const newFolder = rows[0];
   return Response.json({ folder: { id: newFolder.id, name: newFolder.name, placeIds: [] } }, { status: 201 });
-}
+});
 
-export async function DELETE(request: NextRequest) {
-  try {
-    const pool = getPool();
-    if (!pool) {
-      return Response.json({ error: "DATABASE_URL is not configured." }, { status: 503 });
-    }
-    await ensureAuthSetup(pool);
-    const auth = await requireCurrentUser(pool, request);
-    if (!auth.user) return auth.response;
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    if (!id) {
-      return Response.json({ error: "id query param is required" }, { status: 400 });
-    }
-
-    await pool.query(
-      "DELETE FROM saved_place_folders WHERE id = $1 AND user_id = $2",
-      [id, auth.user.id]
-    );
-
-    return Response.json({ success: true, message: "Folder deleted successfully." }, { status: 200 });
-  } catch (e: any) {
-    console.error("Error in DELETE /api/saved-places/folders:", e);
-    return Response.json({ error: "Internal server error", details: e.message }, { status: 500 });
+// Delete a folder
+export const DELETE = createApiHandler({ auth: "required" }, async (request, { pool, user }) => {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id) {
+    return Response.json({ error: "id query param is required" }, { status: 400 });
   }
-}
+
+  await pool.query(
+    "DELETE FROM saved_place_folders WHERE id = $1 AND user_id = $2",
+    [id, user!.id]
+  );
+
+  return Response.json({ success: true, message: "Folder deleted successfully." }, { status: 200 });
+});
+

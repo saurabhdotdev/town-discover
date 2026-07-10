@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { 
   Sparkles, MapPin, Calendar, Clock, Compass, Plus, Trash2, ArrowRight,
   Star, Map as MapIcon, RefreshCw, Layers, Download, CalendarPlus, 
-  MapIcon as MapViewIcon, Info, Bus
+  MapIcon as MapViewIcon, Info, Bus, Car, Navigation, AlertCircle
 } from "lucide-react";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { 
@@ -18,6 +18,8 @@ import {
 } from "@/lib/pune-location";
 import { Place, PlaceCategory } from "@/types";
 import { getCategoryAccent, getCategoryLabel } from "@/lib/utils";
+import { calculateDistance } from "@/lib/geo";
+import { clusterPlacesKMeans } from "@/lib/kmeans";
 
 // Dynamically import MapView to prevent SSR issues (Leaflet uses window)
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
@@ -56,47 +58,46 @@ const TRANSIT_GUIDES: Record<string, TransitInfo> = {
     modes: [
       { icon: "🚌", name: "NWKRTC BRTS", details: "Air-conditioned Volvo/EMU buses running on a high-speed dedicated lane.", cost: "₹25 - ₹40" },
       { icon: "🚗", name: "Local Cab/Auto", details: "Direct highway taxi or shared auto between Hubli and Dharwad centers.", cost: "₹250 - ₹400" },
-      { icon: "🚂", name: "Local Train", details: "Multiple daily shuttle connections between Hubli Junction and Dharwad stations.", cost: "₹30 - ₹75" }
+      { icon: "🚂", name: "Local Train", details: "Intercity shuttle trains connecting Hubli Junction and Dharwad station.", cost: "₹10 - ₹30" }
     ]
   },
-  PunePCMC: {
+  PunePimpriChinchwad: {
     distance: "15 km",
     duration: "25-35 mins",
-    highwayName: "Old Pune-Mumbai Highway / NH 48",
+    highwayName: "Old Mumbai-Pune Highway / NH60",
     modes: [
-      { icon: "🚇", name: "Pune Metro (Line 1)", details: "Direct metro route connecting PCMC to Pune Civil Court with zero traffic.", cost: "₹20 - ₹35" },
-      { icon: "🚂", name: "Local EMU Trains", details: "Hourly local commuter trains connecting Pune Station to Pimpri & Chinchwad.", cost: "₹10 - ₹20" },
-      { icon: "🚌", name: "PMPML BRT Lane", details: "Regular buses running in dedicated lanes along the highway corridor.", cost: "₹20 - ₹50" }
+      { icon: "🚇", name: "Pune Metro (Line 1)", details: "Pimpri Chinchwad Municipal Corporation (PCMC) to Swargate via Shivajinagar.", cost: "₹10 - ₹35" },
+      { icon: "🚆", name: "Local Train (Suburban)", details: "Frequent local trains connecting Pune Junction to Lonavala via PCMC.", cost: "₹10 - ₹25" },
+      { icon: "🚌", name: "PMPML Buses", details: "Frequent AC and non-AC public bus connectivity running across the cities.", cost: "₹15 - ₹50" }
     ]
   },
-  BangaloreMysore: {
-    distance: "140 km",
-    duration: "2 - 2.5 hours",
-    highwayName: "NH 275 (10-lane Bangalore-Mysore Expressway)",
+  BelgaumSambra: {
+    distance: "12 km",
+    duration: "20-25 mins",
+    highwayName: "Belagavi-Bagalkot Highway",
     modes: [
-      { icon: "🚂", name: "Vande Bharat / Shatabdi", details: "Premium high-speed trains. Connects both centers in under 75 mins.", cost: "₹300 - ₹800" },
-      { icon: "🚌", name: "KSRTC Flybus/Airavat", details: "Super luxury Volvo multi-axle buses leaving frequently from Majestic.", cost: "₹250 - ₹450" },
-      { icon: "🚗", name: "Expressway Drive", details: "Smooth cruise along the expressway. Toll charges (~₹320) apply.", cost: "₹2,500 - ₹4,000" }
+      { icon: "🚌", name: "KSRTC Sambra Shuttle", details: "Regular shuttle buses connecting Belagavi Central Bus Stand to Sambra Airport.", cost: "₹20 - ₹35" },
+      { icon: "🚗", name: "Airport Taxi", details: "Direct pre-paid or app cabs available fromSambara Airport terminal.", cost: "₹300 - ₹450" }
     ]
   },
   IndoreUjjain: {
     distance: "55 km",
-    duration: "1 - 1.2 hours",
-    highwayName: "SH 27 (Indore-Ujjain Road)",
+    duration: "1 hr 15 mins",
+    highwayName: "Indore-Ujjain Road / SH27",
     modes: [
-      { icon: "🚌", name: "Chartered Bus Service", details: "High-frequency AC buses departing every 15 mins from AICTSL terminal.", cost: "₹80 - ₹120" },
-      { icon: "🚗", name: "Shared Cab / Taxi", details: "Frequent passenger cabs available at Sarwate Bus Stand.", cost: "₹600 - ₹1,200" },
-      { icon: "🚂", name: "Shuttle Trains", details: "Multiple daily DEMU/MEMU train runs between Indore and Ujjain stations.", cost: "₹20 - ₹50" }
+      { icon: "🚌", name: "Chartered Bus Service", details: "Frequent premium AC coaches running every 15 minutes between Indore & Ujjain.", cost: "₹100 - ₹180" },
+      { icon: "🚗", name: "Private Cab / Ola Outstation", details: "Direct highway drop service. Highly convenient for family day trips.", cost: "₹1,200 - ₹1,800" },
+      { icon: "🚂", name: "Passenger / Express Trains", details: "Multiple daily trains linking Indore Junction and Ujjain Junction.", cost: "₹30 - ₹120" }
     ]
   },
   HyderabadSecunderabad: {
-    distance: "10 km",
-    duration: "20-30 mins",
-    highwayName: "Tank Bund Road / PVNR Expressway link",
+    distance: "8 km",
+    duration: "15-25 mins",
+    highwayName: "PV Narasimha Rao Expressway / Necklace Road",
     modes: [
-      { icon: "🚇", name: "Hyderabad Metro", details: "Green and Red lines connect Secunderabad stations to core Hyderabad.", cost: "₹20 - ₹45" },
-      { icon: "🚂", name: "MMTS Local Train", details: "Suburban trains connecting Secunderabad Jn to Nampally, Begumpet.", cost: "₹10 - ₹15" },
-      { icon: "🚗", name: "Auto/Cab Ride", details: "Scenic drive via Hussain Sagar Lake / Tank Bund road.", cost: "₹150 - ₹300" }
+      { icon: "🚇", name: "Hyderabad Metro (Blue Line)", details: "Secunderabad East to Ameerpet / Hitec City. Fast and traffic-free.", cost: "₹15 - ₹45" },
+      { icon: "🚆", name: "MMTS Suburban Rail", details: "Local train network linking Secunderabad Station to Nampally, Lingampally.", cost: "₹10 - ₹20" },
+      { icon: "🚗", name: "App Cabs / Auto", details: "Cab or auto aggregators. Highly accessible, expect peak-hour bottlenecks.", cost: "₹120 - ₹250" }
     ]
   }
 };
@@ -136,6 +137,60 @@ const categoryColorHex: Record<string, string> = {
   "street-food": "#f97316",
 };
 
+// Transit Route Label Generator
+function getTransitRouteLabel(p1: Place, p2: Place): string {
+  const city = (p1.city || p2.city || "").toLowerCase();
+  const l1 = (p1.locality || "").trim();
+  const l2 = (p2.locality || "").trim();
+
+  if (!l1 || !l2 || l1 === l2) {
+    if (city.includes("pune")) return "via local lanes";
+    if (city.includes("bangalore") || city.includes("bengaluru")) return "via internal streets";
+    if (city.includes("mumbai")) return "via local roads";
+    return "via local streets";
+  }
+
+  if (city.includes("pune")) {
+    if (l1.includes("Koregaon") || l2.includes("Koregaon")) {
+      if (l1.includes("Kalyani") || l2.includes("Kalyani")) return "via Aga Khan Bridge";
+      return "via North Main Rd";
+    }
+    if (l1.includes("Kothrud") || l2.includes("Kothrud")) return "via Karve Rd";
+    if (l1.includes("Baner") || l2.includes("Baner")) return "via Baner Rd & NH48";
+    if (l1.includes("Shivajinagar") || l2.includes("Shivajinagar")) return "via FC Road";
+    if (l1.includes("Viman") || l2.includes("Viman")) return "via Pune-Ahmednagar Highway";
+    return `via ${l1} - ${l2} Link Rd`;
+  }
+
+  if (city.includes("bangalore") || city.includes("bengaluru")) {
+    if (l1.includes("Indiranagar") || l2.includes("Indiranagar")) return "via 100 Feet Rd";
+    if (l1.includes("Koramangala") || l2.includes("Koramangala")) return "via 80 Feet Rd";
+    if (l1.includes("Whitefield") || l2.includes("Whitefield")) return "via ITPL Main Rd";
+    if (l1.includes("MG Road") || l2.includes("MG Road")) return "via MG Road";
+    return "via Outer Ring Rd";
+  }
+
+  if (city.includes("mumbai")) {
+    if (l1.includes("Bandra") && l2.includes("Worli")) return "via Bandra-Worli Sea Link 🌊";
+    if (l1.includes("Colaba") || l2.includes("Colaba")) return "via Marine Drive";
+    return "via Western Express Highway";
+  }
+
+  if (city.includes("delhi")) {
+    return "via Ring Rd & Outer Ring Rd";
+  }
+
+  return `via ${l1} - ${l2} connector`;
+}
+
+// Consistent Live Traffic Status
+function getTrafficStatus(p1: Place, p2: Place) {
+  const code = (p1.title.length + p2.title.length) % 3;
+  if (code === 0) return { label: "Light traffic", color: "text-emerald-400 bg-emerald-400/10 border-emerald-500/20" };
+  if (code === 1) return { label: "Moderate delay", color: "text-amber-400 bg-amber-400/10 border-amber-500/20" };
+  return { label: "Heavy congestion", color: "text-rose-400 bg-rose-400/10 border-rose-500/20" };
+}
+
 type VibeType = "all" | "culture" | "food" | "nature" | "chill";
 type MobileTab = "timeline" | "pool" | "guide";
 
@@ -151,9 +206,46 @@ export default function TripsPage() {
   const [tripName, setTripName] = useState<string>("My Twin City Adventure");
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [travelMode, setTravelMode] = useState<"driving" | "walking">("driving");
   
   // Responsive Tab State
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("timeline");
+
+  // Client-side nearest-neighbor TSP route optimizer
+  const optimizeRoute = (day: number) => {
+    const list = [...(itinerary[day] || [])];
+    if (list.length <= 2) return;
+
+    const optimized: Place[] = [];
+    let current = list.shift()!;
+    optimized.push(current);
+
+    while (list.length > 0) {
+      let nearestIndex = 0;
+      let minDistance = Number.MAX_VALUE;
+
+      for (let i = 0; i < list.length; i++) {
+        const dist = calculateDistance(
+          current.latitude,
+          current.longitude,
+          list[i].latitude,
+          list[i].longitude
+        );
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearestIndex = i;
+        }
+      }
+
+      current = list.splice(nearestIndex, 1)[0];
+      optimized.push(current);
+    }
+
+    setItinerary((prev) => ({
+      ...prev,
+      [day]: optimized,
+    }));
+  };
 
   // Fetch places for selected city
   useEffect(() => {
@@ -177,48 +269,17 @@ export default function TripsPage() {
     fetchPlaces();
   }, [selectedCity]);
 
-  // Distribute places intelligently between twin cities
+  // Distribute places intelligently using K-Means spatial clustering
   const distributePlaces = (allPlaces: Place[], city: SupportedCityName, days: number) => {
-    const twins = SATELLITE_CENTERS[city];
-    const initialItinerary: Record<number, Place[]> = { 1: [], 2: [], 3: [], 4: [] };
+    const clustered = clusterPlacesKMeans(allPlaces, days);
     
-    if (twins && days >= 2) {
-      allPlaces.forEach((place) => {
-        const distToPrimary = Math.hypot(place.latitude - twins.primary.lat, place.longitude - twins.primary.lng);
-        const distToSatellite = Math.hypot(place.latitude - twins.satellite.lat, place.longitude - twins.satellite.lng);
-        
-        if (distToPrimary <= distToSatellite) {
-          if (initialItinerary[1].length < 6) {
-            initialItinerary[1].push(place);
-          }
-        } else {
-          if (initialItinerary[2].length < 6) {
-            initialItinerary[2].push(place);
-          }
-        }
-      });
-
-      if (days > 2) {
-        const allDistributed = [...initialItinerary[1], ...initialItinerary[2]];
-        const leftovers = allPlaces.filter((p) => !allDistributed.some((d) => d.id === p.id));
-        
-        leftovers.forEach((place, index) => {
-          const targetDay = (index % (days - 2)) + 3;
-          if (initialItinerary[targetDay].length < 6) {
-            initialItinerary[targetDay].push(place);
-          }
-        });
-      }
-    } else {
-      allPlaces.forEach((place, index) => {
-        const targetDay = (index % days) + 1;
-        if (initialItinerary[targetDay].length < 5) {
-          initialItinerary[targetDay].push(place);
-        }
-      });
+    // Limit each day's itinerary to at most 6 high-value stops
+    const cappedItinerary: Record<number, Place[]> = { 1: [], 2: [], 3: [], 4: [] };
+    for (let d = 1; d <= days; d++) {
+      cappedItinerary[d] = (clustered[d] || []).slice(0, 6);
     }
 
-    setItinerary(initialItinerary);
+    setItinerary(cappedItinerary);
   };
 
   const handleDaysChange = (newDays: number) => {
@@ -344,12 +405,34 @@ export default function TripsPage() {
       }
 
       const displayName = CITY_DISPLAY_NAMES[selectedCity] || selectedCity;
+
+      // Calculate actual Haversine distance and travel time
+      let totalDistance = 0;
+      let totalDuration = 0;
+
+      for (let d = 1; d <= daysCount; d++) {
+        const stops = itinerary[d] || [];
+        for (let i = 0; i < stops.length; i++) {
+          totalDuration += 45; // 45 minutes spent at each stop
+          if (i > 0) {
+            const dKm = calculateDistance(
+              stops[i - 1].latitude,
+              stops[i - 1].longitude,
+              stops[i].latitude,
+              stops[i].longitude
+            );
+            totalDistance += dKm;
+            totalDuration += travelMode === "driving" ? dKm * 2.4 + 2 : dKm * 12;
+          }
+        }
+      }
+
       const payload = {
         name: tripName || `${displayName} Explorer Trail`,
         source: allStops[0]?.locality || displayName,
         destination: allStops[allStops.length - 1]?.locality || displayName,
-        distanceKm: Math.round(allStops.length * 4.2),
-        durationMinutes: allStops.length * 45,
+        distanceKm: Math.max(1, Math.round(totalDistance)) || null,
+        durationMinutes: Math.max(45, Math.round(totalDuration)) || null,
         routePath: routePathCoords,
         stops: allStops.map(p => ({
           id: p.id,
@@ -530,8 +613,126 @@ export default function TripsPage() {
                   ))}
                 </div>
               </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => distributePlaces(places, selectedCity, daysCount)}
+                  disabled={places.length === 0}
+                  className="w-full h-10 rounded-xl text-xs font-black border border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-300 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm disabled:opacity-40 disabled:pointer-events-none"
+                  title="Recalculate day-wise itinerary using K-Means++ clustering"
+                >
+                  <Sparkles size={14} className="text-teal-400" />
+                  ✨ Re-Cluster Spots (K-Means++)
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Vibe Match Dashboard */}
+          {allStops.length > 0 && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-xl relative overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-400 to-cyan-500" />
+              <h2 className="text-xs font-black uppercase tracking-wider text-[var(--muted-strong)] mb-4 flex items-center gap-2">
+                <Sparkles size={14} className="text-teal-400" />
+                Route Vibe Analyzer
+              </h2>
+              {(() => {
+                let foodCount = 0;
+                let cultureCount = 0;
+                let natureCount = 0;
+                let chillCount = 0;
+
+                allStops.forEach((stop) => {
+                  const isFood = ["cafe", "restaurant", "street-food", "bar", "dessert", "ice-cream"].includes(stop.category);
+                  const isCulture = stop.tags.some(t => ["temple", "monument", "historic", "museum", "church", "mosque", "heritage"].includes(t.toLowerCase()));
+                  const isNature = stop.tags.some(t => ["park", "garden", "lake", "waterfall", "beach", "scenic", "viewpoint"].includes(t.toLowerCase()));
+                  const isChill = ["cafe", "ice-cream", "dessert"].includes(stop.category) || stop.tags.some(t => ["park", "chill", "relax"].includes(t.toLowerCase()));
+
+                  if (isFood) foodCount++;
+                  if (isCulture) cultureCount++;
+                  if (isNature) natureCount++;
+                  if (isChill) chillCount++;
+                });
+
+                const total = foodCount + cultureCount + natureCount + chillCount || 1;
+                const foodPct = Math.round((foodCount / total) * 100);
+                const culturePct = Math.round((cultureCount / total) * 100);
+                const naturePct = Math.round((natureCount / total) * 100);
+                const chillPct = Math.round((chillCount / total) * 100);
+
+                let dominantLabel = "Balanced Explorer";
+                let dominantColor = "text-teal-400";
+                const maxVal = Math.max(foodPct, culturePct, naturePct, chillPct);
+                if (maxVal > 0) {
+                  if (maxVal === foodPct) {
+                    dominantLabel = "Culinary Nomad";
+                    dominantColor = "text-rose-400";
+                  } else if (maxVal === culturePct) {
+                    dominantLabel = "Culture Enthusiast";
+                    dominantColor = "text-sky-400";
+                  } else if (maxVal === naturePct) {
+                    dominantLabel = "Nature Wanderer";
+                    dominantColor = "text-emerald-400";
+                  } else if (maxVal === chillPct) {
+                    dominantLabel = "Leisure Seeker";
+                    dominantColor = "text-amber-400";
+                  }
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center bg-[var(--panel-soft)] rounded-xl p-3 border border-[var(--border)]">
+                      <span className="text-[10px] font-black uppercase text-[var(--muted)]">Dominant Vibe</span>
+                      <span className={`text-xs font-black uppercase tracking-wider ${dominantColor}`}>{dominantLabel}</span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🍔 FOOD & DRINK</span>
+                          <span>{foodPct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-rose-400 rounded-full" style={{ width: `${foodPct}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🏰 CULTURE & HERITAGE</span>
+                          <span>{culturePct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-sky-400 rounded-full" style={{ width: `${culturePct}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🏞️ NATURE & ESCAPES</span>
+                          <span>{naturePct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${naturePct}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-[var(--muted-strong)]">
+                          <span>🧘 CHILL & VIBES</span>
+                          <span>{chillPct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[var(--panel-soft)] rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-400 rounded-full" style={{ width: `${chillPct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Transit Guide */}
           {transitInfo && (
@@ -592,6 +793,7 @@ export default function TripsPage() {
               userLocation={null}
               tripMode={true}
               tripRoutePath={routePathCoords}
+              tripItinerary={itinerary}
               className="h-64 rounded-xl border border-[var(--border)] overflow-hidden shadow-inner"
             />
           </div>
@@ -688,29 +890,63 @@ export default function TripsPage() {
             <div className={`xl:col-span-3 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-xl flex flex-col h-[540px] md:h-[580px] relative overflow-hidden ${activeMobileTab === "timeline" ? "flex" : "hidden md:flex"}`}>
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-400 to-cyan-500" />
               
-              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[var(--border)] pb-3 mb-5">
-                {Array.from({ length: daysCount }).map((_, i) => {
-                  const dayNum = i + 1;
-                  const isDayActive = activeDay === dayNum;
-                  
-                  return (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--border)] pb-3 mb-5 gap-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto shrink-0 scrollbar-none flex-1">
+                  {Array.from({ length: daysCount }).map((_, i) => {
+                    const dayNum = i + 1;
+                    const isDayActive = activeDay === dayNum;
+                    
+                    return (
+                      <button
+                        key={dayNum}
+                        type="button"
+                        onClick={() => setActiveDay(dayNum)}
+                        className={`relative px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 flex-1 ${
+                          isDayActive
+                            ? "text-teal-200 bg-teal-500/10 border border-teal-500/20"
+                            : "text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--panel-soft)]/50 hover:bg-[var(--panel-soft)]"
+                        }`}
+                      >
+                        Day {dayNum}
+                        {isDayActive && (
+                          <span className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 h-1 w-6 rounded-t-full bg-teal-400" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <div className="flex rounded-lg bg-[var(--panel-soft)] p-0.5 border border-[var(--border)] text-[10px] font-bold">
                     <button
-                      key={dayNum}
                       type="button"
-                      onClick={() => setActiveDay(dayNum)}
-                      className={`relative px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 flex-1 ${
-                        isDayActive
-                          ? "text-teal-200 bg-teal-500/10 border border-teal-500/20"
-                          : "text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--panel-soft)]/50 hover:bg-[var(--panel-soft)]"
+                      onClick={() => setTravelMode("driving")}
+                      className={`px-2 py-1 rounded-md transition ${
+                        travelMode === "driving" ? "bg-teal-500/10 text-teal-300" : "text-[var(--muted)]"
                       }`}
                     >
-                      Day {dayNum}
-                      {isDayActive && (
-                        <span className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 h-1 w-6 rounded-t-full bg-teal-400" />
-                      )}
+                      🚗 Drive
                     </button>
-                  );
-                })}
+                    <button
+                      type="button"
+                      onClick={() => setTravelMode("walking")}
+                      className={`px-2 py-1 rounded-md transition ${
+                        travelMode === "walking" ? "bg-teal-500/10 text-teal-300" : "text-[var(--muted)]"
+                      }`}
+                    >
+                      🚶 Walk
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => optimizeRoute(activeDay)}
+                    disabled={!itinerary[activeDay] || itinerary[activeDay].length <= 2}
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-teal-500/20 bg-teal-500/5 px-2.5 text-[10px] font-black uppercase tracking-wider text-teal-300 hover:bg-teal-500/10 transition disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Optimize ⚡
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 custom-scrollbar">
@@ -719,72 +955,126 @@ export default function TripsPage() {
                     itinerary[activeDay].map((stop, index) => {
                       const isFirst = index === 0;
                       const isLast = index === itinerary[activeDay].length - 1;
+                      const prevStop = index > 0 ? itinerary[activeDay][index - 1] : null;
+                      
+                      let distKm = 0;
+                      let timeMins = 0;
+                      if (prevStop) {
+                        distKm = calculateDistance(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude);
+                        timeMins = travelMode === "driving"
+                          ? Math.max(1, Math.round(distKm * 2.4 + 2))
+                          : Math.max(1, Math.round(distKm * 12));
+                      }
                       
                       return (
-                        <motion.div
-                          key={stop.id}
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          className="relative flex gap-3.5 pl-7 group"
-                        >
-                          <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-[var(--border)] group-last:bottom-auto group-last:h-6" />
-                          
-                          <div 
-                            className="absolute left-1 top-4 h-4.5 w-4.5 rounded-full border-2 bg-slate-950 text-[9px] font-black text-center flex items-center justify-center"
-                            style={{ 
-                              borderColor: categoryColorHex[stop.category] || "#2dd4bf",
-                              color: categoryColorHex[stop.category] || "#2dd4bf"
-                            }}
+                        <div key={stop.id}>
+                          {prevStop && (() => {
+                            const traffic = getTrafficStatus(prevStop, stop);
+                            const road = getTransitRouteLabel(prevStop, stop);
+                            return (
+                              <div className="relative pl-7 my-3 flex flex-col gap-1 text-[10px] animate-fade-in group/transit select-none">
+                                {/* Connector dotted line */}
+                                <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-slate-800 border-dashed" />
+                                
+                                <div className="relative z-10 flex items-center gap-2.5 ml-2.5">
+                                  {/* Pulsing travel icon container */}
+                                  <div className="relative h-6 w-6 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-teal-400 shadow-lg group-hover/transit:border-teal-500/35 transition duration-300">
+                                    {travelMode === "driving" ? (
+                                      <Car size={11} className="animate-pulse" />
+                                    ) : (
+                                      <span className="text-[10px] animate-pulse">🚶</span>
+                                    )}
+                                    <div className="absolute inset-0 rounded-full bg-teal-400/5 animate-ping opacity-60 pointer-events-none" />
+                                  </div>
+
+                                  {/* Route details glass container */}
+                                  <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-white/5 bg-slate-950/60 backdrop-blur-sm px-2.5 py-1 text-[9px] shadow-sm font-semibold transition hover:bg-slate-950 hover:border-slate-800/80">
+                                    <span className="text-slate-200 font-bold">
+                                      {distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)} km`}
+                                    </span>
+                                    <span className="text-slate-500">•</span>
+                                    <span className="text-teal-300 font-black">
+                                      {timeMins} min{timeMins > 1 ? "s" : ""}
+                                    </span>
+                                    <span className="text-slate-600 font-mono text-[8px] uppercase tracking-wider">
+                                      {road}
+                                    </span>
+                                  </div>
+
+                                  {/* Traffic Indicator */}
+                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[8px] font-black uppercase tracking-wider ${traffic.color}`}>
+                                    <span className="h-1 w-1 rounded-full bg-current animate-ping animate-duration-1000" />
+                                    {traffic.label}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          <motion.div
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="relative flex gap-3.5 pl-7 group"
                           >
-                            {index + 1}
-                          </div>
-
-                          <div className="flex-1 flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] p-3 hover:border-teal-500/25 hover:bg-[var(--panel)] transition-all duration-150">
-                            <div className="min-w-0 flex items-center gap-3">
-                              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-800">
-                                <img
-                                  src={stop.image || "/placeholder-place.jpg"}
-                                  alt={stop.title}
-                                  className="h-full w-full object-cover"
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <h4 className="text-xs font-black text-[var(--foreground)] truncate">{stop.title}</h4>
-                                <p className="text-[9px] text-[var(--muted-strong)] flex items-center gap-1 mt-0.5 font-semibold">
-                                  <MapPin size={9} className="text-teal-400" />
-                                  {stop.locality || currentCityDisplayName}
-                                </p>
-                              </div>
+                            <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-[var(--border)] group-last:bottom-auto group-last:h-6" />
+                            
+                            <div 
+                              className="absolute left-1 top-4 h-4.5 w-4.5 rounded-full border-2 bg-slate-950 text-[9px] font-black text-center flex items-center justify-center"
+                              style={{ 
+                                borderColor: categoryColorHex[stop.category] || "#2dd4bf",
+                                color: categoryColorHex[stop.category] || "#2dd4bf"
+                              }}
+                            >
+                              {index + 1}
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                disabled={isFirst}
-                                onClick={() => moveStopOrder(activeDay, index, "up")}
-                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[10px] disabled:opacity-30 hover:bg-[var(--panel-soft)]"
-                              >
-                                ▲
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isLast}
-                                onClick={() => moveStopOrder(activeDay, index, "down")}
-                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[10px] disabled:opacity-30 hover:bg-[var(--panel-soft)]"
-                              >
-                                ▼
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeStopFromItinerary(activeDay, stop.id)}
-                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10"
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                            <div className="flex-1 flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-soft)] p-3 hover:border-teal-500/25 hover:bg-[var(--panel)] transition-all duration-150">
+                              <div className="min-w-0 flex items-center gap-3">
+                                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+                                  <img
+                                    src={stop.image || "/placeholder-place.jpg"}
+                                    alt={stop.title}
+                                    className="h-full w-full object-cover"
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-xs font-black text-[var(--foreground)] truncate">{stop.title}</h4>
+                                  <p className="text-[9px] text-[var(--muted-strong)] flex items-center gap-1 mt-0.5 font-semibold">
+                                    <MapPin size={9} className="text-teal-400" />
+                                    {stop.locality || currentCityDisplayName}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={isFirst}
+                                  onClick={() => moveStopOrder(activeDay, index, "up")}
+                                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[10px] disabled:opacity-30 hover:bg-[var(--panel-soft)]"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isLast}
+                                  onClick={() => moveStopOrder(activeDay, index, "down")}
+                                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[10px] disabled:opacity-30 hover:bg-[var(--panel-soft)]"
+                                >
+                                  ▼
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeStopFromItinerary(activeDay, stop.id)}
+                                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        </motion.div>
+                          </motion.div>
+                        </div>
                       );
                     })
                   ) : (

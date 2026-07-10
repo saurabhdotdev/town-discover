@@ -4,6 +4,8 @@ import { z } from "zod";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
 import { BadRequestError } from "@/lib/server/api-errors";
 import { MOCK_PLACES } from "@/data/mock-places";
+import { fetchOSMPlacesByIds } from "@/lib/live-places";
+import { Place } from "@/types";
 
 const postBodySchema = z.object({
   city: z.string().min(1, { message: "city name required" }).max(100).trim(),
@@ -74,24 +76,39 @@ export const POST = createApiHandler(
       throw new BadRequestError(`You don't have enough saved places in ${city} to claim a stamp.`);
     }
 
-    // 1. Check matching mock places
-    const matchingMock = MOCK_PLACES.filter(
-      (p) => savedIds.has(p.id) && isCityMatch(p.city, city)
-    );
-
-    // 2. Check matching approved places from the database
+    // 1. Resolve saved place details dynamically from DB, OSM, and mock fallbacks
+    const resolvedPlaces: Place[] = [];
     const savedIdsArray = Array.from(savedIds);
-    const { rows: dbRows } = await pool.query<{ id: string; city: string }>(
-      `
-      SELECT id, city
-      FROM approved_places
-      WHERE id = ANY($1)
-      `,
-      [savedIdsArray]
-    );
-    const matchingDb = dbRows.filter((p) => isCityMatch(p.city, city));
 
-    const totalMatching = matchingMock.length + matchingDb.length;
+    if (savedIdsArray.length > 0) {
+      const { rows: dbRows } = await pool.query<{ id: string; city: string }>(
+        `
+        SELECT id, city
+        FROM approved_places
+        WHERE id = ANY($1)
+        `,
+        [savedIdsArray]
+      );
+      resolvedPlaces.push(...(dbRows as any));
+
+      const foundDbIds = new Set(dbRows.map((p) => p.id));
+      const remainingIds = savedIdsArray.filter((id) => !foundDbIds.has(id));
+
+      if (remainingIds.length > 0) {
+        const osmIds = remainingIds.filter((id) => id.startsWith("osm-"));
+        if (osmIds.length > 0) {
+          const resolvedOSM = await fetchOSMPlacesByIds(osmIds);
+          resolvedPlaces.push(...resolvedOSM);
+        }
+
+        const mockIds = remainingIds.filter((id) => !id.startsWith("osm-"));
+        const resolvedMock = MOCK_PLACES.filter((p) => mockIds.includes(p.id));
+        resolvedPlaces.push(...resolvedMock);
+      }
+    }
+
+    const matchingPlaces = resolvedPlaces.filter((p) => isCityMatch(p.city, city));
+    const totalMatching = matchingPlaces.length;
 
     // Validate that the user has at least 3 saved places in the target city
     if (totalMatching < 3) {
@@ -100,22 +117,35 @@ export const POST = createApiHandler(
       );
     }
 
-    // Claim the stamp
-    await pool.query(
-      `
-      INSERT INTO user_city_stamps (user_id, city_name)
-      VALUES ($1, $2)
-      ON CONFLICT (user_id, city_name) DO NOTHING
-      `,
-      [user!.id, city]
-    );
+    // Claim the stamp inside a transaction
+    const client = await pool.connect();
+    let newBadges: string[] = [];
+    try {
+      await client.query("BEGIN");
 
-    // Award 100 XP for the milestone
-    const eventType = `passport_stamp_${city.toLowerCase().replace(/\s+/g, "_")}`;
-    await awardXP(pool, user!.id, eventType, 100);
+      await client.query(
+        `
+        INSERT INTO user_city_stamps (user_id, city_name)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id, city_name) DO NOTHING
+        `,
+        [user!.id, city]
+      );
 
-    // Check and grant badges
-    const newBadges = await checkAndGrantBadges(pool, user!.id);
+      // Award 100 XP for the milestone
+      const eventType = `passport_stamp_${city.toLowerCase().replace(/\s+/g, "_")}`;
+      await awardXP(client, user!.id, eventType, 100);
+
+      // Check and grant badges
+      newBadges = await checkAndGrantBadges(client, user!.id);
+
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     return Response.json(
       {

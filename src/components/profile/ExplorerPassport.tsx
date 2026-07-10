@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plane, Star, Award, Compass, Lock, CheckCircle2, ChevronLeft, ChevronRight, BookOpen, User } from "lucide-react";
 import { Place } from "@/types";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useBadges } from "@/hooks/useBadges";
+import useSWR from "swr";
 
 interface StampData {
   cityName: string;
@@ -117,13 +118,25 @@ const BADGE_MAP: Record<string, { name: string; emoji: string; desc: string }> =
   "elite-critic": { name: "Elite Critic", emoji: "👑", desc: "Wrote 15 place reviews" },
 };
 
+const fetcher = (url: string) => fetch(url).then((res) => {
+  if (!res.ok) throw new Error("Failed to fetch passport stamps");
+  return res.json();
+});
+
 export const ExplorerPassport = ({ savedPlaces, onStampClaimed }: ExplorerPassportProps) => {
   const { user } = useAuth();
   const { stats } = useBadges(!!user);
 
+  const { data, mutate } = useSWR<{ stamps: StampData[] }>(
+    user ? "/api/profile/passport" : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 4000,
+    }
+  );
+
   const [isOpen, setIsOpen] = useState(false);
-  const [claimedStamps, setClaimedStamps] = useState<Record<string, string>>({}); // cityName -> stampedAt
-  const [loading, setLoading] = useState(true);
   const [claimingCity, setClaimingCity] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [confettiCenter, setConfettiCenter] = useState({ x: 0, y: 0 });
@@ -131,33 +144,19 @@ export const ExplorerPassport = ({ savedPlaces, onStampClaimed }: ExplorerPasspo
   // Pagination for Right Page
   const [currentPage, setCurrentPage] = useState(0); // 0 = City page A, 1 = City page B, 2 = Badges Page
 
-  // Fetch claimed stamps
-  useEffect(() => {
-    fetchStamps();
-  }, []);
-
-  const fetchStamps = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/profile/passport");
-      if (res.ok) {
-        const data = await res.json();
-        const map: Record<string, string> = {};
-        data.stamps.forEach((s: StampData) => {
-          map[s.cityName.toLowerCase()] = new Date(s.stampedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          });
-        });
-        setClaimedStamps(map);
-      }
-    } catch (e) {
-      console.error("Error loading passport stamps:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Memoize claimed stamps mapping from SWR data
+  const claimedStamps = useMemo<Record<string, string>>(() => {
+    if (!data?.stamps) return {};
+    const map: Record<string, string> = {};
+    data.stamps.forEach((s: StampData) => {
+      map[s.cityName.toLowerCase()] = new Date(s.stampedAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    });
+    return map;
+  }, [data]);
 
   // Helper to count user saved places per city
   const getCitySaveCount = (cityName: string) => {
@@ -197,7 +196,7 @@ export const ExplorerPassport = ({ savedPlaces, onStampClaimed }: ExplorerPasspo
         setTimeout(() => setShowConfetti(false), 3000);
 
         // Reload stamps and stats
-        await fetchStamps();
+        await mutate();
         if (onStampClaimed) {
           onStampClaimed();
         }

@@ -12,7 +12,7 @@ const normalizeOrigin = (value: string | null | undefined) => {
   }
 };
 
-const getAllowedOrigins = (request: NextRequest) => {
+export const getAllowedOrigins = (request: NextRequest) => {
   const origins = new Set<string>();
 
   for (const value of [
@@ -31,8 +31,10 @@ const getAllowedOrigins = (request: NextRequest) => {
     origins.add(request.nextUrl.origin);
     origins.add("http://localhost:3000");
     origins.add("http://localhost:3001");
+    origins.add("http://localhost:8081");
     origins.add("http://127.0.0.1:3000");
     origins.add("http://127.0.0.1:3001");
+    origins.add("http://127.0.0.1:8081");
   }
 
   return origins;

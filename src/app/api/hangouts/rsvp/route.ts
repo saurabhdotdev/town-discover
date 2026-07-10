@@ -3,6 +3,7 @@ import { createApiHandler } from "@/lib/server/api-handler";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
 import { z } from "zod";
 import { BadRequestError, NotFoundError } from "@/lib/server/api-errors";
+import { PoolClient } from "pg";
 
 const rsvpSchema = z.object({
   hangoutId: z.string().uuid({ message: "Invalid hangout ID format" }),
@@ -45,85 +46,97 @@ export const POST = createApiHandler(
     let message = "";
     let newBadges: string[] = [];
 
-    if (existingRsvps.length > 0) {
-      const currentStatus = existingRsvps[0].status;
-      if (currentStatus === status) {
-        // Toggle off: remove the RSVP entirely
-        await pool.query(
-          `DELETE FROM hangout_rsvps WHERE hangout_id = $1 AND user_id = $2`,
-          [hangoutId, user!.id]
-        );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-        // Revoke the +10 XP for this hangout
-        await pool.query(
-          `DELETE FROM user_xp_events WHERE user_id = $1 AND event_type = $2`,
-          [user!.id, xpEventType]
-        );
+      if (existingRsvps.length > 0) {
+        const currentStatus = existingRsvps[0].status;
+        if (currentStatus === status) {
+          // Toggle off: remove the RSVP entirely
+          await client.query(
+            `DELETE FROM hangout_rsvps WHERE hangout_id = $1 AND user_id = $2`,
+            [hangoutId, user!.id]
+          );
 
-        rsvped = false;
-        message = "RSVP removed successfully.";
+          // Revoke the +10 XP for this hangout
+          await client.query(
+            `DELETE FROM user_xp_events WHERE user_id = $1 AND event_type = $2`,
+            [user!.id, xpEventType]
+          );
+
+          rsvped = false;
+          message = "RSVP removed successfully.";
+        } else {
+          // Update status of existing RSVP
+          await client.query(
+            `UPDATE hangout_rsvps SET status = $3 WHERE hangout_id = $1 AND user_id = $2`,
+            [hangoutId, user!.id, status]
+          );
+
+          // Notify the host about status update (if it's not the host updating their own RSVP)
+          if (hostId !== user!.id) {
+            const notifierName = user!.fullName || "Another explorer";
+            await client.query(
+              `INSERT INTO user_notifications (user_id, type, title, message, link)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [
+                hostId,
+                "rsvp_received",
+                `RSVP updated for "${hangoutTitle}"`,
+                `${notifierName} updated status to "${status}" for your hangout.`,
+                `/discover?place=${placeId}`
+              ]
+            );
+          }
+
+          rsvped = true;
+          message = `RSVP status updated to "${status}" successfully.`;
+        }
       } else {
-        // Update status of existing RSVP
-        await pool.query(
-          `UPDATE hangout_rsvps SET status = $3 WHERE hangout_id = $1 AND user_id = $2`,
+        // Create new RSVP
+        await client.query(
+          `INSERT INTO hangout_rsvps (hangout_id, user_id, status) VALUES ($1, $2, $3)`,
           [hangoutId, user!.id, status]
         );
 
-        // Notify the host about status update (if it's not the host updating their own RSVP)
+        // Notify the host about the new RSVP (if it's not the host RSVPing to their own hangout)
         if (hostId !== user!.id) {
           const notifierName = user!.fullName || "Another explorer";
-          await pool.query(
+          await client.query(
             `INSERT INTO user_notifications (user_id, type, title, message, link)
              VALUES ($1, $2, $3, $4, $5)`,
             [
               hostId,
               "rsvp_received",
-              `RSVP updated for "${hangoutTitle}"`,
-              `${notifierName} updated status to "${status}" for your hangout.`,
+              `New RSVP for "${hangoutTitle}"`,
+              `${notifierName} is marked as "${status}" for your hangout.`,
               `/discover?place=${placeId}`
             ]
           );
         }
 
-        rsvped = true;
-        message = `RSVP status updated to "${status}" successfully.`;
-      }
-    } else {
-      // Create new RSVP
-      await pool.query(
-        `INSERT INTO hangout_rsvps (hangout_id, user_id, status) VALUES ($1, $2, $3)`,
-        [hangoutId, user!.id, status]
-      );
-
-      // Notify the host about the new RSVP (if it's not the host RSVPing to their own hangout)
-      if (hostId !== user!.id) {
-        const notifierName = user!.fullName || "Another explorer";
-        await pool.query(
-          `INSERT INTO user_notifications (user_id, type, title, message, link)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [
-            hostId,
-            "rsvp_received",
-            `New RSVP for "${hangoutTitle}"`,
-            `${notifierName} is marked as "${status}" for your hangout.`,
-            `/discover?place=${placeId}`
-          ]
+        // Award XP
+        const { rows: xpAwarded } = await client.query(
+          `SELECT 1 FROM user_xp_events WHERE user_id = $1 AND event_type = $2`,
+          [user!.id, xpEventType]
         );
+
+        if (xpAwarded.length === 0) {
+          await awardXP(client, user!.id, xpEventType, 10);
+          newBadges = await checkAndGrantBadges(client, user!.id);
+        }
+
+        rsvped = true;
+        message = `RSVP marked as "${status}" successfully.`;
       }
 
-      // Award XP
-      const { rows: xpAwarded } = await pool.query(
-        `SELECT 1 FROM user_xp_events WHERE user_id = $1 AND event_type = $2`,
-        [user!.id, xpEventType]
-      );
-
-      if (xpAwarded.length === 0) {
-        await awardXP(pool, user!.id, xpEventType, 10);
-        newBadges = await checkAndGrantBadges(pool, user!.id);
-      }
-
-      rsvped = true;
-      message = `RSVP marked as "${status}" successfully.`;
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
     }
 
     return Response.json({

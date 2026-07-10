@@ -6,6 +6,7 @@ import { Place, UserLocation } from "@/types";
 import { motion } from "framer-motion";
 import { cn, formatDistance, getCategoryLabel, isOpenNow } from "@/lib/utils";
 import { PUNE_CENTER } from "@/lib/pune-location";
+import { calculateDistance } from "@/lib/geo";
 
 interface MapProps {
   places: Place[];
@@ -20,6 +21,7 @@ interface MapProps {
   simulationActive?: boolean;
   simulationCoord?: { latitude: number; longitude: number } | null;
   scrollWheelZoom?: boolean;
+  tripItinerary?: Record<number, Place[]> | null;
 }
 
 const categoryColor: Record<string, string> = {
@@ -160,19 +162,29 @@ export const MapView: React.FC<MapProps> = ({
   simulationActive = false,
   simulationCoord = null,
   scrollWheelZoom = false,
+  tripItinerary = null,
 }) => {
   const [mapZoom, setMapZoom] = useState(14);
+  const [mapStyle, setMapStyle] = useState<"classic" | "satellite">("classic");
   const mapContainer = useRef<HTMLDivElement>(null);
   const leaflet = useRef<typeof import("leaflet") | null>(null);
   const map = useRef<Leaflet.Map | null>(null);
+  const tileLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const markersRef = useRef<Record<string, Leaflet.Marker>>({});
   const polylineRef = useRef<Leaflet.Polyline | null>(null);
+  const polylinesRef = useRef<Leaflet.Polyline[]>([]);
   const userLocationMarkerRef = useRef<Leaflet.Marker | null>(null);
   const lastFlownLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const lastFlownSelectedPlaceRef = useRef<string | null>(null);
   // Use a ref so async init always reads the latest scrollWheelZoom value
   const scrollWheelZoomRef = useRef(scrollWheelZoom);
   scrollWheelZoomRef.current = scrollWheelZoom;
+
+  const placesRef = useRef(places);
+  placesRef.current = places;
+
+  const onMarkerClickRef = useRef(onMarkerClick);
+  onMarkerClickRef.current = onMarkerClick;
 
   // Initialize Map exactly once on mount
   useEffect(() => {
@@ -230,8 +242,26 @@ export const MapView: React.FC<MapProps> = ({
         });
       });
 
-      nextMap.on("click", () => {
-        onMarkerClick?.(null);
+      nextMap.on("click", (e: any) => {
+        const clickLat = e.latlng.lat;
+        const clickLng = e.latlng.lng;
+        
+        let closestPlace: Place | null = null;
+        let minDistance = 0.25; // 250 meters threshold
+        
+        for (const place of placesRef.current) {
+          const dist = calculateDistance(clickLat, clickLng, place.latitude, place.longitude);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestPlace = place;
+          }
+        }
+        
+        if (closestPlace) {
+          onMarkerClickRef.current?.(closestPlace);
+        } else {
+          onMarkerClickRef.current?.(null);
+        }
       });
 
       nextMap.on("zoomend", () => {
@@ -240,11 +270,12 @@ export const MapView: React.FC<MapProps> = ({
 
       L.control.zoom({ position: "bottomright" }).addTo(nextMap);
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      const baseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         subdomains: "abcd",
         maxZoom: 19,
       }).addTo(nextMap);
+      tileLayerRef.current = baseLayer;
 
       if (userLocation) {
         const userIcon = L.divIcon({
@@ -296,6 +327,10 @@ export const MapView: React.FC<MapProps> = ({
       if (polylineRef.current) {
         polylineRef.current.remove();
         polylineRef.current = null;
+      }
+      if (polylinesRef.current) {
+        polylinesRef.current.forEach(p => p.remove());
+        polylinesRef.current = [];
       }
       if (userLocationMarkerRef.current) {
         userLocationMarkerRef.current.remove();
@@ -377,6 +412,36 @@ export const MapView: React.FC<MapProps> = ({
         iconHtml = tripIconSVG.hotel;
       }
 
+      // Check if we have day color-coding
+      let dayNumber: number | null = null;
+      if (tripItinerary) {
+        for (const [day, dayPlaces] of Object.entries(tripItinerary)) {
+          if (dayPlaces.some(p => p.id === place.id)) {
+            dayNumber = parseInt(day);
+            break;
+          }
+        }
+      }
+
+      const dayColors: Record<number, string> = {
+        1: "#0d9488", // Teal
+        2: "#db2777", // Pink/Rose
+        3: "#0284c7", // Sky
+        4: "#d97706", // Amber
+      };
+
+      const dayGlowColors: Record<number, string> = {
+        1: "rgba(13, 148, 136, 0.5)",
+        2: "rgba(219, 39, 119, 0.5)",
+        3: "rgba(2, 132, 199, 0.5)",
+        4: "rgba(217, 119, 6, 0.5)",
+      };
+
+      if (dayNumber !== null) {
+        color = dayColors[dayNumber] || color;
+        glowColor = dayGlowColors[dayNumber] || glowColor;
+      }
+
       const open = isOpenNow(place.hours);
       const pulseActive = place.isTrending || open;
 
@@ -389,6 +454,11 @@ export const MapView: React.FC<MapProps> = ({
             <div style="display:grid;place-items:center;width:100%;height:100%;border-radius:999px;background:${color};border:2px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.3);color:#fff;">
               ${iconHtml}
             </div>
+            ${dayNumber !== null ? `
+              <div style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:999px;background:#0f172a;border:1.5px solid #fff;color:#fff;font-size:9px;font-weight:900;display:grid;place-items:center;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+                D${dayNumber}
+              </div>
+            ` : ""}
           </div>
         `,
         iconSize: isSelected ? [44, 44] : [36, 36],
@@ -559,7 +629,7 @@ export const MapView: React.FC<MapProps> = ({
         renderSinglePlaceMarker(matched, true);
       }
     }
-  }, [places, selectedPlace, onMarkerClick, mapZoom]);
+  }, [places, selectedPlace, onMarkerClick, mapZoom, tripItinerary]);
 
   useEffect(() => {
     const L = leaflet.current;
@@ -683,11 +753,61 @@ export const MapView: React.FC<MapProps> = ({
     const L = leaflet.current;
     if (!map.current || !L) return;
 
-    if (polylineRef.current && tripRoutePath) {
+    // Clear existing single polyline
+    if (polylineRef.current) {
       polylineRef.current.remove();
       polylineRef.current = null;
     }
 
+    // Clear existing multi polylines
+    if (polylinesRef.current) {
+      polylinesRef.current.forEach(p => p.remove());
+      polylinesRef.current = [];
+    }
+
+    // If tripItinerary is provided, draw color-coded paths for each day
+    if (tripItinerary) {
+      const dayColors: Record<number, string> = {
+        1: "#0d9488", // Teal
+        2: "#db2777", // Pink/Rose
+        3: "#0284c7", // Sky
+        4: "#d97706", // Amber
+      };
+
+      const allPoints: [number, number][] = [];
+
+      Object.entries(tripItinerary).forEach(([day, dayPlaces]) => {
+        if (!dayPlaces || dayPlaces.length < 2) return;
+        const dayNum = parseInt(day);
+        const color = dayColors[dayNum] || "#38bdf8";
+
+        const points: [number, number][] = dayPlaces.map(p => {
+          allPoints.push([p.latitude, p.longitude]);
+          return [p.latitude, p.longitude];
+        });
+
+        const polyline = L.polyline(points, {
+          color: color,
+          weight: 5.5,
+          className: "glowing-polyline",
+          dashArray: "12, 6"
+        }).addTo(map.current!);
+
+        polylinesRef.current.push(polyline);
+      });
+
+      if (allPoints.length > 0) {
+        try {
+          const bounds = L.latLngBounds(allPoints);
+          map.current.fitBounds(bounds, { padding: [50, 50] });
+        } catch (e) {
+          console.warn("fitBounds failed:", e);
+        }
+      }
+      return;
+    }
+
+    // Fallback to single path
     if (!tripRoutePath || tripRoutePath.length === 0) return;
 
     const pathPoints: [number, number][] = tripRoutePath.map(c => [c.latitude, c.longitude]);
@@ -706,7 +826,7 @@ export const MapView: React.FC<MapProps> = ({
     } catch (e) {
       console.warn("fitBounds failed:", e);
     }
-  }, [tripRoutePath]);
+  }, [tripRoutePath, tripItinerary]);
 
   // Vehicle Simulation Marker tracking
   const simulationMarkerRef = useRef<Leaflet.Marker | null>(null);
@@ -762,14 +882,67 @@ export const MapView: React.FC<MapProps> = ({
     };
   }, [simulationCoord, simulationActive]);
 
+  // Swap map tiles when style is toggled
+  useEffect(() => {
+    if (!map.current || !leaflet.current || !tileLayerRef.current) return;
+    const L = leaflet.current;
+    
+    // Remove current tile layer
+    tileLayerRef.current.remove();
+    
+    // Create new tile layer based on mapStyle selection
+    if (mapStyle === "satellite") {
+      tileLayerRef.current = L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+        attribution: "&copy; Google Maps Satellite",
+        maxZoom: 19,
+      }).addTo(map.current);
+    } else {
+      tileLayerRef.current = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        subdomains: "abcd",
+        maxZoom: 19,
+      }).addTo(map.current);
+    }
+  }, [mapStyle]);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.42 }}
-      ref={mapContainer}
-      className={cn("h-full w-full overflow-hidden rounded-lg border border-[var(--border)] shadow-2xl", className)}
-    />
+    <div className={cn("relative h-full w-full overflow-hidden rounded-lg border border-[var(--border)] shadow-2xl", className)}>
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.42 }}
+        ref={mapContainer}
+        className="h-full w-full"
+      />
+      
+      {/* Floating Style Toggle Overlay */}
+      <div className="absolute left-4 top-4 z-[9999] flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 backdrop-blur-md p-1 shadow-2xl select-none">
+        <button
+          type="button"
+          onClick={() => setMapStyle("classic")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer",
+            mapStyle === "classic"
+              ? "bg-teal-400 text-slate-950 shadow-md font-black"
+              : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+          )}
+        >
+          🌌 Classic
+        </button>
+        <button
+          type="button"
+          onClick={() => setMapStyle("satellite")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer",
+            mapStyle === "satellite"
+              ? "bg-teal-400 text-slate-950 shadow-md font-black"
+              : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+          )}
+        >
+          🌍 Satellite Earth
+        </button>
+      </div>
+    </div>
   );
 };
 

@@ -51,7 +51,7 @@ export async function fetchLiveTownEvents(city: string): Promise<Event[]> {
       reviewCount: e.reviewCount ?? 0,
       priceRange: e.priceRange ?? "",
       hours: e.hours ?? { open: "", close: "" },
-      // Additional fields can be added later as needed
+      city: e.city ?? city,
     }));
     await setCache(cacheKey, events, 600); // 10 minutes
     return events;

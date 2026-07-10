@@ -97,7 +97,7 @@ export default function HangoutsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to post message.");
+      if (!res.ok) throw new Error(data.error?.message || data.error || "Failed to post message.");
 
       setNewMessageText("");
       fetchShoutboxMessages(true);
@@ -179,14 +179,28 @@ export default function HangoutsPage() {
     try {
       const res = await fetch(`/api/places/osm?city=${encodeURIComponent(selectedCity)}`);
       const data = await res.json();
-      if (res.ok && data.places) {
+      if (res.ok && data.places && data.places.length > 0) {
         setPlaces(data.places);
-        if (data.places.length > 0) {
-          setFormPlaceId(data.places[0].id);
-        }
+        setFormPlaceId(data.places[0].id);
+      } else {
+        const fallbackPlace = {
+          id: `city-center-${selectedCity.toLowerCase()}`,
+          title: `${selectedCity} City Center Landmark`,
+          locality: "Central",
+          city: selectedCity,
+        } as any;
+        setPlaces([fallbackPlace]);
+        setFormPlaceId(fallbackPlace.id);
       }
     } catch {
-      // silently fail
+      const fallbackPlace = {
+        id: `city-center-${selectedCity.toLowerCase()}`,
+        title: `${selectedCity} City Center Landmark`,
+        locality: "Central",
+        city: selectedCity,
+      } as any;
+      setPlaces([fallbackPlace]);
+      setFormPlaceId(fallbackPlace.id);
     } finally {
       setLoadingPlaces(false);
     }
@@ -260,6 +274,10 @@ export default function HangoutsPage() {
     }
 
     const parsedDate = new Date(formDate);
+    if (isNaN(parsedDate.getTime())) {
+      setFormError("Please enter a valid date and time.");
+      return;
+    }
     const now = new Date();
     const minFuture = new Date(now.getTime() + 30 * 60 * 1000);
     const maxFuture = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -288,7 +306,7 @@ export default function HangoutsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create hangout.");
+      if (!res.ok) throw new Error(data.error?.message || data.error || "Failed to create hangout.");
 
       // Refresh badges stats globally
       window.dispatchEvent(new CustomEvent("sheher:refresh-badges"));
@@ -324,7 +342,7 @@ export default function HangoutsPage() {
         body: JSON.stringify({ hangoutId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update RSVP.");
+      if (!res.ok) throw new Error(data.error?.message || data.error || "Failed to update RSVP.");
 
       // Refresh badges / XP stats globally
       window.dispatchEvent(new CustomEvent("sheher:refresh-badges"));
@@ -357,7 +375,7 @@ export default function HangoutsPage() {
         body: JSON.stringify({ hangoutId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to report hangout.");
+      if (!res.ok) throw new Error(data.error?.message || data.error || "Failed to report hangout.");
 
       alert("Thank you. This meetup has been reported.");
       fetchHangouts();
@@ -379,7 +397,7 @@ export default function HangoutsPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete hangout.");
+      if (!res.ok) throw new Error(data.error?.message || data.error || "Failed to delete hangout.");
 
       // Refresh feed
       fetchHangouts();

@@ -50,3 +50,5 @@ next-env.d.ts
 /place.category
 /place.id
 scratch*.html
+
+.vercel

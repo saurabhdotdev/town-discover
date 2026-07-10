@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
   try {
     const places = await getFallbackPlacesForCity(cityParam);
     return Response.json({ places }, { status: 200, headers: { "Cache-Control": "public, max-age=60" } });
-  } catch (error: any) {
-    return Response.json({ error: error.message || "Failed to fetch fallback places" }, { status: 500 });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to fetch fallback places";
+    return Response.json({ error: msg }, { status: 500 });
   }
 }

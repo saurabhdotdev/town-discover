@@ -485,6 +485,59 @@ export async function fetchOSMPlacesByIds(ids: string[], signal?: AbortSignal): 
     })
     .filter((place): place is Place => Boolean(place));
 
+  if (places.length > 0) {
+    try {
+      const { getPool } = await import("@/lib/postgres");
+      const pool = getPool();
+      if (pool) {
+        for (const place of places) {
+          await pool.query(
+            `
+            INSERT INTO approved_places (
+              id, title, description, category, image, rating, latitude, longitude, tags, city, locality, price_range, phone, website, hours
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb
+            ) ON CONFLICT (id) DO UPDATE SET
+              title = EXCLUDED.title,
+              description = EXCLUDED.description,
+              category = EXCLUDED.category,
+              image = EXCLUDED.image,
+              rating = EXCLUDED.rating,
+              latitude = EXCLUDED.latitude,
+              longitude = EXCLUDED.longitude,
+              tags = EXCLUDED.tags,
+              city = EXCLUDED.city,
+              locality = EXCLUDED.locality,
+              price_range = EXCLUDED.price_range,
+              phone = EXCLUDED.phone,
+              website = EXCLUDED.website,
+              hours = EXCLUDED.hours
+            `,
+            [
+              place.id,
+              place.title,
+              place.description,
+              place.category,
+              place.image,
+              place.rating,
+              place.latitude,
+              place.longitude,
+              place.tags,
+              place.city,
+              place.locality,
+              place.priceRange || "$$",
+              place.phone || null,
+              place.website || null,
+              place.hours ? JSON.stringify(place.hours) : null,
+            ]
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to cache OSM places in database:", err);
+    }
+  }
+
   return places;
 }
 

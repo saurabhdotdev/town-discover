@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 
 // ─── Badge Definitions ────────────────────────────────────────────────────────
 
@@ -127,7 +127,7 @@ export const getLevelTitle = (level: number) =>
 // ─── Engine Functions ─────────────────────────────────────────────────────────
 
 export const awardXP = async (
-  pool: Pool,
+  pool: Pool | PoolClient,
   userId: string,
   eventType: string,
   xp: number
@@ -143,7 +143,7 @@ export const awardXP = async (
 };
 
 export const checkAndGrantBadges = async (
-  pool: Pool,
+  pool: Pool | PoolClient,
   userId: string,
   context?: {
     savedPlaceCategory?: string;

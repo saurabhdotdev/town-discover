@@ -11,6 +11,8 @@ interface LocationPermissionCardProps {
   loading: boolean;
   error: string | null;
   onRequest: () => void;
+  liveTracking?: boolean;
+  onToggleTracking?: () => void;
 }
 
 const DISMISS_KEY = "sheher-location-prompt-dismissed";
@@ -53,6 +55,8 @@ export const LocationPermissionCard: React.FC<LocationPermissionCardProps> = ({
   loading,
   error,
   onRequest,
+  liveTracking = false,
+  onToggleTracking,
 }) => {
   const dismissed = useSyncExternalStore(
     subscribeDismiss,
@@ -140,23 +144,36 @@ export const LocationPermissionCard: React.FC<LocationPermissionCardProps> = ({
                     scrolling and more exploring.
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={onRequest}
-                    disabled={loading}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-500 px-4 text-xs font-black text-white shadow-lg shadow-teal-500/20 transition hover:bg-teal-400 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
-                  >
-                    <MapPin size={15} />
-                    {loading ? "Checking..." : "Share my location"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDismiss}
-                    className="text-xs font-bold text-[var(--muted)] transition hover:text-[var(--muted-strong)]"
-                  >
-                    Not now
-                  </button>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={onRequest}
+                      disabled={loading}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-500 px-4 text-xs font-black text-white shadow-lg shadow-teal-500/20 transition hover:bg-teal-400 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                    >
+                      <MapPin size={15} />
+                      {loading ? "Checking..." : "Share my location"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDismiss}
+                      className="text-xs font-bold text-[var(--muted)] transition hover:text-[var(--muted-strong)]"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                  {onToggleTracking && (
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--muted-strong)] select-none bg-[var(--panel-soft)] px-3 py-2 rounded-lg border border-[var(--border)] hover:border-teal-500/30 transition">
+                      <input
+                        type="checkbox"
+                        checked={liveTracking}
+                        onChange={onToggleTracking}
+                        className="rounded border-[var(--border)] bg-[var(--input)] text-teal-500 focus:ring-teal-400/50 cursor-pointer h-4 w-4"
+                      />
+                      <span>Live tracking as you move</span>
+                    </label>
+                  )}
                 </div>
               </>
             )}

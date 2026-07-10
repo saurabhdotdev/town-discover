@@ -38,6 +38,7 @@ export interface Place extends Location {
   routeWaypoints?: Location[];
   trailStops?: TrailStop[];
   isVeg?: boolean;
+  reviewMood?: Record<string, number>;
 }
 
 export interface InfluencerFeature {

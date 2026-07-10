@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getTownEventsForCity, getAllTownEvents } from '@/data/town-events';
 import { SupportedCityName } from '@/lib/pune-location';
+import { createApiHandler } from '@/lib/server/api-handler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
  */
 const priceLevel = (price: string): number => price.length;
 
-export async function GET(request: NextRequest) {
+export const GET = createApiHandler({ auth: "none" }, async (request: NextRequest) => {
   const { searchParams } = request.nextUrl;
 
   // Optional city filter – uses the path segment, but also allow query param for backward compatibility
@@ -47,10 +48,11 @@ export async function GET(request: NextRequest) {
     return true;
   });
 
-  return NextResponse.json({
+  return Response.json({
     city: city ?? 'all',
     count: filtered.length,
     events: filtered,
     source: 'town-script',
   });
-}
+});
+

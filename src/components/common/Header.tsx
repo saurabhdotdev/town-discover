@@ -38,8 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
         transition={{ duration: 0.42, ease: "easeOut" }}
         className={cn(
           "mx-auto flex flex-col gap-3 px-3 sm:px-4 md:flex-row md:items-end md:justify-between md:px-6",
-          compact 
-            ? "max-w-full py-1.5 sm:py-2 md:py-2.5 md:items-center gap-1.5" 
+          compact
+            ? "max-w-full py-1.5 sm:py-2 md:py-2.5 md:items-center gap-1.5"
             : "max-w-screen-xl py-3 md:py-5"
         )}
       >

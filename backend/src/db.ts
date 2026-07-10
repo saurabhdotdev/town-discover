@@ -1,5 +1,9 @@
 import { Pool, QueryResult } from "pg";
 
+if (!process.env.DATABASE_URL) {
+  console.error("⚠️ WARNING: DATABASE_URL environment variable is not defined. Database operations will fail!");
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl:

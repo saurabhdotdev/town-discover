@@ -190,6 +190,10 @@ export const extractPlaceMoodFeatures = (place: Place, now = new Date()): MoodPr
   const text = normalize([place.title, place.description, ...place.tags].join(" "));
   profile = blendProfiles(profile, inferMoodFromQuery(text), 0.65);
 
+  if (place.reviewMood) {
+    profile = blendProfiles(profile, place.reviewMood, 0.8);
+  }
+
   return normalizeProfile(profile);
 };
 

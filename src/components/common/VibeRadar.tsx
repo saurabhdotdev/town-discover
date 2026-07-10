@@ -106,6 +106,80 @@ const PHASES: PhaseConfig[] = [
   },
 ];
 
+const playRadarPing = (phaseId: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    masterGain.connect(ctx.destination);
+    
+    const osc = ctx.createOscillator();
+    const subOsc = ctx.createOscillator();
+    
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    
+    let baseFreq = 440;
+    let sweepType: OscillatorType = "sine";
+    
+    if (phaseId === "morning") {
+      baseFreq = 880; // A5 (high bright)
+      filter.frequency.setValueAtTime(1200, ctx.currentTime);
+    } else if (phaseId === "midday") {
+      baseFreq = 659.25; // E5
+      filter.frequency.setValueAtTime(900, ctx.currentTime);
+    } else if (phaseId === "golden") {
+      baseFreq = 523.25; // C5 (warm)
+      filter.frequency.setValueAtTime(700, ctx.currentTime);
+    } else if (phaseId === "tonight") {
+      baseFreq = 349.23; // F4
+      filter.frequency.setValueAtTime(500, ctx.currentTime);
+      sweepType = "triangle";
+    } else if (phaseId === "midnight") {
+      baseFreq = 220; // A3 (deep low)
+      filter.frequency.setValueAtTime(350, ctx.currentTime);
+    }
+    
+    osc.type = sweepType;
+    osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, ctx.currentTime + 0.4);
+    
+    subOsc.type = "sine";
+    subOsc.frequency.setValueAtTime(baseFreq * 1.5, ctx.currentTime);
+    
+    const delay = ctx.createDelay();
+    delay.delayTime.setValueAtTime(0.15, ctx.currentTime);
+    const delayGain = ctx.createGain();
+    delayGain.gain.setValueAtTime(0.35, ctx.currentTime);
+    
+    delay.connect(delayGain);
+    delayGain.connect(delay);
+    delayGain.connect(masterGain);
+    
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0, ctx.currentTime);
+    oscGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+    oscGain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+    
+    osc.connect(filter);
+    subOsc.connect(filter);
+    filter.connect(oscGain);
+    oscGain.connect(masterGain);
+    oscGain.connect(delay);
+    
+    osc.start();
+    subOsc.start();
+    osc.stop(ctx.currentTime + 0.6);
+    subOsc.stop(ctx.currentTime + 0.6);
+  } catch (err) {
+    console.warn("Failed to play radar ping sound:", err);
+  }
+};
+
 // Helper to auto-detect time phase
 const getAutoDetectedPhase = (): VibePhase => {
   if (typeof window === "undefined") return "midday";
@@ -260,6 +334,7 @@ export const VibeRadar: React.FC<VibeRadarProps> = ({
   const handlePhaseChange = (phase: VibePhase) => {
     setIsTimeTraveling(true);
     setSelectedPhase(phase);
+    playRadarPing(phase);
     setTimeout(() => setIsTimeTraveling(false), 300);
   };
 

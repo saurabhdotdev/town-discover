@@ -17,6 +17,11 @@
         "backgroundColor": "#0f172a"
       }
     },
-    "plugins": ["expo-router", "expo-location"]
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      "expo-asset",
+      "expo-font"
+    ]
   }
 }

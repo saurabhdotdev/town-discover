@@ -30,6 +30,7 @@ import { getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
 import { WeatherWidget } from "@/components/common/WeatherWidget";
+import { SmartSearchBar } from "@/components/common/SmartSearchBar";
 import { useLivePlaces } from "@/hooks/useLivePlaces";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
@@ -44,6 +45,7 @@ import { filterAndRankPlaces } from "@/lib/place-search";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
+import type { LiveEvent } from "@/app/api/events/live/route";
 
 // Lazy-load heavy components that are interaction-triggered or below the fold
 const PlaceDetailModal = dynamic(
@@ -98,11 +100,21 @@ export default function Home() {
   const [widgetPreviewName, setWidgetPreviewName] = useState("");
 
   // Area Layover Planner states
-  const [activePlannerTab, setActivePlannerTab] = useState<"route" | "area">("route");
+  const [activePlannerTab, setActivePlannerTab] = useState<"route" | "area" | "outings">("route");
   const [selectedLocality, setSelectedLocality] = useState("");
   const [areaTimeBudget, setAreaTimeBudget] = useState<"1" | "3" | "5">("3");
   const [areaPlanStops, setAreaPlanStops] = useState<Place[] | null>(null);
   const [areaPlanBudgetEstimate, setAreaPlanBudgetEstimate] = useState("");
+
+  // Local Outings Planner states
+  const [outingType, setOutingType] = useState<"friends" | "date" | "family" | "solo">("friends");
+  const [outingVibe, setOutingVibe] = useState<"food" | "cafe" | "culture" | "nightlife">("food");
+  const [outingTimeOfDay, setOutingTimeOfDay] = useState<"morning" | "evening" | "full">("evening");
+  const [outingStops, setOutingStops] = useState<Place[] | null>(null);
+  const [outingGenerating, setOutingGenerating] = useState(false);
+  const [outingPreviewName, setOutingPreviewName] = useState("");
+  const [liveEventSuggestions, setLiveEventSuggestions] = useState<any[]>([]);
+  const [hangoutSuggestions, setHangoutSuggestions] = useState<any[]>([]);
 
   // Apply onboarding city preference on first load
   useEffect(() => {
@@ -739,6 +751,191 @@ export default function Home() {
     router.push(`/map?mode=trip&stops=${encodeURIComponent(stopIds)}&sourceName=${encodeURIComponent(areaPlanStops[0].title)}&destName=${encodeURIComponent(areaPlanStops[areaPlanStops.length - 1].title)}&trailName=${encodeURIComponent(trailName)}`);
   };
 
+  const handleGenerateLocalOuting = async () => {
+    if (allPlaces.length === 0) {
+      alert("No places available in this city to plan an outing.");
+      return;
+    }
+    setOutingGenerating(true);
+    setOutingStops(null);
+    setLiveEventSuggestions([]);
+    setHangoutSuggestions([]);
+
+    try {
+      const targetCount = outingTimeOfDay === "full" ? 4 : 3;
+
+      const cityPlaces = allPlaces.filter(
+        (p) => p.city.toLowerCase() === activeCity.toLowerCase()
+      );
+
+      if (cityPlaces.length === 0) {
+        alert("No places found for the active city.");
+        setOutingGenerating(false);
+        return;
+      }
+
+      let filterFn = (p: Place) => true;
+      if (outingVibe === "food") {
+        filterFn = (p: Place) => ["restaurant", "food-stall", "street-food", "dessert", "ice-cream"].includes(p.category);
+      } else if (outingVibe === "cafe") {
+        filterFn = (p: Place) => ["cafe", "dessert", "ice-cream"].includes(p.category);
+      } else if (outingVibe === "culture") {
+        filterFn = (p: Place) => p.tags.some(t => ["cultural", "heritage", "museum", "scenic", "nature", "park", "tourist-friendly"].includes(t.toLowerCase())) || p.category === "event";
+      } else if (outingVibe === "nightlife") {
+        filterFn = (p: Place) => ["bar", "nightlife"].includes(p.category) || p.tags.some(t => ["night-drive", "late-night"].includes(t.toLowerCase()));
+      }
+
+      let candidates = cityPlaces.filter(filterFn);
+      if (candidates.length < targetCount) {
+        candidates = [...cityPlaces];
+      }
+
+      if (outingType === "family") {
+        const familyFriendly = candidates.filter(p => p.tags.some(t => ["family-friendly", "family", "kids", "kids-friendly"].includes(t.toLowerCase())));
+        if (familyFriendly.length >= targetCount) candidates = familyFriendly;
+      } else if (outingType === "date") {
+        const romantic = candidates.filter(p => p.rating >= 4.4 || p.tags.some(t => ["romantic", "cozy", "scenic", "view"].includes(t.toLowerCase())));
+        if (romantic.length >= targetCount) candidates = romantic;
+      } else if (outingType === "friends") {
+        const groupSpots = candidates.filter(p => p.tags.some(t => ["group", "friends", "casual", "hangout"].includes(t.toLowerCase())));
+        if (groupSpots.length >= targetCount) candidates = groupSpots;
+      }
+
+      candidates.sort(() => 0.5 - Math.random());
+
+      const chosenStops: Place[] = [];
+      const usedCategories = new Set<string>();
+
+      for (const p of candidates) {
+        if (chosenStops.length >= targetCount) break;
+        if (candidates.length >= targetCount * 2 && usedCategories.has(p.category)) {
+          continue;
+        }
+        chosenStops.push(p);
+        usedCategories.add(p.category);
+      }
+
+      if (chosenStops.length < targetCount) {
+        const remaining = candidates.filter(p => !chosenStops.some(s => s.id === p.id));
+        for (const p of remaining) {
+          if (chosenStops.length >= targetCount) break;
+          chosenStops.push(p);
+        }
+      }
+
+      chosenStops.sort((a, b) => {
+        const score = (category: string) => {
+          if (["cafe", "dessert"].includes(category)) return 1;
+          if (["event", "street-food", "food-stall"].includes(category)) return 2;
+          if (["restaurant"].includes(category)) return 3;
+          if (["bar", "nightlife"].includes(category)) return 4;
+          return 5;
+        };
+        return score(a.category) - score(b.category);
+      });
+
+      const typeLabel = outingType === "friends" ? "Friends Outing" : outingType === "date" ? "Date Night Outing" : outingType === "family" ? "Family Outing" : "Solo Outing";
+      const vibeLabel = outingVibe === "food" ? "Foodie Trail" : outingVibe === "cafe" ? "Cafe Hop" : outingVibe === "culture" ? "Heritage & Arts" : "Nightlife Crawl";
+      const name = `${vibeLabel} for a ${typeLabel} (${outingTimeOfDay === "full" ? "Full Day" : outingTimeOfDay === "morning" ? "Day Out" : "Evening Out"})`;
+      setOutingStops(chosenStops);
+      setOutingPreviewName(name);
+
+      try {
+        const eventsRes = await fetch(`/api/events/live?city=${encodeURIComponent(activeCity)}`);
+        if (eventsRes.ok) {
+          const eventsData = await eventsRes.json();
+          const eventsList: LiveEvent[] = eventsData.events ?? [];
+          const matchedEvents = eventsList.filter(evt => {
+            if (outingTimeOfDay === "evening") {
+              const hour = parseInt(evt.time.split(":")[0]);
+              if (isNaN(hour) || hour < 16) return false;
+            }
+            if (outingVibe === "nightlife") {
+              return ["music", "nightlife", "comedy"].includes(evt.category);
+            }
+            if (outingVibe === "culture") {
+              return ["cultural", "theatre", "workshop"].includes(evt.category);
+            }
+            return true;
+          });
+          setLiveEventSuggestions(matchedEvents.slice(0, 2));
+        }
+
+        const hangoutsRes = await fetch(`/api/hangouts?city=${encodeURIComponent(activeCity)}`);
+        if (hangoutsRes.ok) {
+          const hangoutsData = await hangoutsRes.json();
+          const hangoutsList = hangoutsData.hangouts ?? [];
+          const stopsLocalities = chosenStops.map(s => s.locality.toLowerCase());
+          const matchedHangouts = hangoutsList.filter((h: any) => {
+            return stopsLocalities.some(loc => h.placeTitle.toLowerCase().includes(loc) || h.description.toLowerCase().includes(loc));
+          });
+          setHangoutSuggestions(matchedHangouts.slice(0, 2));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch live suggestions for outing planner:", err);
+      }
+
+    } catch (e) {
+      console.error(e);
+      alert("Something went wrong generating the outing.");
+    } finally {
+      setOutingGenerating(false);
+    }
+  };
+
+  const handleLaunchOuting = () => {
+    if (!outingStops || outingStops.length === 0) return;
+    const stopIds = outingStops.map((s) => s.id).join(",");
+    router.push(`/map?mode=trip&stops=${encodeURIComponent(stopIds)}&sourceName=${encodeURIComponent(outingStops[0].title)}&destName=${encodeURIComponent(outingStops[outingStops.length - 1].title)}&trailName=${encodeURIComponent(outingPreviewName)}`);
+  };
+
+  const handleSaveOuting = async () => {
+    if (!outingStops || outingStops.length === 0) return;
+    if (!user) {
+      alert("Please log in to save your outings!");
+      router.push("/profile");
+      return;
+    }
+
+    try {
+      const routePathCoords: { latitude: number; longitude: number }[] = [];
+      outingStops.forEach((s) => {
+        routePathCoords.push({ latitude: s.latitude, longitude: s.longitude });
+      });
+
+      const payload = {
+        name: outingPreviewName,
+        source: outingStops[0].locality || activeCity,
+        destination: outingStops[outingStops.length - 1].locality || activeCity,
+        distanceKm: outingTimeOfDay === "full" ? 6 : 3,
+        durationMinutes: outingTimeOfDay === "full" ? 180 : 90,
+        routePath: routePathCoords,
+        stops: outingStops,
+      };
+
+      const saveRes = await fetch("/api/trip-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (saveRes.ok) {
+        const data = await saveRes.json();
+        if (data.plan?.id) {
+          alert("🎉 Outing successfully saved to your profile!");
+          router.push(`/trip/${data.plan.id}`);
+        } else {
+          alert("Saved, but failed to retrieve itinerary ID.");
+        }
+      } else {
+        alert("Failed to save outing plan.");
+      }
+    } catch (error) {
+      console.error("Failed to save outing:", error);
+      alert("Error saving your outing.");
+    }
+  };
+
   const normalizedQuery = stripCityFromQuery(query).toLowerCase();
   const filteredPlaces = filterAndRankPlaces(allPlaces, {
     query: normalizedQuery,
@@ -828,27 +1025,25 @@ export default function Home() {
             </div>
 
             <MoodPicker value={selectedMood} onChange={setSelectedMood} className="mt-3" />
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <label className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={20} />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={`Search cafes, food, events in ${activeCity}...`}
-                  className="h-12 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] pl-11 pr-3 text-sm font-semibold text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-teal-300 sm:h-14 sm:pl-12 sm:pr-4 sm:text-base"
-                />
-              </label>
+            <div className="mt-3 flex flex-col gap-2">
+              <SmartSearchBar
+                value={query}
+                onChange={setQuery}
+                places={allPlaces}
+                placeholder={`Search cafes, food, events in ${activeCity}…`}
+                onSelectPlace={(place) => setSelectedPlace(place)}
+              />
               <button
                 type="button"
                 onClick={() => setVegOnly(!vegOnly)}
-                className={`inline-flex h-12 sm:h-14 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-black transition text-xs sm:px-4 sm:text-sm border ${
+                className={`inline-flex h-9 w-fit shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 font-black transition text-xs border ${
                   vegOnly
                     ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
                     : "border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
                 }`}
               >
-                <span className={`h-2.5 w-2.5 rounded-full border transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-650"}`} />
-                Pure Veg
+                <span className={`h-2 w-2 rounded-full border transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-650"}`} />
+                Pure Veg Only
               </button>
             </div>
 
@@ -1034,7 +1229,23 @@ export default function Home() {
                               : "border-transparent text-[var(--muted)] hover:text-slate-200"
                           }`}
                         >
-                          ⏱️ Area Layover Plan
+                          ⏱️ Area Layover
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePlannerTab("outings");
+                            setOutingStops(null);
+                            setLiveEventSuggestions([]);
+                            setHangoutSuggestions([]);
+                          }}
+                          className={`flex-1 pb-2.5 text-xs font-black uppercase tracking-wider text-center border-b-2 transition duration-200 cursor-pointer ${
+                            activePlannerTab === "outings"
+                              ? "border-teal-400 text-teal-300 font-black"
+                              : "border-transparent text-[var(--muted)] hover:text-slate-200"
+                          }`}
+                        >
+                          🎉 Local Outing
                         </button>
                       </div>
           
@@ -1422,6 +1633,243 @@ export default function Home() {
                                     Re-generate 🔄
                                   </button>
                                 </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* TAB 3: LOCAL OUTINGS PLANNER */}
+                        {activePlannerTab === "outings" && (
+                          <div className="space-y-4 animate-fade-in text-left">
+                            {/* Row 1: Select Outing Type */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                1. Outing Partner / Group
+                              </span>
+                              <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
+                                {[
+                                  { id: "friends", label: "👥 Friends" },
+                                  { id: "date", label: "👩‍❤️‍👨 Date" },
+                                  { id: "family", label: "👨‍👩‍👧 Family" },
+                                  { id: "solo", label: "🎒 Solo" },
+                                ].map((t) => {
+                                  const active = outingType === t.id;
+                                  return (
+                                    <button
+                                      key={t.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setOutingType(t.id as any);
+                                        setOutingStops(null);
+                                      }}
+                                      className={`rounded-lg py-2 px-1 text-[10px] text-center font-black transition duration-200 cursor-pointer truncate ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 shadow-md"
+                                          : "text-slate-400 hover:text-white"
+                                      }`}
+                                    >
+                                      {t.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Row 2: Select Outing Vibe */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                2. Outing Vibe / Theme
+                              </span>
+                              <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
+                                {[
+                                  { id: "food", label: "🍔 Foodie" },
+                                  { id: "cafe", label: "☕ Cafe Hop" },
+                                  { id: "culture", label: "🏛️ Culture" },
+                                  { id: "nightlife", label: "🍷 Night" },
+                                ].map((v) => {
+                                  const active = outingVibe === v.id;
+                                  return (
+                                    <button
+                                      key={v.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setOutingVibe(v.id as any);
+                                        setOutingStops(null);
+                                      }}
+                                      className={`rounded-lg py-2 px-1 text-[10px] text-center font-black transition duration-200 cursor-pointer truncate ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 shadow-md"
+                                          : "text-slate-400 hover:text-white"
+                                      }`}
+                                    >
+                                      {v.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Row 3: Select Time of Day */}
+                            <div>
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                                3. Available Outing Hours
+                              </span>
+                              <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 border border-slate-800 p-1">
+                                {[
+                                  { id: "morning", label: "☀️ Day Out", desc: "3 spots" },
+                                  { id: "evening", label: "🌇 Evening Out", desc: "3 stops" },
+                                  { id: "full", label: "⏳ Full Day", desc: "4 stops" },
+                                ].map((time) => {
+                                  const active = outingTimeOfDay === time.id;
+                                  return (
+                                    <button
+                                      key={time.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setOutingTimeOfDay(time.id as any);
+                                        setOutingStops(null);
+                                      }}
+                                      className={`flex flex-col items-center justify-center rounded-lg py-1.5 px-1 transition duration-205 cursor-pointer ${
+                                        active
+                                          ? "bg-teal-400 text-slate-950 shadow-md font-black"
+                                          : "text-slate-400 hover:text-white font-semibold"
+                                      }`}
+                                    >
+                                      <span className="text-xs">{time.label}</span>
+                                      <span className={`text-[9px] ${active ? "text-slate-800" : "text-slate-500"}`}>{time.desc}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Action Button: Generate Outing */}
+                            {!outingStops && (
+                              <button
+                                type="button"
+                                disabled={outingGenerating}
+                                onClick={handleGenerateLocalOuting}
+                                className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 py-3 font-black text-slate-950 transition hover:bg-teal-350 disabled:opacity-50 active:scale-98 cursor-pointer shadow-lg shadow-teal-500/20 text-xs sm:text-sm"
+                              >
+                                {outingGenerating ? "Crafting Outing..." : "Plan Local Outing 🚀"}
+                              </button>
+                            )}
+
+                            {/* Generated Outing Timeline */}
+                            {outingStops && outingStops.length > 0 && (
+                              <div className="mt-4 p-3 bg-slate-950/70 border border-white/5 rounded-lg animate-slide-down text-left space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-teal-300">
+                                    {outingPreviewName}
+                                  </span>
+                                </div>
+
+                                {/* Timeline list */}
+                                <div className="relative pl-4 border-l border-white/10 space-y-4">
+                                  {outingStops.map((stop, idx) => (
+                                    <div 
+                                      key={stop.id}
+                                      onClick={() => setSelectedPlace(stop)}
+                                      className="relative cursor-pointer group/timeline select-none"
+                                    >
+                                      <span className="absolute -left-[20.5px] top-1 h-3 w-3 rounded-full border border-teal-400 bg-slate-950 ring-4 ring-slate-950 flex items-center justify-center text-[7px] font-black text-teal-300">
+                                        {idx + 1}
+                                      </span>
+                                      <div className="pl-1">
+                                        <div className="flex items-center gap-2">
+                                          <h4 className="text-[12px] font-black text-white group-hover/timeline:text-teal-300 transition duration-150 line-clamp-1">
+                                            {stop.title}
+                                          </h4>
+                                          <span className="text-[8px] font-black uppercase px-1 rounded bg-teal-400/10 text-teal-400">
+                                            {getCategoryLabel(stop.category)}
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                          <span>{stop.locality}</span>
+                                          <span>·</span>
+                                          <span className="text-yellow-400 font-bold">★ {stop.rating}</span>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Live suggestions integration */}
+                                {(liveEventSuggestions.length > 0 || hangoutSuggestions.length > 0) && (
+                                  <div className="mt-4 pt-3 border-t border-white/5 space-y-2">
+                                    <span className="block text-[9px] font-black uppercase tracking-widest text-rose-400">
+                                      🔥 Nearby Live Enhancements
+                                    </span>
+                                    
+                                    {liveEventSuggestions.map((evt) => (
+                                      <div 
+                                        key={evt.id}
+                                        onClick={() => router.push(`/events?city=${encodeURIComponent(activeCity)}`)}
+                                        className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 p-2 rounded-lg cursor-pointer transition"
+                                      >
+                                        <span className="text-xs">🎭</span>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[11px] font-black text-rose-200 line-clamp-1">{evt.title}</p>
+                                          <p className="text-[9px] text-slate-400">{evt.locality} · {evt.time} today</p>
+                                        </div>
+                                      </div>
+                                    ))}
+
+                                    {hangoutSuggestions.map((h) => (
+                                      <div 
+                                        key={h.id}
+                                        onClick={() => router.push(`/hangouts`)}
+                                        className="flex items-center gap-2 bg-teal-500/10 hover:bg-teal-500/15 border border-teal-500/20 p-2 rounded-lg cursor-pointer transition"
+                                      >
+                                        <span className="text-xs">👥</span>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[11px] font-black text-teal-200 line-clamp-1">{h.title}</p>
+                                          <p className="text-[9px] text-slate-400">At {h.placeTitle} · Organized by {h.userFullName}</p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Action Buttons grid */}
+                                <div className="grid grid-cols-3 gap-1.5 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleLaunchOuting}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-400 py-2.5 text-xs font-black text-slate-950 transition hover:bg-teal-350 active:scale-98 cursor-pointer"
+                                    title="Launch Route Map"
+                                  >
+                                    Go 🚀
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveOuting}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 py-2.5 text-xs font-black text-white hover:bg-white/10 active:scale-98 cursor-pointer"
+                                    title="Save to profile"
+                                  >
+                                    Save 💾
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const stopsText = outingStops.map((s, idx) => `${idx + 1}️⃣ ${s.title} (${getCategoryLabel(s.category)} in ${s.locality})`).join("\n");
+                                      const inviteText = `Hey explorers! 🚀 Let's plan a local outing in ${activeCity}!\n\n📋 *ITINERARY:* \n${stopsText}\n\nJoin and view map route here:\n${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(outingStops.map(s => s.id).join(","))}&trailName=${encodeURIComponent(outingPreviewName)}\n\nLet's go! 💨`;
+                                      navigator.clipboard.writeText(inviteText);
+                                      alert("WhatsApp invite text copied to clipboard! Paste it to your chat group. 📲");
+                                    }}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 py-2.5 text-xs font-black text-white hover:bg-white/10 active:scale-98 cursor-pointer"
+                                    title="Share WhatsApp Invite"
+                                  >
+                                    Invite 📱
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleGenerateLocalOuting}
+                                  className="w-full text-center text-[10px] font-black text-slate-400 hover:text-white uppercase tracking-wider transition"
+                                >
+                                  🎲 Re-roll Outing
+                                </button>
                               </div>
                             )}
                           </div>
