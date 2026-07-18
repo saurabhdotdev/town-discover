@@ -26,8 +26,8 @@ import { getCategoryFallbackImage } from "@/lib/place-images";
 import { SupportedCityName } from "@/lib/pune-location";
 import { API_URL, formatDistance, formatHours, formatPlaceArea, getCategoryAccent, getCategoryLabel, isOpenNow, isVegetarianPlace } from "@/lib/utils";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+import { useCallback, useEffect, useState } from "react";
+import { useCrowdSocket } from "@/hooks/useCrowdSocket";
 import { getVisitTimeProfile } from "@/lib/visit-time-model";
 
 
@@ -86,24 +86,11 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
     }, 0);
   }, [crowdSummary]);
 
-  useEffect(() => {
-    const socket = io(API_URL, {
-      withCredentials: true,
-    });
-
-    socket.emit("join-place", place.id);
-
-    socket.on("crowd-update", (data: { placeId: string; summary: CrowdSummary }) => {
-      if (data.placeId === place.id) {
-        setLocalCrowdSummary(data.summary);
-      }
-    });
-
-    return () => {
-      socket.emit("leave-place", place.id);
-      socket.disconnect();
-    };
-  }, [place.id]);
+  const handleCrowdUpdate = useCallback(
+    (summary: CrowdSummary) => setLocalCrowdSummary(summary),
+    []
+  );
+  useCrowdSocket(place.id, handleCrowdUpdate);
 
   useEffect(() => {
     setTimeout(() => {
