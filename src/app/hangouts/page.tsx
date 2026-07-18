@@ -643,76 +643,76 @@ export default function HangoutsPage() {
           {/* Left Column (2/3 width): Meetups Feed */}
           <div className="lg:col-span-2 space-y-6">
             {/* Search & Filters Controls */}
-            <div className="mt-4 space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <span className="absolute inset-y-0 left-3.5 flex items-center text-slate-400">
-                <Search size={18} />
-              </span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search hangouts by title, plan, or spot name..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--input)] text-sm font-semibold outline-none focus:border-teal-400 transition"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white"
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <span className="absolute inset-y-0 left-3.5 flex items-center text-slate-400">
+                    <Search size={18} />
+                  </span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search hangouts by title, plan, or spot name..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--input)] text-sm font-semibold outline-none focus:border-teal-400 transition"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Reddit Link */}
+                <a
+                  href={getSubredditUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-xs font-black text-orange-400 hover:bg-orange-500/20 transition shrink-0"
                 >
-                  <X size={16} />
-                </button>
-              )}
+                  🌐 Visit r/{selectedCity} Subreddit
+                </a>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2 overflow-x-auto">
+                {(["all", "today", "week", "upcoming"] as const).map((filter) => {
+                  const label = {
+                    all: "All Meetups",
+                    today: "Today",
+                    week: "This Week",
+                    upcoming: "Upcoming",
+                  }[filter];
+
+                  const isActive = activeFilter === filter;
+
+                  return (
+                    <button
+                      key={filter}
+                      onClick={() => setActiveFilter(filter)}
+                      className={`relative px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+                        isActive ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {label}
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeHangoutTab"
+                          className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Reddit Link */}
-            <a
-              href={getSubredditUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-xs font-black text-orange-400 hover:bg-orange-500/20 transition shrink-0"
-            >
-              🌐 Visit r/{selectedCity} Subreddit
-            </a>
-          </div>
-
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2 overflow-x-auto">
-            {(["all", "today", "week", "upcoming"] as const).map((filter) => {
-              const label = {
-                all: "All Meetups",
-                today: "Today",
-                week: "This Week",
-                upcoming: "Upcoming",
-              }[filter];
-
-              const isActive = activeFilter === filter;
-
-              return (
-                <button
-                  key={filter}
-                  onClick={() => setActiveFilter(filter)}
-                  className={`relative px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-                    isActive ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {label}
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeHangoutTab"
-                      className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Hangouts List */}
-        <div className="mt-6">
+            {/* Hangouts List */}
+            <div className="mt-6">
           {loading ? (
             <p className="text-center text-sm font-semibold text-[var(--muted)] py-12">Loading local meetups...</p>
           ) : error ? (
@@ -903,7 +903,7 @@ export default function HangoutsPage() {
               })}
             </div>
           )}
-        </div>
+            </div>
           </div>
 
           {/* Right Column: Vibe Shoutbox */}

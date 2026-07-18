@@ -915,8 +915,8 @@ export const MapView: React.FC<MapProps> = ({
         className="h-full w-full"
       />
       
-      {/* Floating Style Toggle Overlay */}
-      <div className="absolute left-4 top-4 z-[9999] flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 backdrop-blur-md p-1 shadow-2xl select-none">
+      {/* Floating Style Toggle Overlay — positioned bottom-left to avoid clashing with page-level top-left buttons */}
+      <div className="absolute left-4 bottom-8 z-[9999] flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 backdrop-blur-md p-1 shadow-2xl select-none">
         <button
           type="button"
           onClick={() => setMapStyle("classic")}
