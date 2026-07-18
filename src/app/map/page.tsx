@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { motion, Reorder } from "framer-motion";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
@@ -14,7 +14,7 @@ import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { Place } from "@/types";
 import { MapSkeleton } from "@/components/common/Skeleton";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
   ssr: false,
@@ -201,7 +201,7 @@ const AIRPORT_GUIDES: Record<string, AirportGuide> = {
   }
 };
 
-export default function MapPage() {
+function MapContent() {
   const [mapWidth, setMapWidth] = useState(65); // default 65% width
   const [isDragging, setIsDragging] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -247,6 +247,7 @@ export default function MapPage() {
 
   const { user, setAuthRequiredMessage } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { selectedCity, hasChosenCity, chooseCity, preferDetectedCity } = useCitySelection();
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -421,8 +422,6 @@ export default function MapPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const searchParams = new URLSearchParams(window.location.search);
     const planId = searchParams.get("tripPlan");
     const stopsParam = searchParams.get("stops");
 
@@ -529,8 +528,7 @@ export default function MapPage() {
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, activeCity]);
 
   const saveTripPlan = async () => {
     if (!user) {
@@ -2956,5 +2954,13 @@ export default function MapPage() {
         </motion.div>
       )}
     </>
+  );
+}
+
+export default function MapPage() {
+  return (
+    <Suspense fallback={<MapSkeleton />}>
+      <MapContent />
+    </Suspense>
   );
 }
