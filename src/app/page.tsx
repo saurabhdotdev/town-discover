@@ -672,19 +672,17 @@ export default function Home() {
     if (!selectedLocality) return;
 
     const localitySpots = allPlaces.filter(
-      (p) => p.city.toLowerCase() === activeCity.toLowerCase() && 
-             p.locality.toLowerCase() === selectedLocality.toLowerCase()
+      (p) => p.locality.toLowerCase() === selectedLocality.toLowerCase()
     );
 
     let candidateSpots = [...localitySpots];
-    if (candidateSpots.length < 3 && localitySpots.length > 0) {
-      const centroidLat = localitySpots[0].latitude;
-      const centroidLng = localitySpots[0].longitude;
+    if (candidateSpots.length < 3) {
+      const centroidLat = localitySpots[0]?.latitude ?? allPlaces[0]?.latitude ?? 0;
+      const centroidLng = localitySpots[0]?.longitude ?? allPlaces[0]?.longitude ?? 0;
       const otherSpots = allPlaces.filter((p) => {
-        if (p.city.toLowerCase() !== activeCity.toLowerCase()) return false;
         if (p.locality.toLowerCase() === selectedLocality.toLowerCase()) return false;
         const d = Math.hypot(p.latitude - centroidLat, p.longitude - centroidLng);
-        return d <= 0.025;
+        return d <= 0.05;
       });
       candidateSpots = [...candidateSpots, ...otherSpots];
     }
