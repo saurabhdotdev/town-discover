@@ -98,13 +98,15 @@ export async function GET(request: NextRequest) {
 
     try {
       const { fetchLivePlacesByBounds } = await import("@/lib/live-places");
-      const cacheKey = `places:bounds:${south.toFixed(3)}:${west.toFixed(3)}:${north.toFixed(3)}:${east.toFixed(3)}`;
+      // Round to 2dp (~1.1km grid) so small pans reuse the same cache entry
+      // instead of busting it on every minor map movement (was toFixed(3) = ~110m grid)
+      const cacheKey = `places:bounds:${south.toFixed(2)}:${west.toFixed(2)}:${north.toFixed(2)}:${east.toFixed(2)}`;
       
       const { getCache, setCache } = await import("@/lib/redis");
       let livePlaces = await getCache<any[]>(cacheKey);
       if (!livePlaces) {
         livePlaces = await fetchLivePlacesByBounds({ south, west, north, east });
-        await setCache(cacheKey, livePlaces, 600);
+        await setCache(cacheKey, livePlaces, 900); // 15 min (was 10 min)
       }
 
       const places = mergePlaces([...approvedPlaces, ...livePlaces], filteredEvents);

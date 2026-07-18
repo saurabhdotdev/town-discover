@@ -76,7 +76,13 @@ export const GET = createApiHandler(
       [city]
     );
 
-    return Response.json({ hangouts }, { status: 200 });
+    return Response.json(
+      { hangouts },
+      {
+        status: 200,
+        headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+      }
+    );
   }
 );
 
