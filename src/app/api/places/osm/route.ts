@@ -5,7 +5,7 @@ import { fetchLiveTownEvents } from "@/lib/town-events";
 import { fetchLivePlaces } from "@/lib/live-places";
 import { mergePlaces } from "@/lib/merge-places";
 import { CITY_CENTERS, getCityFromQuery, getNearestSupportedCity, SUPPORTED_CITY_NAMES, SupportedCityName } from "@/lib/pune-location";
-import { UserLocation } from "@/types";
+import { UserLocation, Place } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       (e) => e.latitude >= south && e.latitude <= north && e.longitude >= west && e.longitude <= east
     );
 
-    let approvedPlaces: any[] = [];
+    let approvedPlaces: Place[] = [];
     const pool = getPool();
     if (pool) {
       try {
@@ -82,15 +82,18 @@ export async function GET(request: NextRequest) {
           `,
           [south, north, west, east]
         );
-        approvedPlaces = rows.map((row: any) => ({
-          ...row,
-          isOpen: true,
-          isTrending: false,
-          reviewCount: 0,
-          distance: 0,
-          hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
-          reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
-        }));
+        approvedPlaces = rows.map((row) => {
+          const r = row as Record<string, unknown> & Place;
+          return {
+            ...r,
+            isOpen: true,
+            isTrending: false,
+            reviewCount: 0,
+            distance: 0,
+            hours: r.hours ? (typeof r.hours === "string" ? JSON.parse(r.hours) : r.hours) : undefined,
+            reviewMood: r.reviewMood ? (typeof r.reviewMood === "string" ? JSON.parse(r.reviewMood) : r.reviewMood) : undefined
+          };
+        });
       } catch (dbErr) {
         console.error("Failed to fetch approved places by bounds:", dbErr);
       }
@@ -103,7 +106,7 @@ export async function GET(request: NextRequest) {
       const cacheKey = `places:bounds:${south.toFixed(2)}:${west.toFixed(2)}:${north.toFixed(2)}:${east.toFixed(2)}`;
       
       const { getCache, setCache } = await import("@/lib/redis");
-      let livePlaces = await getCache<any[]>(cacheKey);
+      let livePlaces = await getCache<Place[]>(cacheKey);
       if (!livePlaces) {
         livePlaces = await fetchLivePlacesByBounds({ south, west, north, east });
         await setCache(cacheKey, livePlaces, 900); // 15 min (was 10 min)
@@ -114,11 +117,11 @@ export async function GET(request: NextRequest) {
         { places, city, source: "osm-bounds", eventsMerged: filteredEvents.length },
         { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } }
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error("OSM bounds fetch failed:", error);
       const places = mergePlaces([...approvedPlaces], filteredEvents);
       return Response.json(
-        { places, city, source: "fallback-bounds", eventsMerged: filteredEvents.length, warning: error.message },
+        { places, city, source: "fallback-bounds", eventsMerged: filteredEvents.length, warning: error instanceof Error ? error.message : "OSM bounds fetch failed" },
         { status: 200 }
       );
     }
@@ -135,7 +138,7 @@ export async function GET(request: NextRequest) {
 
   const townEvents = await fetchLiveTownEvents(city);
 
-  let approvedPlaces: any[] = [];
+  let approvedPlaces: Place[] = [];
   const pool = getPool();
   if (pool) {
     try {
@@ -163,15 +166,18 @@ export async function GET(request: NextRequest) {
         `,
         [city]
       );
-      approvedPlaces = rows.map((row: any) => ({
-        ...row,
-        isOpen: true,
-        isTrending: false,
-        reviewCount: 0,
-        distance: 0,
-        hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
-        reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
-      }));
+      approvedPlaces = rows.map((row) => {
+        const r = row as Record<string, unknown> & Place;
+        return {
+          ...r,
+          isOpen: true,
+          isTrending: false,
+          reviewCount: 0,
+          distance: 0,
+          hours: r.hours ? (typeof r.hours === "string" ? JSON.parse(r.hours) : r.hours) : undefined,
+          reviewMood: r.reviewMood ? (typeof r.reviewMood === "string" ? JSON.parse(r.reviewMood) : r.reviewMood) : undefined
+        };
+      });
     } catch (dbErr) {
       console.error("Failed to fetch approved places:", dbErr);
     }
@@ -193,7 +199,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const livePlaces = await fetchLivePlaces(location, request.signal);
+    const { getCache, setCache } = await import("@/lib/redis");
+    const cacheKey = `places:osm:coords:${location.latitude.toFixed(2)}:${location.longitude.toFixed(2)}`;
+    let livePlaces = await getCache<Place[]>(cacheKey);
+    if (!livePlaces) {
+      livePlaces = await fetchLivePlaces(location, request.signal);
+      await setCache(cacheKey, livePlaces, 3600); // Cache for 1 hour
+    }
     const places = mergePlaces([...approvedPlaces, ...livePlaces], townEvents);
     return Response.json({ places, city, source: "osm", eventsMerged: townEvents.length }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } });
   } catch (error) {
