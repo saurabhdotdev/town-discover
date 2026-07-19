@@ -334,6 +334,69 @@ function MapContent() {
   // Flash Deal Notification States
   const [activeFlashDeal, setActiveFlashDeal] = useState<any | null>(null);
 
+  // Load trail from URL parameters (e.g. from AI Chat)
+  useEffect(() => {
+    const stopsParam = searchParams.get("stops");
+    if (stopsParam) {
+      const sourceName = searchParams.get("sourceName") || "Start";
+      const destName = searchParams.get("destName") || "End";
+      const trailName = searchParams.get("trailName") || "Spontaneous Walk";
+
+      const resolveStops = async () => {
+        setTripLoading(true);
+        try {
+          const res = await fetch(`/api/places/resolve?ids=${encodeURIComponent(stopsParam)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.places && Array.isArray(data.places) && data.places.length > 0) {
+              const stops = data.places as Place[];
+              setTripStops(stops);
+              setTripSource(sourceName);
+              setTripDest(destName);
+              setTripPlanName(trailName);
+              setMode("trip");
+
+              // Fetch snapped route from route proxy
+              const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
+              const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
+              
+              // Optimistic straight lines first
+              setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
+              setTripStats({
+                distance: parseFloat((stops.length * 0.7).toFixed(1)),
+                duration: stops.length * 10
+              });
+
+              const routeRes = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
+              if (routeRes.ok) {
+                const routeData = await routeRes.json();
+                if (routeData && routeData.routes?.[0]) {
+                  const route = routeData.routes[0];
+                  setTripRoutePath(
+                    route.geometry.coordinates.map(([lng, lat]: [number, number]) => ({
+                      latitude: lat,
+                      longitude: lng,
+                    }))
+                  );
+                  setTripStats({
+                    distance: parseFloat((route.distance / 1000).toFixed(1)),
+                    duration: Math.round(route.duration / 60),
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to load trail from URL params:", err);
+        } finally {
+          setTripLoading(false);
+        }
+      };
+
+      resolveStops();
+    }
+  }, [searchParams]);
+
   const handlePlanTrip = async (startStr: string, endStr: string) => {
     if (!startStr.trim() || !endStr.trim()) {
       setTripError("Please fill in starting point and destination.");
