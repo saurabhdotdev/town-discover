@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { createApiHandler } from "@/lib/server/api-handler";
 import { z } from "zod/v3";
 import { awardXP, checkAndGrantBadges } from "@/lib/gamification";
@@ -99,25 +98,46 @@ export const PATCH = createApiHandler({ auth: "admin" }, async (request, { pool 
 
   const { id, status } = parseResult.data;
 
+  // 1. Fetch suggestion details before opening any transaction or holding a pool connection
+  const initialSelect = await pool.query(
+    "SELECT * FROM place_suggestions WHERE id = $1",
+    [id]
+  );
+  const suggestion = initialSelect.rows[0];
+  if (!suggestion) {
+    return Response.json({ error: "Suggestion not found." }, { status: 404 });
+  }
+
+  let vectorStr: string | null = null;
+  if (status === "approved") {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      const tags = ["suggested", suggestion.category, "community-added"];
+      const vals = await getPlaceEmbedding(apiKey, {
+        title: suggestion.title,
+        category: suggestion.category,
+        tags,
+        locality: suggestion.locality,
+        description: suggestion.description
+      });
+      if (vals && vals.length === 768) {
+        vectorStr = `[${vals.join(",")}]`;
+      }
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const updateRes = await client.query(
+    await client.query(
       `
       UPDATE place_suggestions
       SET status = $1
       WHERE id = $2
-      RETURNING *
       `,
       [status, id]
     );
-
-    const suggestion = updateRes.rows[0];
-    if (!suggestion) {
-      await client.query("ROLLBACK");
-      return Response.json({ error: "Suggestion not found." }, { status: 404 });
-    }
 
     if (status === "approved") {
       const placeId = `suggested-${suggestion.id}`;
@@ -132,21 +152,6 @@ export const PATCH = createApiHandler({ auth: "admin" }, async (request, { pool 
             open: `${match[1].padStart(2, "0")}:${match[2]}`,
             close: `${match[3].padStart(2, "0")}:${match[4]}`
           };
-        }
-      }
-
-      const apiKey = process.env.GEMINI_API_KEY;
-      let vectorStr: string | null = null;
-      if (apiKey) {
-        const vals = await getPlaceEmbedding(apiKey, {
-          title: suggestion.title,
-          category: suggestion.category,
-          tags,
-          locality: suggestion.locality,
-          description: suggestion.description
-        });
-        if (vals && vals.length === 768) {
-          vectorStr = `[${vals.join(",")}]`;
         }
       }
 
