@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Bell, Bookmark, ChevronRight, Compass, Lock, LogOut, Mail, MapPin, Radio, Shield, Sparkles, Star, User, Folder, Plus, X, Check, Trash2 } from "lucide-react";
+import { Bell, Bookmark, ChevronRight, Compass, Lock, LogOut, Mail, MapPin, Radio, Shield, Sparkles, Star, User, Folder, Plus, X, Check, Trash2, Database } from "lucide-react";
 import { Header } from "@/components/common/Header";
 import { BrandMark } from "@/components/common/BrandMark";
 import Link from "next/link";
@@ -102,6 +102,8 @@ export default function ProfilePage() {
   const [adminPromoEmail, setAdminPromoEmail] = useState("");
   const [adminStatus, setAdminStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [adminMessage, setAdminMessage] = useState("");
+  const [seedingStatus, setSeedingStatus] = useState<"idle" | "seeding" | "success" | "error">("idle");
+  const [seedingMessage, setSeedingMessage] = useState("");
 
   // Collections (Folders) state
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -256,6 +258,29 @@ export default function ProfilePage() {
       mutateSuggestions();
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleSeedDatabase = async () => {
+    if (!window.confirm("Are you sure you want to seed the database? This will insert or update mock places in your database.")) return;
+    setSeedingStatus("seeding");
+    setSeedingMessage("Seeding in progress...");
+    try {
+      const res = await fetch("/api/admin/seed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to seed database");
+      setSeedingStatus("success");
+      setSeedingMessage(data.message || "Database successfully seeded!");
+      setTimeout(() => {
+        setSeedingStatus("idle");
+        setSeedingMessage("");
+      }, 5000);
+    } catch (err) {
+      setSeedingStatus("error");
+      setSeedingMessage(err instanceof Error ? err.message : "An unexpected error occurred.");
     }
   };
 
@@ -524,21 +549,48 @@ export default function ProfilePage() {
             </button>
 
             {user?.role === "super_admin" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminMessage("");
-                  setAdminStatus("idle");
-                  setShowAdminModal(true);
-                }}
-                className="mt-2 flex w-full items-center justify-between rounded-lg px-2 py-3 text-left font-semibold text-[var(--muted-strong)] transition hover:bg-[var(--panel-soft)]"
-              >
-                <span className="flex items-center gap-3">
-                  <Shield size={18} className="text-teal-300" />
-                  Add Super Admin
-                </span>
-                <ChevronRight size={18} className="text-[var(--muted)]" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminMessage("");
+                    setAdminStatus("idle");
+                    setShowAdminModal(true);
+                  }}
+                  className="mt-2 flex w-full items-center justify-between rounded-lg px-2 py-3 text-left font-semibold text-[var(--muted-strong)] transition hover:bg-[var(--panel-soft)]"
+                >
+                  <span className="flex items-center gap-3">
+                    <Shield size={18} className="text-teal-300" />
+                    Add Super Admin
+                  </span>
+                  <ChevronRight size={18} className="text-[var(--muted)]" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSeedDatabase}
+                  disabled={seedingStatus === "seeding"}
+                  className="mt-2 flex w-full items-center justify-between rounded-lg px-2 py-3 text-left font-semibold text-[var(--muted-strong)] transition hover:bg-[var(--panel-soft)] disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-3">
+                    <Database size={18} className="text-teal-300" />
+                    {seedingStatus === "seeding" ? "Seeding Database..." : "Seed Database"}
+                  </span>
+                  <ChevronRight size={18} className="text-[var(--muted)]" />
+                </button>
+
+                {seedingMessage && (
+                  <p className={`mt-1.5 px-2 text-[11px] font-semibold ${
+                    seedingStatus === "success" 
+                      ? "text-emerald-400" 
+                      : seedingStatus === "error" 
+                      ? "text-rose-400" 
+                      : "text-amber-300 animate-pulse"
+                  }`}>
+                    {seedingMessage}
+                  </p>
+                )}
+              </>
             )}
 
             <button

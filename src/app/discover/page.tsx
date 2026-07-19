@@ -34,6 +34,7 @@ import { BrandMark } from "@/components/common/BrandMark";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
+import { WanderlustDrop } from "@/components/common/WanderlustDrop";
 import { LazyImage } from "@/components/common/LazyImage";
 import { DiscoverySection } from "@/components/cards/DiscoverySection";
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
@@ -872,6 +873,13 @@ export default function DiscoverPage() {
                 <span className="hidden sm:inline">Swipe Mode</span>
                 <span className="sm:hidden">Vibe</span>
               </button>
+
+              {/* Wanderlust Drop Button */}
+              <WanderlustDrop
+                places={allPlaces}
+                userLocation={locationSource === "browser" && location ? { latitude: location.latitude, longitude: location.longitude } : null}
+                cityName={activeCity}
+              />
             </div>
           </div>
 

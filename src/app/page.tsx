@@ -26,6 +26,7 @@ import { DiscoverySection } from "@/components/cards/DiscoverySection";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
+import { WanderlustDrop } from "@/components/common/WanderlustDrop";
 import { getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
@@ -1031,18 +1032,26 @@ export default function Home() {
                 placeholder={`Search cafes, food, events in ${activeCity}…`}
                 onSelectPlace={(place) => setSelectedPlace(place)}
               />
-              <button
-                type="button"
-                onClick={() => setVegOnly(!vegOnly)}
-                className={`inline-flex h-9 w-fit shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 font-black transition text-xs border ${
-                  vegOnly
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                    : "border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
-                }`}
-              >
-                <span className={`h-2 w-2 rounded-full border transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-650"}`} />
-                Pure Veg Only
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVegOnly(!vegOnly)}
+                  className={`inline-flex h-9 w-fit shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 font-black transition text-xs border ${
+                    vegOnly
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                      : "border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full border transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-650"}`} />
+                  Pure Veg Only
+                </button>
+
+                <WanderlustDrop
+                  places={allPlaces}
+                  userLocation={locationSource === "browser" && location ? { latitude: location.latitude, longitude: location.longitude } : null}
+                  cityName={activeCity}
+                />
+              </div>
             </div>
 
             <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
