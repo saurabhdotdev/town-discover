@@ -658,17 +658,34 @@ export const MapView: React.FC<MapProps> = ({
 
     if (selectedPlace.routeWaypoints && selectedPlace.routeWaypoints.length >= 2) {
       const getScenicRoute = async () => {
+        // Draw optimistic straight line route instantly
+        if (map.current && L) {
+          const pathPoints: [number, number][] = selectedPlace.routeWaypoints!.map(w => [w.latitude, w.longitude]);
+          const polyline = L.polyline(pathPoints, {
+            color: "#ec4899",
+            weight: 4,
+            opacity: 0.6,
+            dashArray: "10, 5",
+          }).addTo(map.current);
+          polylineRef.current = polyline;
+        }
+
         try {
           const waypointStr = selectedPlace.routeWaypoints!.map(w => `${w.longitude},${w.latitude}`).join(";");
-          const url = `https://router.project-osrm.org/route/v1/driving/${waypointStr}?overview=full&geometries=geojson`;
+          const url = `/api/places/route?coords=${waypointStr}&mode=driving`;
           const res = await fetch(url);
-          if (!res.ok) throw new Error("OSRM API error");
+          if (!res.ok) throw new Error("Route API error");
           const data = await res.json();
           if (data.code !== "Ok" || !data.routes?.[0]?.geometry?.coordinates) {
             throw new Error("Invalid OSRM geometry");
           }
 
           if (isCancelled || !map.current || !L) return;
+
+          // Remove optimistic line before drawing the snapped road line
+          if (polylineRef.current) {
+            polylineRef.current.remove();
+          }
 
           const coordinates = data.routes[0].geometry.coordinates;
           const pathPoints: [number, number][] = coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
@@ -685,6 +702,10 @@ export const MapView: React.FC<MapProps> = ({
           console.warn("Failed to fetch scenic road route, falling back to straight waypoints:", err);
           if (isCancelled || !map.current || !L) return;
 
+          if (polylineRef.current) {
+            polylineRef.current.remove();
+          }
+
           const pathPoints: [number, number][] = selectedPlace.routeWaypoints!.map(w => [w.latitude, w.longitude]);
           const polyline = L.polyline(pathPoints, {
             color: "#ec4899",
@@ -699,16 +720,36 @@ export const MapView: React.FC<MapProps> = ({
       getScenicRoute();
     } else if (userLocation) {
       const getRoadRoute = async () => {
+        // Draw optimistic straight line route instantly
+        if (map.current && L) {
+          const straightPoints: [number, number][] = [
+            [userLocation.latitude, userLocation.longitude],
+            [selectedPlace.latitude, selectedPlace.longitude],
+          ];
+          const polyline = L.polyline(straightPoints, {
+            color: "#14b8a6",
+            weight: 3,
+            opacity: 0.6,
+            dashArray: "8, 8",
+          }).addTo(map.current);
+          polylineRef.current = polyline;
+        }
+
         try {
-          const url = `https://router.project-osrm.org/route/v1/driving/${userLocation.longitude},${userLocation.latitude};${selectedPlace.longitude},${selectedPlace.latitude}?overview=full&geometries=geojson`;
+          const url = `/api/places/route?coords=${userLocation.longitude},${userLocation.latitude};${selectedPlace.longitude},${selectedPlace.latitude}&mode=driving`;
           const res = await fetch(url);
-          if (!res.ok) throw new Error("OSRM API error");
+          if (!res.ok) throw new Error("Route API error");
           const data = await res.json();
           if (data.code !== "Ok" || !data.routes?.[0]?.geometry?.coordinates) {
             throw new Error("Invalid OSRM geometry");
           }
 
           if (isCancelled || !map.current || !L) return;
+
+          // Remove optimistic line before drawing the snapped road line
+          if (polylineRef.current) {
+            polylineRef.current.remove();
+          }
 
           const coordinates = data.routes[0].geometry.coordinates;
           const pathPoints: [number, number][] = coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
@@ -724,6 +765,10 @@ export const MapView: React.FC<MapProps> = ({
         } catch (err) {
           console.warn("Failed to fetch road route, falling back to straight line:", err);
           if (isCancelled || !map.current || !L) return;
+
+          if (polylineRef.current) {
+            polylineRef.current.remove();
+          }
 
           const straightPoints: [number, number][] = [
             [userLocation.latitude, userLocation.longitude],

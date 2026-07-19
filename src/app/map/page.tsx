@@ -353,9 +353,9 @@ function MapContent() {
         throw new Error("Unable to resolve locations. Try another spelling.");
       }
 
-      const url = `https://router.project-osrm.org/route/v1/driving/${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("OSRM routing server connection error.");
+      const url = `/api/places/route?coords=${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}&mode=driving`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
+      if (!res.ok) throw new Error("Routing server connection error.");
       
       const data = await res.json();
       if (data.code !== "Ok" || !data.routes?.[0]?.geometry?.coordinates) {
@@ -451,9 +451,16 @@ function MapContent() {
             
             // Build route coordinates using OSRM foot routing
             const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
-            const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+            const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
             
-            fetch(osrmUrl)
+            // Optimistic straight lines first
+            setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
+            setTripStats({
+              distance: parseFloat((stops.length * 0.7).toFixed(1)),
+              duration: stops.length * 10
+            });
+
+            fetch(routeUrl, { signal: AbortSignal.timeout(3000) })
               .then((res) => (res.ok ? res.json() : null))
               .then((routeData) => {
                 if (routeData && routeData.routes?.[0]) {
@@ -582,11 +589,18 @@ function MapContent() {
     }
     
     setTripLoading(true);
+    // Draw optimistic straight line route instantly
+    setTripRoutePath(newStops.map((s) => ({ latitude: s.latitude, longitude: s.longitude })));
+    setTripStats({
+      distance: parseFloat((newStops.length * 0.7).toFixed(1)),
+      duration: newStops.length * 10
+    });
+
     try {
       const coordString = newStops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-      const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+      const url = `/api/places/route?coords=${coordString}&mode=foot`;
       
-      const res = await fetch(osrmUrl);
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         const routeData = await res.json();
         if (routeData && routeData.routes?.[0]) {

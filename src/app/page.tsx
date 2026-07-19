@@ -411,12 +411,12 @@ export default function Home() {
 
       if (isWidget) {
         const coordString = stops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-        const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+        const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
         let distanceKm = 0;
         let durationMinutes = 0;
 
         try {
-          const res = await fetch(osrmUrl);
+          const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
           if (res.ok) {
             const data = await res.json();
             if (data.code === "Ok" && data.routes?.[0]) {
@@ -445,12 +445,12 @@ export default function Home() {
       if (user) {
         const routePathCoords: { latitude: number; longitude: number }[] = [];
         const coordString = stops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-        const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+        const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
         let distanceKm = 0;
         let durationMinutes = 0;
 
         try {
-          const res = await fetch(osrmUrl);
+          const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
           if (res.ok) {
             const data = await res.json();
             if (data.code === "Ok" && data.routes?.[0]) {
@@ -583,12 +583,12 @@ export default function Home() {
       if (user) {
         const routePathCoords: { latitude: number; longitude: number }[] = [];
         const coordString = stops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-        const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+        const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
         let distanceKm = widgetPreviewStats?.distance ?? 0;
         let durationMinutes = widgetPreviewStats?.duration ?? 0;
 
         try {
-          const res = await fetch(osrmUrl);
+          const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
           if (res.ok) {
             const data = await res.json();
             if (data.code === "Ok" && data.routes?.[0]) {

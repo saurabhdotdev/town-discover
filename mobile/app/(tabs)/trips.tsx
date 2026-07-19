@@ -217,15 +217,15 @@ export default function TripsScreen() {
       const themeLabel = theme === "cafe" ? "Cafe Hop" : theme === "food" ? "Foodie" : theme === "scenic" ? "Scenic" : "Spontaneous";
       const name = `${themeLabel} ${durationLabel} ${city} Walk`;
 
-      // Call OSRM Route Foot path
+      // Call Route proxy endpoint
       const coordString = stops.map(s => `${s.longitude},${s.latitude}`).join(";");
-      const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+      const routeUrl = `https://sheher-city.vercel.app/api/places/route?coords=${coordString}&mode=foot`;
       
       let distanceKm = budget === "1" ? 0.6 : budget === "5" ? 4.5 : 1.8;
       let durationMinutes = budget === "1" ? 15 : budget === "5" ? 75 : 30;
 
       try {
-        const res = await fetch(osrmUrl);
+        const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
           const data = await res.json();
           if (data.code === "Ok" && data.routes?.[0]) {
