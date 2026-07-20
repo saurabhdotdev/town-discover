@@ -23,6 +23,12 @@ import {
   TripPlan,
   AuthUser,
 } from "../../src/api/client";
+import {
+  cachePlaces,
+  getCachedPlaces,
+  cacheTrips,
+  getCachedTrips,
+} from "../../src/api/cache";
 import AppMapView from "../../src/components/MapView";
 
 
@@ -34,6 +40,7 @@ export default function TripsScreen() {
   
   // Tab selector: New Trip vs Saved Trips
   const [activeTab, setActiveTab] = useState<"builder" | "saved">("builder");
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form states
   const [budget, setBudget] = useState<"1" | "3" | "5">("3");
@@ -85,9 +92,17 @@ export default function TripsScreen() {
     setLoadingPlans(true);
     try {
       const plans = await fetchTripPlans();
-      setSavedPlans((plans as TripPlan[]) || []);
+      const planList = (plans as TripPlan[]) || [];
+      setSavedPlans(planList);
+      setIsOffline(false);
+      void cacheTrips(planList);
     } catch (err) {
-      console.log("Error loading trip plans:", err);
+      console.log("Error loading trip plans, falling back to cache:", err);
+      setIsOffline(true);
+      const cached = await getCachedTrips();
+      if (cached) {
+        setSavedPlans(cached);
+      }
     } finally {
       setLoadingPlans(false);
     }
@@ -101,11 +116,22 @@ export default function TripsScreen() {
         const recs = await fetchMoodRecommendations({ city, mood: "chill" });
         const cleanPlaces = recs.map(r => r.place);
         setPlaces(cleanPlaces);
+        setIsOffline(false);
         if (cleanPlaces.length > 0) {
           setStartPlaceId(cleanPlaces[0].id);
         }
+        void cachePlaces(cleanPlaces);
       } catch (err) {
-        console.log("Failed to load starting spots:", err);
+        console.log("Failed to load starting spots, falling back to cache:", err);
+        setIsOffline(true);
+        const cached = await getCachedPlaces();
+        if (cached) {
+          const cityPlaces = cached.filter((p: any) => p.city?.toLowerCase() === city.toLowerCase());
+          setPlaces(cityPlaces);
+          if (cityPlaces.length > 0) {
+            setStartPlaceId(cityPlaces[0].id);
+          }
+        }
       } finally {
         setLoadingPlaces(false);
       }
@@ -328,6 +354,13 @@ export default function TripsScreen() {
           </Text>
         </Pressable>
       </View>
+
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline" size={13} color="#f59e0b" />
+          <Text style={styles.offlineBannerText}>Offline Mode — Showing Cached Outing Data</Text>
+        </View>
+      )}
 
       {activeTab === "builder" ? (
         // ROUTE GENERATOR SCREEN
@@ -867,6 +900,25 @@ const styles = StyleSheet.create({
   modalCloseBtn: { padding: 4 },
   scrollList: {
     paddingBottom: 100,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    marginBottom: 12,
+    marginHorizontal: 4,
+  },
+  offlineBannerText: {
+    color: "#f59e0b",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
 

@@ -26,6 +26,12 @@ import {
   Place,
   AuthUser,
 } from "../../src/api/client";
+import {
+  cachePlaces,
+  getCachedPlaces,
+  cacheHangouts,
+  getCachedHangouts,
+} from "../../src/api/cache";
 import AppMapView from "../../src/components/MapView";
 
 
@@ -62,6 +68,7 @@ export default function HangoutsScreen() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [viewMode, setViewMode] = useState<"meetups" | "shoutbox">("meetups");
   const [showMap, setShowMap] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   
   // Meetup States
   const [hangouts, setHangouts] = useState<Hangout[]>([]);
@@ -122,8 +129,15 @@ export default function HangoutsScreen() {
     try {
       const list = await fetchHangouts(city);
       setHangouts(list);
+      setIsOffline(false);
+      void cacheHangouts(list);
     } catch (err) {
-      console.log("Error loading hangouts:", err);
+      console.log("Error loading hangouts, falling back to cache:", err);
+      setIsOffline(true);
+      const cached = await getCachedHangouts();
+      if (cached) {
+        setHangouts(cached);
+      }
     } finally {
       if (!silent) setLoadingHangouts(false);
     }
@@ -146,11 +160,22 @@ export default function HangoutsScreen() {
     try {
       const osmPlaces = await fetchOsmPlaces(city);
       setPlaces(osmPlaces);
+      setIsOffline(false);
       if (osmPlaces.length > 0) {
         setFormPlaceId(osmPlaces[0].id);
       }
+      void cachePlaces(osmPlaces);
     } catch (err) {
-      console.log("Error loading places for creator modal:", err);
+      console.log("Error loading places for creator modal, falling back to cache:", err);
+      setIsOffline(true);
+      const cached = await getCachedPlaces();
+      if (cached) {
+        const cityPlaces = cached.filter((p: any) => p.city?.toLowerCase() === city.toLowerCase());
+        setPlaces(cityPlaces);
+        if (cityPlaces.length > 0) {
+          setFormPlaceId(cityPlaces[0].id);
+        }
+      }
     } finally {
       setLoadingPlaces(false);
     }
@@ -343,6 +368,13 @@ export default function HangoutsScreen() {
           </Text>
         </Pressable>
       </View>
+
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline" size={13} color="#f59e0b" />
+          <Text style={styles.offlineBannerText}>Offline Mode — Showing Cached Meetup Data</Text>
+        </View>
+      )}
 
       {viewMode === "meetups" ? (
         // MEETUPS SECTION
@@ -919,5 +951,24 @@ const styles = StyleSheet.create({
   formSubmitText: { color: "#020617", fontSize: 13, fontWeight: "900" },
   scrollList: {
     paddingBottom: 100,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    marginBottom: 12,
+    marginHorizontal: 4,
+  },
+  offlineBannerText: {
+    color: "#f59e0b",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

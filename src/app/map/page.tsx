@@ -1107,6 +1107,13 @@ export default function MapPage() {
     };
   }, [activeCity, activeLocation]);
 
+  const handleQuickSwap = (idx: number, newStop: Place) => {
+    const updated = [...tripStops];
+    updated[idx] = newStop;
+    setTripStops(updated);
+    recalculateRouteForStops(updated);
+  };
+
   const handleSwapToIndoorSpots = () => {
     let swappedCount = 0;
     const updatedStops = tripStops.map(stop => {
@@ -2597,6 +2604,38 @@ export default function MapPage() {
                       >
                         {filteredTripStops.map((stop, idx) => {
                           const isFocused = focusedPlace?.id === stop.id;
+
+                          const scheduledHour = (simulatedDepartureHour + idx * 1.5) % 24;
+                          const formatStopHour = (h: number) => {
+                            const rounded = Math.floor(h);
+                            const mins = Math.round((h % 1) * 60);
+                            const ampm = rounded >= 12 ? "PM" : "AM";
+                            const displayHour = rounded % 12 || 12;
+                            const displayMins = mins < 10 ? `0${mins}` : mins;
+                            return `${displayHour}:${displayMins} ${ampm}`;
+                          };
+                          const timeString = formatStopHour(scheduledHour);
+                          const stopWeather = weatherState.getWeatherForHour(Math.floor(scheduledHour));
+
+                          const isOutdoor = stop.tags.includes("outdoor") || 
+                            stop.tags.includes("viewpoint") || 
+                            stop.tags.includes("scenic") || 
+                            stop.category === "event";
+                          const isRainyStop = stopWeather.condition === "Rainy" && isOutdoor;
+
+                          const findReplacementIndoorSpot = () => {
+                            const candidates = [...curatedPlaces, ...livePlaces].filter(p => 
+                              p.id !== stop.id && 
+                              p.category === "cafe" &&
+                              p.city?.toLowerCase() === activeCity.toLowerCase()
+                            );
+                            if (candidates.length > 0) {
+                              return candidates.sort((a, b) => b.rating - a.rating)[0];
+                            }
+                            return null;
+                          };
+                          const replacement = isRainyStop ? findReplacementIndoorSpot() : null;
+
                           return (
                             <Reorder.Item
                               key={stop.id}
@@ -2624,6 +2663,19 @@ export default function MapPage() {
                                 >
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                                        <span className="inline-flex items-center gap-1 rounded bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] font-black text-teal-400">
+                                          ⏰ {timeString}
+                                        </span>
+                                        <span className={cn(
+                                          "inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase border",
+                                          stopWeather.condition === "Rainy" 
+                                            ? "bg-amber-950/40 text-amber-400 border-amber-500/20" 
+                                            : "bg-slate-900/40 text-slate-400 border-slate-800"
+                                        )}>
+                                          {stopWeather.condition === "Rainy" ? "🌧️ Rainy" : stopWeather.condition === "Pleasant" ? "🍃 Pleasant" : stopWeather.condition === "Hot" ? "☀️ Hot" : "☕ Cozy"} ({stopWeather.temp}°C)
+                                        </span>
+                                      </div>
                                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
                                         Stop {idx + 1} · {getCategoryLabel(stop.category, stop.tags)}
                                       </p>
@@ -2658,6 +2710,26 @@ export default function MapPage() {
                                   >
                                     View Detailed Info
                                   </button>
+                                )}
+
+                                {isRainyStop && replacement && (
+                                  <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 flex items-center justify-between gap-3" onClick={e => e.stopPropagation()}>
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-bold text-amber-300">
+                                        Rain expected during this outdoor stop!
+                                      </p>
+                                      <p className="text-[10px] font-black text-slate-350 mt-0.5 truncate">
+                                        Swap with cozy cafe: {replacement.title}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickSwap(idx, replacement)}
+                                      className="shrink-0 rounded bg-amber-400 px-2.5 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300 transition duration-150 cursor-pointer shadow-sm"
+                                    >
+                                      Swap Spot ☕
+                                    </button>
+                                  </div>
                                 )}
                               </div>
 
