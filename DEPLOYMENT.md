@@ -3,105 +3,100 @@
 ## Frontend Deployment (Vercel)
 
 ### Step 1: Push to GitHub
+
 ```bash
-git init
 git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/yourusername/town-discover.git
-git push -u origin main
+git commit -m "Deploy Sheher updates"
+git push
 ```
 
 ### Step 2: Deploy to Vercel
-1. Go to [vercel.com](https://vercel.com)
-2. Sign in with GitHub
-3. Click "Add New" → "Project"
-4. Select your `town-discover` repository
-5. Configure:
-   - **Framework**: Next.js (auto-detected)
-   - **Root Directory**: `./` (root)
-   - **Environment Variables**: Add `NEXT_PUBLIC_API_URL` → your backend URL
 
-### Step 3: Set Environment Variables
-In Vercel Dashboard → Project Settings → Environment Variables:
-```
-NEXT_PUBLIC_API_URL = https://your-backend-domain.com
+1. Go to https://vercel.com.
+2. Sign in with GitHub.
+3. Click "Add New" -> "Project".
+4. Select the `town-discover` repository.
+5. Keep the root directory as `./`.
+6. Add the production values from `.env.example` in Project Settings -> Environment Variables.
+
+Do not deploy `.env.local` or `.env.production` files. `.vercelignore` excludes local env files; production values belong in Vercel Environment Variables.
+
+### Step 3: Production Environment Variables
+
+Required for the current Vercel app:
+
+```text
+NEXT_PUBLIC_API_URL=https://sheher-city.vercel.app
+DATABASE_URL=postgresql://user:password@host:5432/database
 ```
 
----
+Feature-specific keys:
+
+```text
+GEMINI_API_KEY=your_gemini_api_key
+GOOGLE_PLACES_API_KEY=your_google_places_api_key
+REDIS_URL=redis://default:password@host:6379
+SUPER_ADMIN_EMAILS=admin@example.com
+```
 
 ## Backend Deployment Options
 
-### Option A: Railway (Recommended for Express)
-1. Go to [railway.app](https://railway.app)
-2. Create new project
-3. Connect GitHub repository
-4. Set root directory to `./backend`
+### Option A: Railway
+
+1. Go to https://railway.app.
+2. Create a new project.
+3. Connect the GitHub repository.
+4. Set root directory to `./backend`.
 5. Add environment variables:
-   - `NODE_ENV`: production
-   - `PORT`: 5000 (or auto-assigned)
-   - `DATABASE_URL`: your PostgreSQL URL
-   - `CORS_ORIGIN`: your Vercel frontend URL
+   - `NODE_ENV`: `production`
+   - `PORT`: platform assigned, or `5000`
+   - `DATABASE_URL`: PostgreSQL connection string
+   - `FRONTEND_URL`: `https://sheher-city.vercel.app`
 
 ### Option B: Render
-1. Go to [render.com](https://render.com)
-2. Create new Web Service
-3. Connect GitHub
-4. Configure:
-   - **Build Command**: `npm run build`
-   - **Start Command**: `npm start`
-   - **Root Directory**: `./backend`
-5. Add Environment Variables same as above
 
-### Option C: Fly.io
-1. Install `flyctl` CLI
-2. Run `flyctl launch` in backend directory
-3. Configure `fly.toml` with Node environment
-4. Deploy with `flyctl deploy`
+1. Go to https://render.com.
+2. Create a new Web Service.
+3. Connect GitHub.
+4. Set root directory to `./backend`.
+5. Use `npm run build` as the build command.
+6. Use `npm start` as the start command.
+7. Add the same environment variables as Railway.
 
----
+## Connecting Frontend To Backend
 
-## Connecting Frontend to Backend
+If the backend is deployed separately:
 
-After deploying backend, update in Vercel:
-1. Get your backend URL (e.g., `https://sheher-api.railway.app`)
-2. Go to Vercel Dashboard → Project Settings
-3. Update `NEXT_PUBLIC_API_URL` environment variable
-4. Redeploy (auto-triggers)
+1. Copy the backend URL, for example `https://sheher-api.example.com`.
+2. Go to Vercel Project Settings -> Environment Variables.
+3. Set `NEXT_PUBLIC_API_URL` to that backend URL.
+4. Redeploy.
 
----
+If the Next.js app serves the API routes directly, keep:
 
-## Environment Variables Checklist
-
-**Frontend (.env.production)**
-- `NEXT_PUBLIC_API_URL` = Backend URL
-
-**Backend (.env in production)**
-- `NODE_ENV` = production
-- `PORT` = 5000 (or assigned by platform)
-- `CORS_ORIGIN` = Frontend URL (e.g., https://town-discover.vercel.app)
-- `DATABASE_URL` = PostgreSQL connection string (if using DB)
-
----
+```text
+NEXT_PUBLIC_API_URL=https://sheher-city.vercel.app
+```
 
 ## Verify Deployment
 
-After deploying both:
-1. Visit your Vercel frontend URL
-2. Check browser console for any API errors
-3. Test API endpoint: `https://your-backend/api/health`
-4. Should respond: `{ status: "Sheher API is alive ✨" }`
+After deployment:
 
----
+1. Visit https://sheher-city.vercel.app.
+2. Visit https://sheher-city.vercel.app/hangouts.
+3. Test login, city switching, meetup creation, RSVP, shoutbox posting, and reporting.
+4. Check Vercel deployment logs for missing environment variable errors.
 
 ## Troubleshooting
 
-**CORS errors?**
-- Update backend `CORS_ORIGIN` to match frontend domain
+**CORS errors**
 
-**API calls fail?**
-- Check `NEXT_PUBLIC_API_URL` matches backend domain
-- Verify backend environment variables
+Update `FRONTEND_URL` or `NEXT_PUBLIC_APP_URL` to match `https://sheher-city.vercel.app`.
 
-**Build fails?**
-- Check Node version compatibility (recommend 18+)
-- Verify all dependencies are listed in package.json
+**API calls fail**
+
+Check `NEXT_PUBLIC_API_URL`, `DATABASE_URL`, and Vercel function logs.
+
+**Build fails**
+
+Run `npm.cmd run build` locally and confirm all required environment variables exist in Vercel.

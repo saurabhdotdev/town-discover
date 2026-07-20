@@ -52,7 +52,7 @@ import { getMoodLabel, getTopMoodRecommendations, inferMoodProfile, getMoodMatch
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
+import { getCityWeather, filterPlacesByWeather, useCityLiveWeather } from "@/lib/weather";
 import { SwipeVibeMode } from "@/components/common/SwipeVibeMode";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
@@ -376,10 +376,7 @@ export default function DiscoverPage() {
     return scores;
   }, [allPlaces, selectedMood, now]);
 
-  const weather = useMemo(() => {
-    const city = (activeCity || "Pune") as any;
-    return getCityWeather(city, now);
-  }, [activeCity, now]);
+  const weather = useCityLiveWeather((activeCity || "Pune") as any);
 
   const weatherPicks = useMemo(() => {
     return filterPlacesByWeather(allPlaces, weather.condition).slice(0, 12);

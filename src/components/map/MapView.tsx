@@ -22,6 +22,9 @@ interface MapProps {
   simulationCoord?: { latitude: number; longitude: number } | null;
   scrollWheelZoom?: boolean;
   tripItinerary?: Record<number, Place[]> | null;
+  tripStops?: Place[];
+  onAddStop?: (place: Place) => void;
+  onRemoveStop?: (stopId: string) => void;
 }
 
 const categoryColor: Record<string, string> = {
@@ -163,6 +166,9 @@ export const MapView: React.FC<MapProps> = ({
   simulationCoord = null,
   scrollWheelZoom = false,
   tripItinerary = null,
+  tripStops = [],
+  onAddStop,
+  onRemoveStop,
 }) => {
   const [mapZoom, setMapZoom] = useState(14);
   const [mapStyle, setMapStyle] = useState<"classic" | "satellite">("classic");
@@ -176,15 +182,23 @@ export const MapView: React.FC<MapProps> = ({
   const userLocationMarkerRef = useRef<Leaflet.Marker | null>(null);
   const lastFlownLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const lastFlownSelectedPlaceRef = useRef<string | null>(null);
-  // Use a ref so async init always reads the latest scrollWheelZoom value
   const scrollWheelZoomRef = useRef(scrollWheelZoom);
   scrollWheelZoomRef.current = scrollWheelZoom;
 
   const placesRef = useRef(places);
   placesRef.current = places;
 
+  const tripStopsRef = useRef(tripStops);
+  tripStopsRef.current = tripStops;
+
   const onMarkerClickRef = useRef(onMarkerClick);
   onMarkerClickRef.current = onMarkerClick;
+
+  const onAddStopRef = useRef(onAddStop);
+  onAddStopRef.current = onAddStop;
+
+  const onRemoveStopRef = useRef(onRemoveStop);
+  onRemoveStopRef.current = onRemoveStop;
 
   // Initialize Map exactly once on mount
   useEffect(() => {
@@ -278,11 +292,17 @@ export const MapView: React.FC<MapProps> = ({
       tileLayerRef.current = baseLayer;
 
       if (userLocation) {
+        const hasHeading = typeof userLocation.heading === "number" && userLocation.heading !== null;
         const userIcon = L.divIcon({
           html: `
             <div style="position:relative;width:28px;height:28px;display:grid;place-items:center;">
               <div style="position:absolute;width:28px;height:28px;border-radius:999px;background:rgba(56,189,248,.22);box-shadow:0 0 0 8px rgba(56,189,248,.08);"></div>
-              <div style="width:12px;height:12px;border-radius:999px;background:#38bdf8;border:2px solid #fff;box-shadow:0 8px 20px rgba(0,0,0,.35);"></div>
+              <div style="width:12px;height:12px;border-radius:999px;background:#38bdf8;border:2px solid #fff;box-shadow:0 8px 20px rgba(0,0,0,.35);position:relative;z-index:2;"></div>
+              ${hasHeading ? `
+                <div style="position:absolute;top:0;left:0;width:28px;height:28px;transform:rotate(${userLocation.heading}deg);z-index:1;">
+                  <div style="position:absolute;top:-8px;left:8px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #38bdf8;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></div>
+                </div>
+              ` : ""}
             </div>
           `,
           iconSize: [28, 28],
@@ -349,11 +369,17 @@ export const MapView: React.FC<MapProps> = ({
       userLocationMarkerRef.current = null;
     }
 
+    const hasHeading = typeof userLocation.heading === "number" && userLocation.heading !== null;
     const userIcon = L.divIcon({
       html: `
         <div style="position:relative;width:28px;height:28px;display:grid;place-items:center;">
           <div style="position:absolute;width:28px;height:28px;border-radius:999px;background:rgba(56,189,248,.22);box-shadow:0 0 0 8px rgba(56,189,248,.08);"></div>
-          <div style="width:12px;height:12px;border-radius:999px;background:#38bdf8;border:2px solid #fff;box-shadow:0 8px 20px rgba(0,0,0,.35);"></div>
+          <div style="width:12px;height:12px;border-radius:999px;background:#38bdf8;border:2px solid #fff;box-shadow:0 8px 20px rgba(0,0,0,.35);position:relative;z-index:2;"></div>
+          ${hasHeading ? `
+            <div style="position:absolute;top:0;left:0;width:28px;height:28px;transform:rotate(${userLocation.heading}deg);z-index:1;">
+              <div style="position:absolute;top:-8px;left:8px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #38bdf8;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></div>
+            </div>
+          ` : ""}
         </div>
       `,
       iconSize: [28, 28],
@@ -386,6 +412,25 @@ export const MapView: React.FC<MapProps> = ({
 
     Object.values(markersRef.current).forEach((marker) => marker.remove());
     markersRef.current = {};
+
+    // Expose a global callback for popup actions
+    if (typeof window !== "undefined") {
+      (window as any)._onPopupAction = (placeId: string, actionType: "focus" | "toggleStop") => {
+        const matchedPlace = placesRef.current.find((p) => p.id === placeId);
+        if (!matchedPlace) return;
+
+        if (actionType === "focus") {
+          onMarkerClickRef.current?.(matchedPlace);
+        } else if (actionType === "toggleStop") {
+          const isStop = tripStopsRef.current.some((s) => s.id === placeId);
+          if (isStop) {
+            onRemoveStopRef.current?.(placeId);
+          } else {
+            onAddStopRef.current?.(matchedPlace);
+          }
+        }
+      };
+    }
 
     const renderSinglePlaceMarker = (place: Place, isSelected: boolean) => {
       const isNightDrive = place.tags.includes("night-drive");
@@ -466,17 +511,48 @@ export const MapView: React.FC<MapProps> = ({
         className: "",
       });
 
+      const hasThisStop = tripStopsRef.current.some((s) => s.id === place.id);
+
+      const richPopupHtml = `
+        <div style="min-width:210px; font-family: inherit; color: #f8fafc; background: #0f172a; padding: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+          ${place.image ? `<img src="${place.image}" style="width: 100%; height: 95px; object-fit: cover; display: block;" />` : ""}
+          <div style="padding: 10px 12px; background: #0f172a;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-bottom: 4px;">
+              <b style="font-size: 13px; color: #fff; display: block; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;">${place.title}</b>
+              <span style="display: inline-flex; align-items: center; color: #fbbf24; font-size: 11px; font-weight: 800; shrink-0;">
+                ★${place.rating}
+              </span>
+            </div>
+            <div style="font-size: 10px; color: #94a3b8; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${getCategoryLabel(place.category, place.tags)} · ${place.locality}
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+              <button 
+                onclick="window._onPopupAction?.('${place.id}', 'focus')" 
+                style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #f1f5f9; font-size: 10px; font-weight: 700; padding: 6px 0; border-radius: 6px; cursor: pointer; transition: all 0.2s;"
+              >
+                Details ℹ️
+              </button>
+              <button 
+                onclick="window._onPopupAction?.('${place.id}', 'toggleStop')" 
+                style="flex: 1.3; background: ${hasThisStop ? "#f43f5e" : "#2dd4bf"}; border: none; color: ${hasThisStop ? "#ffffff" : "#0f172a"}; font-size: 10px; font-weight: 800; padding: 6px 0; border-radius: 6px; cursor: pointer; transition: all 0.2s;"
+              >
+                ${hasThisStop ? "Remove Stop ❌" : "Add Stop 📍"}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
       const marker = L.marker([place.latitude, place.longitude], {
         icon: markerIcon,
         bubblingMouseEvents: false,
       })
         .addTo(map.current!)
-        .bindPopup(`
-          <div style="padding:6px 2px;min-width:160px;">
-            <b>${place.title}</b><br/>
-            ${getCategoryLabel(place.category, place.tags)} - ${formatDistance(place.distance)}
-          </div>
-        `)
+        .bindPopup(richPopupHtml, {
+          className: "custom-rich-map-popup",
+          maxWidth: 240,
+        })
         .bindTooltip(`
           <div class="font-black text-[10px] leading-tight text-white flex items-center gap-1">
             <span>${place.title}</span>
@@ -753,8 +829,10 @@ export const MapView: React.FC<MapProps> = ({
     const L = leaflet.current;
     if (!map.current || !L) return;
 
-    // Clear existing single polyline
+    // Clear existing single polyline (and its attached start marker)
     if (polylineRef.current) {
+      const prev = polylineRef.current as any;
+      if (prev._startMarker) { prev._startMarker.remove(); }
       polylineRef.current.remove();
       polylineRef.current = null;
     }
@@ -819,6 +897,44 @@ export const MapView: React.FC<MapProps> = ({
     }).addTo(map.current);
 
     polylineRef.current = polyline;
+
+    // Add a clear START flag marker at the first point of the trip route
+    const startPoint = pathPoints[0];
+    if (startPoint) {
+      const startIcon = L.divIcon({
+        html: `
+          <div style="
+            display:flex;flex-direction:column;align-items:center;gap:0;
+            filter:drop-shadow(0 4px 12px rgba(45,212,191,0.5));
+          ">
+            <div style="
+              background:#2dd4bf;color:#0f172a;
+              font-size:9px;font-weight:900;letter-spacing:0.12em;
+              padding:3px 7px;border-radius:6px;
+              white-space:nowrap;text-transform:uppercase;
+              border:1.5px solid rgba(255,255,255,0.25);
+              box-shadow:0 2px 8px rgba(0,0,0,0.4);
+            ">🚩 START</div>
+            <div style="
+              width:2px;height:10px;
+              background:linear-gradient(to bottom,#2dd4bf,transparent);
+            "></div>
+            <div style="
+              width:10px;height:10px;border-radius:999px;
+              background:#2dd4bf;
+              border:2px solid #fff;
+              box-shadow:0 0 0 4px rgba(45,212,191,0.25);
+            "></div>
+          </div>
+        `,
+        iconSize: [60, 52],
+        iconAnchor: [30, 52],
+        className: "",
+      });
+      const startMarker = L.marker(startPoint, { icon: startIcon, zIndexOffset: 900 }).addTo(map.current);
+      // Store on polylineRef so it gets cleaned up with the route
+      (polylineRef.current as any)._startMarker = startMarker;
+    }
 
     try {
       const bounds = L.latLngBounds(pathPoints);
@@ -915,8 +1031,8 @@ export const MapView: React.FC<MapProps> = ({
         className="h-full w-full"
       />
       
-      {/* Floating Style Toggle Overlay */}
-      <div className="absolute left-4 top-4 z-[9999] flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 backdrop-blur-md p-1 shadow-2xl select-none">
+      {/* Floating Style Toggle Overlay — bottom-left so it never overlaps action buttons */}
+      <div className="absolute left-4 bottom-4 z-[9999] flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/85 backdrop-blur-md p-1 shadow-2xl select-none">
         <button
           type="button"
           onClick={() => setMapStyle("classic")}

@@ -20,6 +20,7 @@ import {
   Train,
   Globe,
   Dog,
+  ShieldCheck,
 } from "lucide-react";
 import { CrowdLevel, CrowdSummary, Place, PlaceCategory } from "@/types";
 import { getCategoryFallbackImage } from "@/lib/place-images";
@@ -148,6 +149,11 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
   const hasHours = Boolean(place.hours);
   const hasCrowdSignal = Boolean(localCrowdSummary?.crowdLevel && localCrowdSummary.reportCount > 0);
   const areaLabel = formatPlaceArea(place);
+  const trustSignals = [
+    place.reviewCount > 0 ? `${place.reviewCount} reviews` : "Rating pending",
+    hasHours ? "Hours listed" : "Hours unverified",
+    hasCrowdSignal ? "Live crowd reports" : place.isTrending ? "Trending signal" : "Curated pick",
+  ];
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -327,6 +333,23 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
 
           <p className="line-clamp-2 text-sm leading-5 text-[var(--muted-strong)] sm:leading-6">{place.description}</p>
 
+          <div className="rounded-lg border border-teal-500/15 bg-teal-500/[0.04] p-2">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-teal-300">
+              <ShieldCheck size={12} />
+              Trust signals
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {trustSignals.map((signal) => (
+                <span
+                  key={signal}
+                  className="rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--muted-strong)]"
+                >
+                  {signal}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-[var(--muted-strong)]">
             <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-2">
               <div className="mb-1 flex items-center gap-1.5 text-[var(--muted)]">
@@ -376,7 +399,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                 event.stopPropagation();
                 onClick?.();
               }}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2.5 text-sm font-black text-[var(--primary-foreground)] transition hover:opacity-90 active:scale-95"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2.5 text-sm font-black text-[var(--primary-foreground)] transition hover:opacity-90 active:scale-95 cursor-pointer"
             >
               Details
               <ExternalLink size={15} />
@@ -391,7 +414,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                   window.open(url, '_blank');
                 }}
                 title="Search on YouTube"
-                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95 cursor-pointer"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
@@ -407,7 +430,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                   window.open(url, '_blank');
                 }}
                 title="Search on Instagram"
-                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95 cursor-pointer"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
@@ -419,7 +442,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                 type="button"
                 aria-label={`Share ${place.title}`}
                 onClick={handleShare}
-                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95 cursor-pointer"
               >
                 <Share2 size={16} />
               </button>
@@ -430,7 +453,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
                   event.stopPropagation();
                   onSave?.(place);
                 }}
-                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95"
+                className="grid h-10 w-full place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] active:scale-95 cursor-pointer"
               >
                 <Bookmark size={16} className={isSaved ? "fill-amber-300 text-amber-300" : ""} />
               </button>

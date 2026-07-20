@@ -22,10 +22,10 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => m
 });
 import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee, Compass, Utensils, Moon, Store, GlassWater, Cake, IceCream, Soup, Heart, Car } from "lucide-react";
 import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow, isVegetarianPlace, API_URL } from "@/lib/utils";
-import { io } from "socket.io-client";
+
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { LazyImage } from "@/components/common/LazyImage";
-import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
+import { getCityWeather, filterPlacesByWeather, useCityLiveWeather } from "@/lib/weather";
 
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { CITY_CENTERS } from "@/lib/pune-location";
@@ -262,12 +262,9 @@ export default function MapPage() {
     requestLocation,
     toggleLiveTracking,
   } = useGeolocation();
-  const activeCity = !hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity;
-  const activeLocation =
-    locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
-  
   const [mapBounds, setMapBounds] = useState<{ south: number; west: number; north: number; east: number } | null>(null);
-
+  const activeCity = !hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity;
+  const weatherState = useCityLiveWeather(activeCity);
   const { places: livePlaces, loading: livePlacesLoading, error: livePlacesError } = useLivePlacesByBounds(
     mapBounds,
     activeCity
@@ -306,6 +303,32 @@ export default function MapPage() {
   const [tripPlanName, setTripPlanName] = useState<string>("");
   const [savedTripPlans, setSavedTripPlans] = useState<SavedTripPlan[]>([]);
   const [activeTripPlanId, setActiveTripPlanId] = useState<string | null>(null);
+
+  // Automatically adjust default trip source/destination based on selected city context
+  useEffect(() => {
+    if (!activeTripPlanId) {
+      if (activeCity === "Mumbai") {
+        setTripSource("Mumbai");
+        setTripDest("Lonavala");
+      } else if (activeCity === "Bangalore") {
+        setTripSource("Bangalore");
+        setTripDest("Nandi Hills");
+      } else if (activeCity === "Delhi") {
+        setTripSource("Delhi");
+        setTripDest("Gurgaon");
+      } else if (activeCity === "Chennai") {
+        setTripSource("Chennai");
+        setTripDest("Mahabalipuram");
+      } else {
+        setTripSource(activeCity);
+        if (activeCity === "Pune") {
+          setTripDest("Mumbai");
+        } else {
+          setTripDest("Airport");
+        }
+      }
+    }
+  }, [activeCity, activeTripPlanId]);
   const [tripSaveStatus, setTripSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [tripSaveMessage, setTripSaveMessage] = useState("");
   const [vehicleType, setVehicleType] = useState<"car" | "suv" | "lcv">("car");
@@ -333,6 +356,42 @@ export default function MapPage() {
   // Flash Deal Notification States
   const [activeFlashDeal, setActiveFlashDeal] = useState<any | null>(null);
 
+  // Derived state computations & Live Geolocation simulation
+  const [simulateLiveLocation, setSimulateLiveLocation] = useState<boolean>(false);
+  const [routingProfile, setRoutingProfile] = useState<"driving" | "foot">("driving");
+
+  const currentSimCoord = useMemo(() => {
+    if (!tripRoutePath || !simulationActive) return null;
+    return tripRoutePath[simulationIndex] || null;
+  }, [tripRoutePath, simulationIndex, simulationActive]);
+
+  const currentSimSpeed = useMemo(() => {
+    if (!simulationActive) return 0;
+    const baseSpeed = 80 + Math.sin(simulationIndex / 5) * 5;
+    return Math.round(baseSpeed * (simulationSpeed / 2));
+  }, [simulationActive, simulationIndex, simulationSpeed]);
+
+  const simulationStatsRemaining = useMemo(() => {
+    if (!tripStats || !tripRoutePath || !simulationActive) return null;
+    const fraction = (tripRoutePath.length - 1 - simulationIndex) / (tripRoutePath.length - 1);
+    return {
+      distance: Math.max(0, parseFloat((tripStats.distance * fraction).toFixed(1))),
+      duration: Math.max(0, Math.round(tripStats.duration * fraction)),
+    };
+  }, [tripStats, tripRoutePath, simulationIndex, simulationActive]);
+
+  const activeLocation = useMemo(() => {
+    if (simulateLiveLocation && currentSimCoord) {
+      return {
+        latitude: currentSimCoord.latitude,
+        longitude: currentSimCoord.longitude,
+        accuracy: 10,
+        heading: null
+      };
+    }
+    return locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
+  }, [locationSource, location, activeCity, detectedCity, simulateLiveLocation, currentSimCoord]);
+
   const handlePlanTrip = async (startStr: string, endStr: string) => {
     if (!startStr.trim() || !endStr.trim()) {
       setTripError("Please fill in starting point and destination.");
@@ -352,7 +411,7 @@ export default function MapPage() {
         throw new Error("Unable to resolve locations. Try another spelling.");
       }
 
-      const url = `https://router.project-osrm.org/route/v1/driving/${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}?overview=full&geometries=geojson`;
+      const url = `https://router.project-osrm.org/route/v1/${routingProfile === "driving" ? "driving" : "foot"}/${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}?overview=full&geometries=geojson`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("OSRM routing server connection error.");
       
@@ -450,9 +509,9 @@ export default function MapPage() {
             setTripDest(destName);
             setTripPlanName(trailName ?? `Spontaneous Walk: ${sourceName} to ${destName}`);
             
-            // Build route coordinates using OSRM foot routing
+            // Build route coordinates using OSRM routing
             const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
-            const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+            const osrmUrl = `https://router.project-osrm.org/route/v1/${routingProfile === "driving" ? "driving" : "foot"}/${coordString}?overview=full&geometries=geojson`;
             
             fetch(osrmUrl)
               .then((res) => (res.ok ? res.json() : null))
@@ -586,7 +645,7 @@ export default function MapPage() {
     setTripLoading(true);
     try {
       const coordString = newStops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-      const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+      const osrmUrl = `https://router.project-osrm.org/route/v1/${routingProfile === "driving" ? "driving" : "foot"}/${coordString}?overview=full&geometries=geojson`;
       
       const res = await fetch(osrmUrl);
       if (res.ok) {
@@ -711,12 +770,25 @@ export default function MapPage() {
     if (normalized.includes("pune")) return "PNQ";
     if (normalized.includes("mumbai") || normalized.includes("bombay")) return "BOM";
     if (normalized.includes("bangalore") || normalized.includes("bengaluru")) return "BLR";
-    if (normalized.includes("delhi")) return "DEL";
+    if (normalized.includes("delhi") || normalized.includes("new delhi")) return "DEL";
     if (normalized.includes("chennai") || normalized.includes("madras")) return "MAA";
+    if (normalized.includes("kolkata") || normalized.includes("calcutta")) return "CCU";
+    if (normalized.includes("hyderabad")) return "HYD";
+    if (normalized.includes("jaipur")) return "JAI";
+    if (normalized.includes("udaipur")) return "UDR";
+    if (normalized.includes("srinagar")) return "SXR";
+    if (normalized.includes("goa") || normalized.includes("panaji")) return "GOI";
     if (normalized.includes("kolhapur")) return "KLH";
     if (normalized.includes("nashik")) return "ISK";
-    if (normalized.includes("cherryhill")) return "CHH";
-    return "SHR";
+    if (normalized.includes("pondicherry") || normalized.includes("puducherry")) return "PNY";
+    if (normalized.includes("shimla")) return "SLV";
+    if (normalized.includes("agra")) return "AGR";
+    if (normalized.includes("varanasi")) return "VNS";
+    if (normalized.includes("kochi") || normalized.includes("cochin")) return "COK";
+    // Fallback: use first 3 letters of city uppercased
+    const words = cityName.trim().split(/\s+/);
+    if (words.length >= 2) return (words[0][0] + words[1][0] + (words[2]?.[0] ?? words[0][1])).toUpperCase();
+    return cityName.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "SHR";
   };
 
   const [postcardMessage, setPostcardMessage] = useState<string | null>(null);
@@ -890,10 +962,9 @@ export default function MapPage() {
   const hourlyWeatherForecast = useMemo(() => {
     const forecast = [];
     const now = new Date();
-    const city = (activeCity || "Pune") as any;
     for (let i = 0; i < 6; i++) {
       const futureDate = new Date(now.getTime() + i * 60 * 60 * 1000);
-      const weather = getCityWeather(city, futureDate);
+      const weather = weatherState.hourly[i] || weatherState.current;
       forecast.push({
         time: futureDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         hourValue: futureDate.getHours(),
@@ -901,14 +972,11 @@ export default function MapPage() {
       });
     }
     return forecast;
-  }, [activeCity]);
+  }, [weatherState]);
 
   const selectedWeather = useMemo(() => {
-    const city = (activeCity || "Pune") as any;
-    const targetDate = new Date();
-    targetDate.setHours(simulatedDepartureHour);
-    return getCityWeather(city, targetDate);
-  }, [activeCity, simulatedDepartureHour]);
+    return weatherState.getWeatherForHour(simulatedDepartureHour);
+  }, [weatherState, simulatedDepartureHour]);
 
   useEffect(() => {
     if (selectedWeather.condition === "Rainy") {
@@ -928,18 +996,27 @@ export default function MapPage() {
     }
   }, [selectedWeather, tripStops, simulatedDepartureHour]);
 
-  // Real-time Flash Deal Socket listener
+  // Real-time Flash Deal Socket listener - lazy-loaded for performance
   useEffect(() => {
-    const socket = io(API_URL, {
-      withCredentials: true,
-    });
+    let active = true;
+    let socket: any = null;
 
-    socket.on("new-flash-deal", (deal: any) => {
-      setActiveFlashDeal(deal);
+    import("socket.io-client").then(({ io }) => {
+      if (!active) return;
+      socket = io(API_URL, {
+        withCredentials: true,
+      });
+
+      socket.on("new-flash-deal", (deal: any) => {
+        setActiveFlashDeal(deal);
+      });
     });
 
     return () => {
-      socket.disconnect();
+      active = false;
+      if (socket) {
+        socket.disconnect();
+      }
     };
   }, []);
 
@@ -1043,10 +1120,7 @@ export default function MapPage() {
     return () => clearTimeout(timer);
   }, [simulationActive, simulationIndex, simulationSpeed, tripRoutePath, simStepSize]);
 
-  const currentSimCoord = useMemo(() => {
-    if (!tripRoutePath || !simulationActive) return null;
-    return tripRoutePath[simulationIndex] || null;
-  }, [tripRoutePath, simulationIndex, simulationActive]);
+  // currentSimCoord is declared at the top of the component
 
   useEffect(() => {
     if (!currentSimCoord || !tripStops.length) {
@@ -1398,6 +1472,9 @@ export default function MapPage() {
             simulationActive={simulationActive}
             simulationCoord={currentSimCoord}
             scrollWheelZoom={true}
+            tripStops={tripStops}
+            onAddStop={handleAddStopToTrip}
+            onRemoveStop={handleDeleteStop}
           />
 
           {livePlacesLoading && mode !== "trip" && (
@@ -1989,6 +2066,35 @@ export default function MapPage() {
                   </div>
                 </div>
 
+                {/* Routing Profile Toggle */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-[var(--muted)] block mb-1">Routing Mode</label>
+                  <div className="flex bg-[var(--input)] border border-[var(--border)] rounded-lg p-0.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => setRoutingProfile("driving")}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                        routingProfile === "driving"
+                          ? "bg-cyan-400 text-slate-950 shadow-md font-black"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      🚗 Drive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoutingProfile("foot")}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                        routingProfile === "foot"
+                          ? "bg-cyan-400 text-slate-950 shadow-md font-black"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      🚶 Walk
+                    </button>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => handlePlanTrip(tripSource, tripDest)}
@@ -2169,6 +2275,50 @@ export default function MapPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Cockpit HUD */}
+                    {simulationActive && (
+                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-950/60 border border-slate-900 p-2.5 text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black uppercase text-cyan-400">Cruise Speed</span>
+                          <span className="text-sm font-black text-white mt-0.5">{currentSimSpeed} km/h</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black uppercase text-cyan-400">GPS Coord</span>
+                          <span className="text-[9px] font-mono text-slate-300 mt-1 truncate">
+                            {currentSimCoord ? `${currentSimCoord.latitude.toFixed(4)}, ${currentSimCoord.longitude.toFixed(4)}` : "Tracking..."}
+                          </span>
+                        </div>
+                        {simulationStatsRemaining && (
+                          <div className="col-span-2 border-t border-slate-900 pt-1.5 mt-1 grid grid-cols-2 gap-2 text-left">
+                            <div>
+                              <span className="text-[8px] font-black uppercase text-slate-400">Distance Left</span>
+                              <div className="text-[10px] font-bold text-white mt-0.5">{simulationStatsRemaining.distance} km</div>
+                            </div>
+                            <div>
+                              <span className="text-[8px] font-black uppercase text-slate-400">Est. Time Left</span>
+                              <div className="text-[10px] font-bold text-white mt-0.5">
+                                {Math.floor(simulationStatsRemaining.duration / 60)}h {simulationStatsRemaining.duration % 60}m
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <div className="col-span-2 border-t border-slate-900 pt-1.5 mt-1 flex items-center justify-between">
+                          <span className="text-[8px] font-black uppercase text-slate-400">Simulate Live GPS</span>
+                          <button
+                            type="button"
+                            onClick={() => setSimulateLiveLocation(!simulateLiveLocation)}
+                            className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border transition-all cursor-pointer ${
+                              simulateLiveLocation
+                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                : "bg-slate-900 border-slate-800 text-slate-400"
+                            }`}
+                          >
+                            {simulateLiveLocation ? "ACTIVE 🟢" : "INACTIVE ⚪"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Progress Bar */}
                     <div className="space-y-1">
@@ -2559,218 +2709,242 @@ export default function MapPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="fixed inset-0 z-[800] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[800] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) { setIsShareModalOpen(false); setCopyShareMessage(""); } }}
         >
           <motion.div
-            initial={{ scale: 0.95, y: 15 }}
-            animate={{ scale: 1, y: 0 }}
-            className="relative w-full max-w-lg rounded-2xl border border-teal-500/30 bg-slate-950 p-6 text-center shadow-2xl z-40 max-h-[90vh] overflow-y-auto no-scrollbar"
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 60, opacity: 0 }}
+            transition={{ type: "spring", damping: 28, stiffness: 300 }}
+            className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-[#080f14] shadow-2xl overflow-hidden"
+            style={{ maxHeight: "92vh" }}
           >
-            <button
-              type="button"
-              onClick={() => {
-                setIsShareModalOpen(false);
-                setCopyShareMessage("");
-              }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white transition cursor-pointer"
-            >
-              <X size={20} />
-            </button>
-
-            <div className="mb-4 flex flex-col items-center">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-500/10 text-teal-400 shadow-inner">
-                <Share2 size={24} className="animate-pulse" />
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-teal-500/15 flex items-center justify-center">
+                  <Share2 size={16} className="text-teal-400" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-teal-400">Share Itinerary</p>
+                  <p className="text-[9px] font-semibold text-slate-500 mt-0.5">{tripPlanName || `${tripStops.length} stop trip`}</p>
+                </div>
               </div>
-              <h3 className="mt-3 text-lg font-black text-white">Share Your Trip Itinerary</h3>
-              <p className="text-xs font-semibold text-slate-400 mt-1">Copy WhatsApp text or get a direct map route link</p>
+              <button
+                type="button"
+                onClick={() => { setIsShareModalOpen(false); setCopyShareMessage(""); }}
+                className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            {/* Boarding Pass Summary Card */}
-            <div className="relative border border-teal-500/25 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 rounded-xl p-5 text-left overflow-hidden mb-5 shadow-inner">
-              {/* Decorative ticket cutout punches */}
-              <div className="absolute left-0 top-[60%] -translate-y-1/2 -translate-x-3 h-6 w-6 rounded-full bg-slate-950 border border-teal-500/20 z-10" />
-              <div className="absolute right-0 top-[60%] -translate-y-1/2 translate-x-3 h-6 w-6 rounded-full bg-slate-950 border border-teal-500/20 z-10" />
+            {/* Scrollable ticket body */}
+            <div className="overflow-y-auto no-scrollbar px-4 pb-6" style={{ maxHeight: "calc(92vh - 72px)" }}>
 
-              {/* TICKET MAIN SECTION */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300">SHEHER CITY EXPRESS</span>
-                  </div>
-                  <span className="text-[8px] font-black tracking-widest text-slate-500 bg-white/5 px-2 py-0.5 rounded border border-white/10">
-                    BOARDING PASS
-                  </span>
-                </div>
+              {/* ── BOARDING PASS TICKET ── */}
+              {(() => {
+                const cityIATA   = getCityIATA(activeCity);
+                const sourceIATA = getCityIATA(tripSource);
+                const destIATA   = getCityIATA(tripDest);
+                const sameCode   = sourceIATA === destIATA;
+                const fromCode   = sameCode ? cityIATA : sourceIATA;
+                const toCode     = sameCode ? cityIATA : destIATA;
+                const fromLabel  = sameCode
+                  ? (tripStops[0]?.locality || tripStops[0]?.title || activeCity)
+                  : tripSource;
+                const toLabel    = sameCode
+                  ? (tripStops[tripStops.length - 1]?.locality || tripStops[tripStops.length - 1]?.title || activeCity)
+                  : tripDest;
+                const totalHrs   = Math.floor(tripStats.duration / 60);
+                const totalMins  = tripStats.duration % 60;
 
-                {/* Airport style code routing */}
-                <div className="flex items-center justify-between py-1">
-                  <div className="text-left flex flex-col items-start">
-                    <div className="text-3xl font-black text-white tracking-wider">{getCityIATA(tripSource)}</div>
-                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{tripSource}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedAirportCode(getCityIATA(tripSource));
-                        setIsAirportGuideOpen(true);
-                      }}
-                      className="mt-1.5 flex items-center gap-1 text-[8px] font-black uppercase text-teal-400 hover:text-teal-300 transition tracking-wider bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20 cursor-pointer"
-                    >
-                      Explore {getCityIATA(tripSource)} ✈️
-                    </button>
-                  </div>
-                  <div className="flex flex-col items-center flex-1 px-4 relative">
-                    <div className="w-full border-t border-dashed border-teal-500/30 relative">
-                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-950 px-2 text-teal-300 text-xs">
-                        ✈
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right flex flex-col items-end">
-                    <div className="text-3xl font-black text-white tracking-wider">{getCityIATA(tripDest)}</div>
-                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{tripDest}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedAirportCode(getCityIATA(tripDest));
-                        setIsAirportGuideOpen(true);
-                      }}
-                      className="mt-1.5 flex items-center gap-1 text-[8px] font-black uppercase text-amber-400 hover:text-amber-300 transition tracking-wider bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 cursor-pointer"
-                    >
-                      Explore {getCityIATA(tripDest)} ✈️
-                    </button>
-                  </div>
-                </div>
+                return (
+                  <div className="rounded-2xl overflow-hidden shadow-xl border border-white/[0.06] mb-4">
 
-                <div className="grid grid-cols-2 gap-4 border-t border-b border-white/5 py-3 text-xs font-bold text-slate-400">
-                  <div className="space-y-1">
-                    <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Passenger</span>
-                    <div className="text-xs font-black text-white uppercase truncate">
-                      {user?.fullName || "GUEST EXPLORER"}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-right">
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Gate</span>
-                      <div className="text-xs font-black text-white">18A</div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Class</span>
-                      <div className="text-xs font-black text-amber-300">EXPLR</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Perforation divider line */}
-              <div className="border-t border-dashed border-slate-700/60 my-4 relative" />
-
-              {/* TICKET STUB / PITSTOPS SECTION */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Pitstops Stub</span>
-                  <span className="text-[9px] font-black text-teal-300">{tripStops.length} Spots</span>
-                </div>
-                
-                <div className="space-y-1.5 max-h-24 overflow-y-auto no-scrollbar">
-                  {tripStops.map((stop, idx) => (
-                    <div key={stop.id} className="flex items-center justify-between text-[11px] leading-tight">
-                      <div className="flex items-center gap-1.5 truncate pr-4">
-                        <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-teal-400/10 text-teal-300 flex items-center justify-center text-[8px] font-black">
-                          {idx + 1}
-                        </span>
-                        <span className="font-semibold text-slate-200 truncate">{stop.title}</span>
+                    {/* TOP gradient band */}
+                    <div className="bg-gradient-to-r from-teal-900/80 via-slate-900 to-slate-900 px-5 py-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[9px] font-black uppercase tracking-[0.25em] text-teal-300/80">Sheher City Express</span>
+                        <span className="text-[8px] font-black tracking-[0.2em] text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/[0.07]">BOARDING PASS</span>
                       </div>
-                      <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wide shrink-0">
-                        {stop.priceRange || "$$"}
-                      </span>
+
+                      {/* Route section */}
+                      <div className="flex items-center gap-0">
+                        {/* FROM */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-4xl font-black text-white tracking-wider leading-none">{fromCode}</div>
+                          <div className="mt-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide truncate max-w-[110px]">{fromLabel}</div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedAirportCode(fromCode); setIsAirportGuideOpen(true); }}
+                            className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-teal-400 bg-teal-400/10 border border-teal-400/20 px-2 py-1 rounded-lg hover:bg-teal-400/20 transition cursor-pointer"
+                          >
+                            ✈ Explore
+                          </button>
+                        </div>
+
+                        {/* Flight path */}
+                        <div className="flex-1 flex flex-col items-center gap-1.5 px-2">
+                          <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                            {totalHrs > 0 ? `${totalHrs}h ` : ""}{totalMins}m
+                          </div>
+                          <div className="relative w-full flex items-center gap-1">
+                            <div className="h-px flex-1 bg-gradient-to-r from-teal-500/30 to-teal-500/10" />
+                            <div className="text-teal-400 text-base">✈</div>
+                            <div className="h-px flex-1 bg-gradient-to-r from-teal-500/10 to-teal-500/30" />
+                          </div>
+                          <div className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{tripStats.distance} km</div>
+                        </div>
+
+                        {/* TO */}
+                        <div className="flex-1 min-w-0 text-right">
+                          <div className="text-4xl font-black text-white tracking-wider leading-none">{toCode}</div>
+                          <div className="mt-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide truncate max-w-[110px] ml-auto">{toLabel}</div>
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedAirportCode(toCode); setIsAirportGuideOpen(true); }}
+                              className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-teal-400 bg-teal-400/10 border border-teal-400/20 px-2 py-1 rounded-lg hover:bg-teal-400/20 transition cursor-pointer"
+                            >
+                              🗺 Map
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Passenger row */}
+                      <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Passenger</p>
+                          <p className="text-[11px] font-black text-white uppercase mt-0.5 truncate">{user?.fullName || "GUEST"}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Gate</p>
+                          <p className="text-[11px] font-black text-white mt-0.5">18A</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Class</p>
+                          <p className="text-[11px] font-black text-amber-300 mt-0.5">EXPLR</p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+
+                    {/* TEAR STRIP / PERFORATION */}
+                    <div className="relative h-5 bg-[#080f14] flex items-center">
+                      <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-[#080f14] border border-white/[0.06]" />
+                      <div className="flex-1 mx-4 border-t border-dashed border-white/[0.08]" />
+                      <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-[#080f14] border border-white/[0.06]" />
+                    </div>
+
+                    {/* STUB SECTION */}
+                    <div className="bg-slate-900/60 px-5 pt-2 pb-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Pitstop Stub</span>
+                        <span className="text-[9px] font-black text-teal-300 bg-teal-400/10 px-2 py-0.5 rounded-full border border-teal-400/15">{tripStops.length} Stops</span>
+                      </div>
+
+                      <div className="space-y-2 max-h-[136px] overflow-y-auto no-scrollbar">
+                        {tripStops.map((stop, idx) => (
+                          <div key={stop.id} className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="shrink-0 h-5 w-5 rounded-full bg-teal-400/10 border border-teal-400/20 flex items-center justify-center text-[9px] font-black text-teal-300">
+                                {idx + 1}
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-200 truncate">{stop.title}</span>
+                            </div>
+                            <span className="shrink-0 text-[9px] font-bold text-slate-500 uppercase tracking-wide">{stop.priceRange || "$$"}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Stats row */}
+                      <div className="mt-4 pt-3 border-t border-white/[0.06] grid grid-cols-3 gap-2">
+                        <div>
+                          <p className="text-[8px] uppercase text-slate-600 font-black tracking-wider">Distance</p>
+                          <p className="text-xs font-black text-white mt-0.5">{tripStats.distance} km</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[8px] uppercase text-slate-600 font-black tracking-wider">Duration</p>
+                          <p className="text-xs font-black text-white mt-0.5">{totalHrs > 0 ? `${totalHrs}h ` : ""}{totalMins}m</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] uppercase text-slate-600 font-black tracking-wider">Tolls</p>
+                          <p className="text-xs font-black text-amber-300 mt-0.5">₹{estimatedToll}</p>
+                        </div>
+                      </div>
+
+                      {/* Barcode */}
+                      <div className="mt-4 flex flex-col items-center gap-1.5">
+                        <div className="flex items-end justify-center gap-[1.5px] h-8 w-full opacity-30">
+                          {[2,1,3,1,2,1,4,1,2,3,1,2,1,3,2,1,4,1,2,1,3,1,2,4,1,3,1,2,1,4,2,1,3].map((w, i) => (
+                            <div key={i} className="bg-slate-300 shrink-0" style={{ width: `${w}px`, height: `${60 + (i % 3) * 20}%` }} />
+                          ))}
+                        </div>
+                        <span className="text-[8px] tracking-[0.3em] font-mono text-slate-600">
+                          SH‑{Math.round(tripStats.distance * 100)}‑{tripStops.length}X
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── ACTIONS ── */}
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const shareUrl = activeTripPlanId
+                        ? `${window.location.origin}/trip/${activeTripPlanId}`
+                        : `${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(tripStops.map(s => s.id).join(","))}&sourceName=${encodeURIComponent(tripSource)}&destName=${encodeURIComponent(tripDest)}&trailName=${encodeURIComponent(tripPlanName)}`;
+                      await navigator.clipboard.writeText(shareUrl);
+                      setCopyShareMessage("Link copied! Paste it anywhere.");
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-teal-400 py-3.5 text-[11px] font-black uppercase tracking-wider text-slate-950 hover:bg-teal-300 active:scale-[0.98] transition-all duration-150 cursor-pointer shadow-lg shadow-teal-500/20"
+                  >
+                    🔗 Copy Link
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGeneratePostcard}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-500/10 py-3.5 text-[11px] font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/15 active:scale-[0.98] transition-all duration-150 cursor-pointer"
+                  >
+                    📸 Save Card
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-3 text-[10px] font-bold text-slate-400">
-                  <div>
-                    <span className="text-[8px] uppercase text-slate-500 block">Distance</span>
-                    <span className="text-white font-black">{tripStats.distance} km</span>
-                  </div>
-                  <div>
-                    <span className="text-[8px] uppercase text-slate-500 block">Boarding</span>
-                    <span className="text-white font-black">
-                      {Math.floor(tripStats.duration / 60)}h {tripStats.duration % 60}m
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[8px] uppercase text-slate-500 block">Tolls Est</span>
-                    <span className="text-amber-300 font-black">₹{estimatedToll}</span>
-                  </div>
-                </div>
-
-                {/* CSS Barcode stub */}
-                <div className="pt-4 flex flex-col items-center gap-1.5">
-                  <div className="flex items-center justify-center gap-[1px] h-10 w-full bg-white/5 rounded p-1.5 overflow-hidden opacity-60">
-                    {[1,2,1,3,1,2,4,1,2,1,3,2,1,4,1,2,3,1,2,1,4,2,1,2,3,1,2,1,4].map((width, i) => (
-                      <div
-                        key={i}
-                        className="bg-slate-300 h-full shrink-0"
-                        style={{ width: `${width}px` }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[8px] tracking-[0.25em] font-mono text-slate-500 uppercase">
-                    SH-{Math.round(tripStats.distance * 100)}-{tripStops.length}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={async () => {
-                    const shareUrl = activeTripPlanId 
-                      ? `${window.location.origin}/trip/${activeTripPlanId}` 
-                      : `${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(tripStops.map(s => s.id).join(","))}&sourceName=${encodeURIComponent(tripSource)}&destName=${encodeURIComponent(tripDest)}&trailName=${encodeURIComponent(tripPlanName)}`;
-                    await navigator.clipboard.writeText(shareUrl);
-                    setCopyShareMessage("Map route link copied to clipboard!");
+                    const waText = generateWhatsAppShareText();
+                    await navigator.clipboard.writeText(waText);
+                    setCopyShareMessage("WhatsApp text copied! Ready to paste.");
                   }}
-                  className="rounded-xl bg-teal-400 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-teal-350 active:scale-98 transition duration-150 cursor-pointer shadow-lg shadow-teal-500/15"
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 py-3.5 text-[11px] font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/15 active:scale-[0.98] transition-all duration-150 cursor-pointer"
                 >
-                  🔗 Copy Link
+                  💬 Copy for WhatsApp
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleGeneratePostcard}
-                  className="rounded-xl border border-amber-400/40 bg-amber-500/10 py-3 text-xs font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/20 active:scale-98 transition duration-150 cursor-pointer"
-                >
-                  📸 Save Card
-                </button>
+                {(postcardMessage || copyShareMessage) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`text-[11px] font-bold text-center py-2.5 px-4 rounded-xl border ${
+                      postcardMessage
+                        ? "text-amber-300 bg-amber-400/10 border-amber-400/20"
+                        : "text-teal-300 bg-teal-400/10 border-teal-400/20"
+                    }`}
+                  >
+                    {postcardMessage || copyShareMessage}
+                  </motion.div>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={async () => {
-                  const waText = generateWhatsAppShareText();
-                  await navigator.clipboard.writeText(waText);
-                  setCopyShareMessage("WhatsApp formatted text copied! Ready to paste.");
-                }}
-                className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-3 text-xs font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/20 active:scale-98 transition duration-150 cursor-pointer"
-              >
-                💬 Copy for WhatsApp (Emoji Rich)
-              </button>
-
-              {postcardMessage && (
-                <div className="text-xs font-black text-amber-300 bg-amber-400/10 border border-amber-400/20 p-2.5 rounded-lg text-center animate-slide-down">
-                  {postcardMessage}
-                </div>
-              )}
-
-              {copyShareMessage && (
-                <div className="text-xs font-black text-teal-300 bg-teal-400/10 border border-teal-400/20 p-2.5 rounded-lg text-center animate-slide-down">
-                  {copyShareMessage}
-                </div>
-              )}
             </div>
           </motion.div>
         </motion.div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Bell, Bookmark, ChevronRight, Compass, Lock, LogOut, Mail, MapPin, Radio, Shield, Sparkles, Star, User, Folder, Plus, X, Check, Trash2 } from "lucide-react";
+import { Bell, Bookmark, ChevronRight, Coffee, Compass, Lock, LogOut, Mail, MapPin, Radio, Shield, Sparkles, Star, User, Folder, Plus, X, Check, Trash2, Crown, Medal, Trophy, Zap, ChevronUp, Clock, RefreshCw, Search } from "lucide-react";
 import { Header } from "@/components/common/Header";
 import { BrandMark } from "@/components/common/BrandMark";
 import Link from "next/link";
@@ -19,10 +19,11 @@ import { BadgeShelf } from "@/components/profile/BadgeShelf";
 import { XPProgressBar } from "@/components/profile/XPProgressBar";
 import { clearOnboarding } from "@/hooks/useOnboarding";
 import { SheherPassCard } from "@/components/profile/SheherPassCard";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ExplorerPassport } from "@/components/profile/ExplorerPassport";
 import { AffiliateOffersCard } from "@/components/profile/AffiliateOffersCard";
 import useSWR from "swr";
+import { CITY_CENTERS } from "@/lib/pune-location";
 
 interface PrivateDiscoveryBrief {
   summary: {
@@ -71,6 +72,259 @@ interface SuggestionItem {
   userFullName?: string | null;
 }
 
+interface TopBadge {
+  id: string;
+  name: string;
+  emoji: string;
+  category: string;
+}
+
+interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  fullName: string;
+  totalXp: number;
+  level: number;
+  levelTitle: string;
+  progress: number;
+  badgeCount: number;
+  topBadges: TopBadge[];
+}
+
+const CITY_OPTIONS = ["All Cities", ...Object.keys(CITY_CENTERS)];
+
+const RANK_COLORS: Record<number, string> = {
+  1: "from-amber-400 via-yellow-300 to-amber-500",
+  2: "from-slate-300 via-slate-200 to-slate-400",
+  3: "from-amber-700 via-orange-500 to-amber-600",
+};
+
+const RANK_GLOW: Record<number, string> = {
+  1: "shadow-amber-500/30",
+  2: "shadow-slate-400/20",
+  3: "shadow-orange-600/20",
+};
+
+const RANK_BG: Record<number, string> = {
+  1: "bg-gradient-to-br from-amber-500/10 via-yellow-400/5 to-amber-600/10 border-amber-400/30",
+  2: "bg-gradient-to-br from-slate-400/10 via-slate-305/5 to-slate-500/10 border-slate-400/20",
+  3: "bg-gradient-to-br from-orange-600/10 via-amber-600/5 to-orange-700/10 border-orange-500/20",
+};
+
+interface Quest {
+  title: string;
+  desc: string;
+  reward: number;
+  icon: React.ReactNode;
+  color: string;
+  link: string;
+  linkText: string;
+}
+
+const getCityQuests = (city: string): Quest[] => [
+  {
+    title: "🌙 Late Night Wanderer",
+    desc: `Check-in or report crowd level at any street food stall or bar in ${city} after 10 PM.`,
+    reward: 50,
+    icon: <Clock size={16} className="text-amber-400" />,
+    color: "from-amber-500/20 to-yellow-500/5 border-amber-500/30 text-amber-300",
+    link: "/discover?category=food-stall",
+    linkText: "Find Stalls",
+  },
+  {
+    title: "☕ Nomad Workspace Vibe",
+    desc: `Leave a rating/review at a work-friendly cafe in ${city} to help fellow remote explorers.`,
+    reward: 30,
+    icon: <Coffee size={16} className="text-cyan-400" />,
+    color: "from-cyan-500/20 to-teal-500/5 border-cyan-500/30 text-cyan-300",
+    link: "/discover?category=cafe",
+    linkText: "Explore Cafes",
+  },
+  {
+    title: "⚡ Pulse Check Curator",
+    desc: `Submit a crowd report at any trending live event in ${city} to help check the city's active vibe.`,
+    reward: 40,
+    icon: <Compass size={16} className="text-emerald-400" />,
+    color: "from-emerald-500/20 to-teal-500/5 border-emerald-500/30 text-emerald-300",
+    link: "/discover?category=event",
+    linkText: "View Events",
+  },
+];
+
+function PodiumCard({ entry, animate }: { entry: LeaderboardEntry; animate: boolean }) {
+  const heights = { 1: "h-48 md:h-56", 2: "h-36 md:h-40", 3: "h-28 md:h-32" };
+  const sizes = { 1: "text-7xl", 2: "text-5xl", 3: "text-4xl" };
+  const order = { 1: "order-2", 2: "order-1", 3: "order-3" };
+
+  const podiumColors = {
+    1: "from-amber-400/25 via-yellow-400/10 to-amber-500/5 border-amber-400/40",
+    2: "from-slate-300/25 via-slate-200/10 to-slate-400/5 border-slate-400/30",
+    3: "from-amber-700/25 via-orange-500/10 to-amber-600/5 border-orange-500/30",
+  };
+
+  const ringColors = {
+    1: "ring-amber-400 shadow-amber-500/30 border-amber-400/40",
+    2: "ring-slate-400 shadow-slate-300/20 border-slate-400/30",
+    3: "ring-orange-600 shadow-orange-600/20 border-orange-500/30",
+  };
+
+  return (
+    <motion.div
+      initial={animate ? { opacity: 0, y: 40 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: entry.rank * 0.12, duration: 0.6, type: "spring", stiffness: 120 }}
+      className={`${order[entry.rank as 1 | 2 | 3]} flex flex-col items-center gap-3 w-24 sm:w-28 md:w-32`}
+    >
+      <div className="h-8 flex items-end">
+        {entry.rank === 1 && (
+          <motion.div
+            animate={{ rotate: [-6, 6, -6], y: [0, -3, 0] }}
+            transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+            className="drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]"
+          >
+            <Crown size={32} className="text-amber-400 fill-amber-400" />
+          </motion.div>
+        )}
+        {entry.rank === 2 && <Medal size={26} className="text-slate-300 drop-shadow-[0_0_6px_rgba(226,232,240,0.4)]" />}
+        {entry.rank === 3 && <Medal size={24} className="text-orange-500 drop-shadow-[0_0_6px_rgba(234,88,12,0.4)]" />}
+      </div>
+
+      <div className="relative group select-none">
+        <div className={`absolute inset-0 rounded-full blur-md opacity-40 scale-105 bg-gradient-to-tr ${RANK_COLORS[entry.rank]} transition group-hover:opacity-60 duration-300`} />
+        
+        <div
+          className={`relative flex h-16 w-16 items-center justify-center rounded-full bg-slate-950 font-black text-[var(--foreground)] text-xl border-2 ring-2 ring-offset-2 ring-offset-slate-950 transition duration-300 group-hover:scale-105 ${ringColors[entry.rank as 1 | 2 | 3]}`}
+        >
+          {entry.fullName.charAt(0).toUpperCase()}
+          
+          <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 border border-slate-955 text-[10px] font-black text-white shadow-md">
+            {entry.rank}
+          </span>
+        </div>
+      </div>
+
+      <div className="text-center w-full px-1">
+        <p className="truncate text-xs font-black text-[var(--foreground)] tracking-tight">
+          {entry.fullName}
+        </p>
+        <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--muted)] mt-0.5">{entry.levelTitle}</p>
+        
+        <div className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-cyan-950/30 border border-cyan-800/30 px-2 py-0.5 shadow-sm">
+          <Zap size={9} className="text-cyan-400 fill-cyan-400 animate-pulse animate-duration-1000" />
+          <span className="text-[10px] font-black text-cyan-300">{entry.totalXp.toLocaleString()}</span>
+        </div>
+
+        <div className="mt-1.5 flex justify-center gap-1">
+          {entry.topBadges.slice(0, 3).map((b) => (
+            <span
+              key={b.id}
+              title={b.name}
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 border border-slate-800 shadow-sm text-xs"
+            >
+              {b.emoji}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div
+        className={`w-full rounded-t-2xl bg-gradient-to-b border border-b-0 flex items-start justify-center pt-4 relative overflow-hidden backdrop-blur-md shadow-inner ${podiumColors[entry.rank as 1 | 2 | 3]} ${heights[entry.rank as 1 | 2 | 3]}`}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:10px_10px] opacity-30 pointer-events-none" />
+        
+        <span className={`${sizes[entry.rank as 1 | 2 | 3]} font-black opacity-15 tracking-tighter text-white select-none`}>
+          {entry.rank}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+function RankRow({ entry, isCurrentUser, animate, index }: {
+  entry: LeaderboardEntry;
+  isCurrentUser: boolean;
+  animate: boolean;
+  index: number;
+}) {
+  return (
+    <motion.div
+      initial={animate ? { opacity: 0, x: -16 } : false}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.03, duration: 0.4 }}
+      whileHover={{ scale: 1.008, y: -1 }}
+      className={`relative flex items-center gap-3 rounded-xl border p-3.5 shadow-sm transition-all duration-200 ${
+        isCurrentUser
+          ? "border-cyan-500/40 bg-gradient-to-r from-cyan-500/10 via-teal-500/5 to-slate-950/20 shadow-md shadow-cyan-900/5"
+          : entry.rank <= 3
+          ? `${RANK_BG[entry.rank as 1 | 2 | 3]} shadow-md`
+          : "border-[var(--border)] bg-[var(--panel-soft)] hover:border-teal-500/20 hover:bg-[var(--panel)]"
+      }`}
+    >
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+          entry.rank <= 3
+            ? `bg-gradient-to-br ${RANK_COLORS[entry.rank as 1|2|3]} text-slate-950 shadow-md`
+            : "bg-[var(--panel)] text-[var(--muted-strong)] border border-[var(--border)]"
+        }`}
+      >
+        {entry.rank <= 3 ? (
+          entry.rank === 1 ? <Crown size={14} className="fill-slate-950" /> : <Medal size={14} />
+        ) : (
+          entry.rank
+        )}
+      </div>
+
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border border-[var(--border)] text-xs font-black text-[var(--foreground)]">
+        {entry.fullName.charAt(0).toUpperCase()}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="truncate font-black text-[var(--foreground)] text-xs sm:text-sm">
+            {entry.fullName}
+            {isCurrentUser && (
+              <span className="ml-1.5 rounded-full bg-cyan-400 text-slate-950 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider">
+                You
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="mt-1 flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-black text-[var(--muted)] bg-slate-900/40 border border-slate-800 px-1.5 py-0.5 rounded-lg">
+            Lv.{entry.level} · {entry.levelTitle}
+          </span>
+          <div className="flex items-center gap-1">
+            {entry.topBadges.slice(0, 3).map((b) => (
+              <span key={b.id} title={b.name} className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] border border-slate-850">
+                {b.emoji}
+              </span>
+            ))}
+          </div>
+        </div>
+        
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[var(--border)] p-[1px]">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${entry.progress}%` }}
+            transition={{ delay: index * 0.03 + 0.15, duration: 0.5, ease: "easeOut" }}
+            className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400"
+          />
+        </div>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <div className="flex items-center gap-1 justify-end">
+          <Zap size={11} className="text-cyan-400 fill-cyan-400 animate-pulse animate-duration-1000" />
+          <span className="font-black text-[var(--foreground)] text-xs sm:text-sm">{entry.totalXp.toLocaleString()}</span>
+        </div>
+        <p className="text-[9px] font-black uppercase tracking-wide text-[var(--muted)] mt-0.5">
+          {entry.badgeCount} badge{entry.badgeCount !== 1 ? "s" : ""}
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
 const fetcher = (url: string) => fetch(url).then((res) => {
   if (!res.ok) throw new Error("Failed to load data");
   return res.json();
@@ -93,6 +347,63 @@ export default function ProfilePage() {
   const [newSuggestion, setNewSuggestion] = useState("");
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
   const { stats: gamificationStats, refresh: refreshGamificationStats } = useBadges(!!user);
+
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<"profile" | "leaderboard">("profile");
+
+  useEffect(() => {
+    if (tabParam === "leaderboard") {
+      setActiveTab("leaderboard");
+    } else if (tabParam === "overview") {
+      setActiveTab("profile");
+    }
+  }, [tabParam]);
+
+  // Leaderboard states
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
+  const [leaderboardError, setLeaderboardError] = useState("");
+  const [cityFilter, setCityFilter] = useState("All Cities");
+  const [leaderboardSearch, setLeaderboardSearch] = useState("");
+  const [refreshingLeaderboard, setRefreshingLeaderboard] = useState(false);
+  const [animate, setAnimate] = useState(true);
+
+  const fetchLeaderboard = async (forceRefresh = false) => {
+    if (forceRefresh) setRefreshingLeaderboard(true);
+    else setLeaderboardLoading(true);
+    setLeaderboardError("");
+    setAnimate(true);
+    try {
+      const city = cityFilter !== "All Cities" ? `&city=${encodeURIComponent(cityFilter)}` : "";
+      const res = await fetch(`/api/leaderboard?limit=50${city}`, {
+        cache: forceRefresh ? "no-store" : "default",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to load leaderboard.");
+      setLeaderboardData(json.leaderboard || []);
+    } catch (err: any) {
+      setLeaderboardError(err.message);
+    } finally {
+      setLeaderboardLoading(false);
+      setRefreshingLeaderboard(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "leaderboard") {
+      fetchLeaderboard();
+    }
+  }, [activeTab, cityFilter]);
+
+  const filteredLeaderboard = useMemo(() => {
+    if (!leaderboardSearch.trim()) return leaderboardData;
+    const q = leaderboardSearch.toLowerCase();
+    return leaderboardData.filter((e) => e.fullName.toLowerCase().includes(q));
+  }, [leaderboardData, leaderboardSearch]);
+
+  const leaderboardTop3 = filteredLeaderboard.slice(0, 3);
+  const myLeaderboardEntry = user ? leaderboardData.find((e) => e.userId === (user as any).id) : null;
 
   // Admin Management Modal states
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -559,686 +870,891 @@ export default function ProfilePage() {
         </motion.aside>
 
         <main className="min-w-0 space-y-5">
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.42, delay: 0.03 }}
-            className="rounded-lg border border-teal-300/20 bg-[var(--panel)] p-4 sm:p-5"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0">
-                <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-teal-200">
-                  <Lock size={13} />
-                  Private Discovery
-                </p>
-                <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">
-                  Your Personal City Brief
-                </h2>
-                <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[var(--muted)]">
-                  {privateMode
-                    ? privateBrief?.summary.privacy ?? "Computed privately from your saved places and collections."
-                    : "Turn this on to see picks shaped by your saved places and collections."}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPrivateMode((current) => !current)}
-                  className={`inline-flex h-10 items-center justify-center rounded-lg px-3 text-xs font-black transition ${
-                    privateMode
-                      ? "bg-teal-300 text-slate-950"
-                      : "border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)]"
-                  }`}
-                >
-                  {privateMode ? "Private On" : "Turn On"}
-                </button>
-                {privateMode && (
-                  <button
-                    type="button"
-                    onClick={() => mutatePrivateBrief()}
-                    disabled={privateBriefLoading}
-                    className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)] disabled:opacity-50"
-                  >
-                    {privateBriefLoading ? "Updating..." : "Refresh"}
-                  </button>
-                )}
-              </div>
-            </div>
+          {/* Main Tab bar */}
+          <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2 mb-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-wider relative transition cursor-pointer ${
+                activeTab === "profile" ? "text-teal-300 font-black" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Overview
+              {activeTab === "profile" && (
+                <motion.div layoutId="profileActiveTab" className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("leaderboard")}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-wider relative transition cursor-pointer ${
+                activeTab === "leaderboard" ? "text-teal-300 font-black" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Leaderboard
+              {activeTab === "leaderboard" && (
+                <motion.div layoutId="profileActiveTab" className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400" />
+              )}
+            </button>
+          </div>
 
-            {!privateMode ? (
-              <div className="mt-5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-sm font-semibold text-[var(--muted)]">
-                Private discovery is paused. Your saved places still stay in your account.
-              </div>
-            ) : privateBriefLoading && !privateBrief ? (
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-32 animate-pulse rounded-lg bg-[var(--panel-soft)]" />
-                ))}
-              </div>
-            ) : privateBriefError ? (
-              <div className="mt-5 rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-sm font-semibold text-rose-200">
-                {privateBriefError}
-              </div>
-            ) : privateBrief ? (
-              <div className="mt-5 space-y-5">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {[
-                    { label: "Saved signal", value: privateBrief.summary.savedCount.toString() },
-                    { label: "Collections", value: privateBrief.summary.collectionCount.toString() },
-                    { label: "Best city", value: privateBrief.summary.primaryCity },
-                  ].map((stat) => (
-                    <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
-                      <p className="truncate text-lg font-black text-[var(--foreground)]">{stat.value}</p>
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-[1fr_0.78fr]">
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-black text-[var(--foreground)]">Private picks to try next</h3>
-                      <Link href="/discover" className="inline-flex items-center gap-1 text-xs font-black text-teal-300">
-                        Discover
-                        <ChevronRight size={14} />
-                      </Link>
-                    </div>
-                    <div className="grid gap-3 xl:grid-cols-2">
-                      {privatePickPlaces.length > 0 ? (
-                        privatePickPlaces.map((place) => {
-                          return (
-                            <button
-                              key={place.id}
-                              type="button"
-                              onClick={() => setSelectedPlace(place)}
-                              className="group grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 text-left transition hover:border-teal-300/40"
-                            >
-                              <div className="relative h-20 overflow-hidden rounded-md bg-slate-900">
-                                <Image
-                                  src={place.image}
-                                  alt={place.title}
-                                  fill
-                                  sizes="72px"
-                                  className="object-cover transition duration-500 group-hover:scale-105"
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
-                                  {getCategoryLabel(place.category)}
-                                </p>
-                                <h4 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h4>
-                                <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--muted)]">{place.reason}</p>
-                                <p className="mt-1 flex items-center gap-2 text-[11px] font-bold text-[var(--muted-strong)]">
-                                  <MapPin size={11} className="text-cyan-300" />
-                                  {place.locality}
-                                  <Star size={11} className="fill-yellow-300 text-yellow-300" />
-                                  {place.rating}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-sm font-semibold text-[var(--muted)] xl:col-span-2">
-                          Save a few places first and this will become a personal shortlist.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
-                      <h3 className="text-sm font-black text-[var(--foreground)]">Signals</h3>
-                      <div className="mt-3 space-y-2">
-                        {privateBrief.insights.map((insight) => (
-                          <p key={insight} className="rounded-md bg-[var(--panel)] px-3 py-2 text-xs font-semibold leading-5 text-[var(--muted-strong)]">
-                            {insight}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-amber-300/20 bg-amber-300/8 p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-sm font-black text-[var(--foreground)]">Explorer Pass value</h3>
-                        {!user.isPremiumPass && <Lock size={15} className="text-amber-300" />}
-                      </div>
-                      <div className="mt-3 space-y-2">
-                        {privateBrief.premiumUnlocks.slice(0, 2).map((pick) => (
-                          <div key={pick.id} className="rounded-md border border-amber-300/10 bg-[var(--panel)] p-3">
-                            <p className="text-xs font-black text-amber-200">{pick.title}</p>
-                            <p className="mt-1 text-[11px] font-semibold leading-5 text-[var(--muted)]">
-                              {user.isPremiumPass ? pick.privateSignal : "Hidden matching reason, deal readiness, and extended shortlist."}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
-                      <h3 className="text-sm font-black text-[var(--foreground)]">Next moves</h3>
-                      <div className="mt-3 space-y-2">
-                        {privateBrief.nextMoves.map((move) => (
-                          <p key={move} className="flex gap-2 text-xs font-semibold leading-5 text-[var(--muted-strong)]">
-                            <Sparkles size={13} className="mt-0.5 shrink-0 text-teal-300" />
-                            {move}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </motion.section>
-
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.42, delay: 0.05 }}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Saved collection</p>
-                <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Places To Try Next</h2>
-              </div>
-              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-sm font-bold text-[var(--muted-strong)]">
-                <Bookmark size={15} />
-                {savedPlaces.length} saved
-              </span>
-            </div>
-
-            {/* Folders switcher tab row */}
-            <div className="no-scrollbar mt-5 flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setActiveFolderId(null)}
-                className={`relative px-4 py-2 text-xs font-black uppercase tracking-wider transition shrink-0 ${
-                  activeFolderId === null ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
-                }`}
+          {activeTab === "profile" ? (
+            <>
+              <motion.section
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.42, delay: 0.03 }}
+                className="rounded-lg border border-teal-300/20 bg-[var(--panel)] p-4 sm:p-5"
               >
-                All ({savedPlaces.filter((p) => savedPlaceIds.has(p.id)).length})
-                {activeFolderId === null && (
-                  <motion.div
-                    layoutId="activeFolderTab"
-                    className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400"
-                  />
-                )}
-              </button>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-teal-200">
+                      <Lock size={13} />
+                      Private Discovery
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">
+                      Your Personal City Brief
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[var(--muted)]">
+                      {privateMode
+                        ? privateBrief?.summary.privacy ?? "Computed privately from your saved places and collections."
+                        : "Turn this on to see picks shaped by your saved places and collections."}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPrivateMode((current) => !current)}
+                      className={`inline-flex h-10 items-center justify-center rounded-lg px-3 text-xs font-black transition ${
+                        privateMode
+                          ? "bg-teal-300 text-slate-950"
+                          : "border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)]"
+                      }`}
+                    >
+                      {privateMode ? "Private On" : "Turn On"}
+                    </button>
+                    {privateMode && (
+                      <button
+                        type="button"
+                        onClick={() => mutatePrivateBrief()}
+                        disabled={privateBriefLoading}
+                        className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel-strong)] disabled:opacity-50"
+                      >
+                        {privateBriefLoading ? "Updating..." : "Refresh"}
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-              {folders.map((f) => {
-                const isActive = activeFolderId === f.id;
-                return (
+                {!privateMode ? (
+                  <div className="mt-5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-sm font-semibold text-[var(--muted)]">
+                    Private discovery is paused. Your saved places still stay in your account.
+                  </div>
+                ) : privateBriefLoading && !privateBrief ? (
+                  <div className="mt-5 grid gap-3 md:grid-cols-3">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="h-32 animate-pulse rounded-lg bg-[var(--panel-soft)]" />
+                    ))}
+                  </div>
+                ) : privateBriefError ? (
+                  <div className="mt-5 rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-sm font-semibold text-rose-200">
+                    {privateBriefError}
+                  </div>
+                ) : privateBrief ? (
+                  <div className="mt-5 space-y-5">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {[
+                        { label: "Saved signal", value: privateBrief.summary.savedCount.toString() },
+                        { label: "Collections", value: privateBrief.summary.collectionCount.toString() },
+                        { label: "Best city", value: privateBrief.summary.primaryCity },
+                      ].map((stat) => (
+                        <div key={stat.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+                          <p className="truncate text-lg font-black text-[var(--foreground)]">{stat.value}</p>
+                          <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">{stat.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-3 lg:grid-cols-[1fr_0.78fr]">
+                      <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <h3 className="text-sm font-black text-[var(--foreground)]">Private picks to try next</h3>
+                          <Link href="/discover" className="inline-flex items-center gap-1 text-xs font-black text-teal-300">
+                            Discover
+                            <ChevronRight size={14} />
+                          </Link>
+                        </div>
+                        <div className="grid gap-3 xl:grid-cols-2">
+                          {privatePickPlaces.length > 0 ? (
+                            privatePickPlaces.map((place) => {
+                              return (
+                                <button
+                                  key={place.id}
+                                  type="button"
+                                  onClick={() => setSelectedPlace(place)}
+                                  className="group grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 text-left transition hover:border-teal-300/40"
+                                >
+                                  <div className="relative h-20 overflow-hidden rounded-md bg-slate-900">
+                                    <Image
+                                      src={place.image}
+                                      alt={place.title}
+                                      fill
+                                      sizes="72px"
+                                      className="object-cover transition duration-500 group-hover:scale-105"
+                                    />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+                                      {getCategoryLabel(place.category)}
+                                    </p>
+                                    <h4 className="mt-1 line-clamp-1 text-sm font-black text-[var(--foreground)]">{place.title}</h4>
+                                    <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--muted)]">{place.reason}</p>
+                                    <p className="mt-1 flex items-center gap-2 text-[11px] font-bold text-[var(--muted-strong)]">
+                                      <MapPin size={11} className="text-cyan-300" />
+                                      {place.locality}
+                                      <Star size={11} className="fill-yellow-300 text-yellow-300" />
+                                      {place.rating}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-sm font-semibold text-[var(--muted)] xl:col-span-2">
+                              Save a few places first and this will become a personal shortlist.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                          <h3 className="text-sm font-black text-[var(--foreground)]">Signals</h3>
+                          <div className="mt-3 space-y-2">
+                            {privateBrief.insights.map((insight) => (
+                              <p key={insight} className="rounded-md bg-[var(--panel)] px-3 py-2 text-xs font-semibold leading-5 text-[var(--muted-strong)]">
+                                {insight}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-amber-300/20 bg-amber-300/8 p-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-black text-[var(--foreground)]">Explorer Pass value</h3>
+                            {!user.isPremiumPass && <Lock size={15} className="text-amber-300" />}
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {privateBrief.premiumUnlocks.slice(0, 2).map((pick) => (
+                              <div key={pick.id} className="rounded-md border border-amber-300/10 bg-[var(--panel)] p-3">
+                                <p className="text-xs font-black text-amber-200">{pick.title}</p>
+                                <p className="mt-1 text-[11px] font-semibold leading-5 text-[var(--muted)]">
+                                  {user.isPremiumPass ? pick.privateSignal : "Hidden matching reason, deal readiness, and extended shortlist."}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                          <h3 className="text-sm font-black text-[var(--foreground)]">Next moves</h3>
+                          <div className="mt-3 space-y-2">
+                            {privateBrief.nextMoves.map((move) => (
+                              <p key={move} className="flex gap-2 text-xs font-semibold leading-5 text-[var(--muted-strong)]">
+                                <Sparkles size={13} className="mt-0.5 shrink-0 text-teal-300" />
+                                {move}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </motion.section>
+
+              <motion.section
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.42, delay: 0.05 }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Saved collection</p>
+                    <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Places To Try Next</h2>
+                  </div>
+                  <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-sm font-bold text-[var(--muted-strong)]">
+                    <Bookmark size={15} />
+                    {savedPlaces.length} saved
+                  </span>
+                </div>
+
+                <div className="no-scrollbar mt-5 flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-[var(--border)]">
                   <button
-                    key={f.id}
                     type="button"
-                    onClick={() => setActiveFolderId(f.id)}
+                    onClick={() => setActiveFolderId(null)}
                     className={`relative px-4 py-2 text-xs font-black uppercase tracking-wider transition shrink-0 ${
-                      isActive ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
+                      activeFolderId === null ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    📁 {f.name} ({f.placeIds.length})
-                    {isActive && (
+                    All ({savedPlaces.filter((p) => savedPlaceIds.has(p.id)).length})
+                    {activeFolderId === null && (
                       <motion.div
                         layoutId="activeFolderTab"
                         className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400"
                       />
                     )}
                   </button>
-                );
-              })}
 
-              <button
-                type="button"
-                onClick={() => setShowCreateFolderModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-teal-500/30 text-teal-300 text-xs font-black hover:bg-teal-400/10 transition shrink-0 ml-auto cursor-pointer"
-              >
-                <Plus size={12} />
-                New Collection
-              </button>
-            </div>
-
-            {/* Selected Folder Header Panel */}
-            {activeFolderId && (
-              <div className="mt-4 flex items-center justify-between gap-4 bg-teal-500/5 border border-teal-500/10 rounded-xl p-3.5">
-                <div>
-                  <h4 className="text-sm font-black text-white">
-                    Collection: {folders.find((f) => f.id === activeFolderId)?.name}
-                  </h4>
-                  <p className="text-[11px] font-semibold text-[var(--muted)]">
-                    Only showing spots saved in this collection.
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDeleteFolder(activeFolderId)}
-                  disabled={deletingFolderId === activeFolderId}
-                  className="inline-flex items-center justify-center p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition cursor-pointer disabled:opacity-50"
-                  title="Delete Collection"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            )}
-
-            <div className="mt-5 grid gap-3 xl:grid-cols-2">
-              {displayedSavedPlaces.length > 0 ? displayedSavedPlaces.map((place) => (
-                <div
-                  key={place.id}
-                  className="group relative grid grid-cols-[82px_minmax(0,1fr)] gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 text-left transition hover:bg-[var(--panel-strong)] sm:grid-cols-[96px_minmax(0,1fr)]"
-                >
-                  {/* Click trigger background */}
-                  <div
-                    onClick={() => setSelectedPlace(place)}
-                    className="absolute inset-0 cursor-pointer z-0"
-                  />
-
-                  {/* Thumbnail image */}
-                  <div className="relative h-24 overflow-hidden rounded-lg bg-slate-900 z-10 pointer-events-none">
-                    <Image
-                      src={place.image}
-                      alt={`${place.title} in ${place.locality}`}
-                      fill
-                      sizes="96px"
-                      className="transition duration-500 group-hover:scale-105"
-                    />
-                  </div>
-
-                  {/* Card Content */}
-                  <div className="min-w-0 flex flex-col justify-between pr-8">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--muted)]">
-                        {getCategoryLabel(place.category)}
-                      </p>
-                      <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)]">{place.title}</h3>
-                      <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)] leading-relaxed">{place.description}</p>
-                      <p className="mt-1.5 flex items-start gap-1 text-xs font-semibold leading-4 text-[var(--muted-strong)]">
-                        <MapPin size={12} className="mt-0.5 shrink-0 text-cyan-300" />
-                        <span className="line-clamp-2">{formatPlaceArea(place)}</span>
-                      </p>
-                    </div>
-
-                    <div className="mt-2 flex items-center gap-3 text-xs font-bold text-[var(--muted-strong)]">
-                      <span>{formatDistance(place.distance)} away</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Star size={13} className="fill-yellow-300 text-yellow-300" />
-                        {place.rating}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Action Controls top right */}
-                  <div className="absolute right-2 top-2 z-25 flex items-center gap-1">
-                    {/* Collection dropdown toggle */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveDropdownPlaceId((current) => (current === place.id ? null : place.id));
-                      }}
-                      className={`p-1.5 rounded-lg transition cursor-pointer ${
-                        activeDropdownPlaceId === place.id
-                          ? "bg-teal-400/20 text-teal-300"
-                          : "text-slate-400 hover:text-teal-300 hover:bg-teal-400/10"
-                      }`}
-                      title="Manage Collection"
-                    >
-                      <Folder size={14} />
-                    </button>
-
-                    {/* Unsave Bookmark */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm("Remove this place from your saved list?")) {
-                          toggleSave(place);
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
-                      title="Unsave Spot"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-
-                  {/* Manage Collection dropdown popover overlay */}
-                  <AnimatePresence>
-                    {activeDropdownPlaceId === place.id && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="absolute right-2 top-11 z-30 w-48 rounded-xl border border-[var(--border)] bg-[var(--panel-strong)] p-2 shadow-2xl space-y-1 text-left"
+                  {folders.map((f) => {
+                    const isActive = activeFolderId === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setActiveFolderId(f.id)}
+                        className={`relative px-4 py-2 text-xs font-black uppercase tracking-wider transition shrink-0 ${
+                          isActive ? "text-teal-300" : "text-slate-400 hover:text-slate-200"
+                        }`}
                       >
-                        <div className="flex items-center justify-between border-b border-white/5 pb-1 px-1 mb-1">
-                          <span className="text-[10px] font-black uppercase text-slate-400">Collections</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveDropdownPlaceId(null);
-                            }}
-                            className="text-slate-400 hover:text-white"
-                          >
-                            <X size={12} />
-                          </button>
+                        📁 {f.name} ({f.placeIds.length})
+                        {isActive && (
+                          <motion.div
+                            layoutId="activeFolderTab"
+                            className="absolute inset-x-0 bottom-0 h-0.5 bg-teal-400"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateFolderModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-teal-500/30 text-teal-300 text-xs font-black hover:bg-teal-400/10 transition shrink-0 ml-auto cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    New Collection
+                  </button>
+                </div>
+
+                {activeFolderId && (
+                  <div className="mt-4 flex items-center justify-between gap-4 bg-teal-500/5 border border-teal-500/10 rounded-xl p-3.5">
+                    <div>
+                      <h4 className="text-sm font-black text-white">
+                        Collection: {folders.find((f) => f.id === activeFolderId)?.name}
+                      </h4>
+                      <p className="text-[11px] font-semibold text-[var(--muted)]">
+                        Only showing spots saved in this collection.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteFolder(activeFolderId)}
+                      disabled={deletingFolderId === activeFolderId}
+                      className="inline-flex items-center justify-center p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition cursor-pointer disabled:opacity-50"
+                      title="Delete Collection"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                  {displayedSavedPlaces.length > 0 ? displayedSavedPlaces.map((place) => (
+                    <div
+                      key={place.id}
+                      className="group relative grid grid-cols-[82px_minmax(0,1fr)] gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3 text-left transition hover:bg-[var(--panel-strong)] sm:grid-cols-[96px_minmax(0,1fr)]"
+                    >
+                      <div
+                        onClick={() => setSelectedPlace(place)}
+                        className="absolute inset-0 cursor-pointer z-0"
+                      />
+
+                      <div className="relative h-24 overflow-hidden rounded-lg bg-slate-900 z-10 pointer-events-none">
+                        <Image
+                          src={place.image}
+                          alt={`${place.title} in ${place.locality}`}
+                          fill
+                          sizes="96px"
+                          className="transition duration-500 group-hover:scale-105"
+                        />
+                      </div>
+
+                      <div className="min-w-0 flex flex-col justify-between pr-8">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+                            {getCategoryLabel(place.category)}
+                          </p>
+                          <h3 className="mt-1 line-clamp-1 font-black text-[var(--foreground)]">{place.title}</h3>
+                          <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)] leading-relaxed">{place.description}</p>
+                          <p className="mt-1.5 flex items-start gap-1 text-xs font-semibold leading-4 text-[var(--muted-strong)]">
+                            <MapPin size={12} className="mt-0.5 shrink-0 text-cyan-300" />
+                            <span className="line-clamp-2">{formatPlaceArea(place)}</span>
+                          </p>
                         </div>
 
-                        {folders.length === 0 ? (
-                          <p className="text-[10px] text-slate-500 font-semibold p-2 text-center">No collections created yet.</p>
-                        ) : (
-                          <div className="max-h-36 overflow-y-auto space-y-0.5">
-                            {folders.map((f) => {
-                              const inFolder = f.placeIds.includes(place.id);
-                              return (
-                                <button
-                                  key={f.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTogglePlaceInFolder(place.id, f.id, inFolder);
-                                  }}
-                                  className="w-full flex items-center justify-between text-left rounded-md px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition font-semibold"
-                                >
-                                  <span className="truncate">📁 {f.name}</span>
-                                  {inFolder ? (
-                                    <Check size={12} className="text-teal-400 font-black shrink-0" />
-                                  ) : (
-                                    <Plus size={12} className="text-slate-600 shrink-0" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
+                        <div className="mt-2 flex items-center gap-3 text-xs font-bold text-[var(--muted-strong)]">
+                          <span>{formatDistance(place.distance)} away</span>
+                          <span className="inline-flex items-center gap-1">
+                            <Star size={13} className="fill-yellow-300 text-yellow-300" />
+                            {place.rating}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="absolute right-2 top-2 z-25 flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDropdownPlaceId((current) => (current === place.id ? null : place.id));
+                          }}
+                          className={`p-1.5 rounded-lg transition cursor-pointer ${
+                            activeDropdownPlaceId === place.id
+                              ? "bg-teal-400/20 text-teal-300"
+                              : "text-slate-400 hover:text-teal-300 hover:bg-teal-400/10"
+                          }`}
+                          title="Manage Collection"
+                        >
+                          <Folder size={14} />
+                        </button>
 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setShowCreateFolderModal(true);
-                            setActiveDropdownPlaceId(null);
+                            if (window.confirm("Remove this place from your saved list?")) {
+                              toggleSave(place);
+                            }
                           }}
-                          className="w-full flex items-center justify-center gap-1 border border-dashed border-teal-500/30 text-teal-300 hover:bg-teal-500/10 rounded-lg py-1.5 text-[10px] font-black transition cursor-pointer mt-1"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                          title="Unsave Spot"
                         >
-                          <Plus size={10} />
-                          New Collection
+                          <X size={14} />
                         </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )) : (
-                <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-center text-sm font-semibold text-[var(--muted)] xl:col-span-2">
-                  <Bookmark size={28} className="mx-auto mb-3 text-teal-300" />
-                  <p className="text-base font-black text-[var(--foreground)]">No saved places yet</p>
-                  <p className="mx-auto mt-1 max-w-sm">Start a shortlist from Discover, then group your favorite spots into collections.</p>
-                  <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
-                    <Link
-                      href="/discover"
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-[var(--primary-foreground)]"
-                    >
-                      <Compass size={14} />
-                      Explore Places
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateFolderModal(true)}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-xs font-black text-[var(--foreground)]"
-                    >
-                      <Plus size={14} />
-                      Create Collection
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.section>
-
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.42, delay: 0.1 }}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Account overview</p>
-                <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Discovery Board</h2>
-              </div>
-              <Sparkles className="text-amber-300" size={24} />
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {[
-                {
-                  icon: <Bookmark size={17} />,
-                  title: savedPlaces.length > 0 ? `${savedPlaces.length} saved places` : "No saved places yet",
-                  detail:
-                    savedPlaces.length > 0
-                      ? `Your saved list spans ${savedCities.length} ${savedCities.length === 1 ? "city" : "cities"}.`
-                      : "Save a place from Home or Discover and it will appear here.",
-                },
-                {
-                  icon: <MapPin size={17} />,
-                  title: `Top saved city: ${topSavedCity}`,
-                  detail:
-                    savedPlaces.length > 0
-                      ? "Use this as your quick shortlist when planning where to go next."
-                      : "Mumbai, Kolhapur, Nashik, Pune, Bangalore, Chennai, and Delhi are now available to explore.",
-                },
-                {
-                  icon: <Compass size={17} />,
-                  title: user.role === "super_admin" ? "Super admin access active" : "Explorer account active",
-                  detail:
-                    user.role === "super_admin"
-                      ? "You can manage super admin access through the protected admin role endpoint."
-                      : "You can save places and submit live crowd reports when signed in.",
-                },
-              ].map((item) => (
-                <div key={item.title} className="flex gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--panel)] text-[var(--fresh)]">
-                    {item.icon}
-                  </span>
-                  <div>
-                    <h3 className="font-bold text-[var(--foreground)]">{item.title}</h3>
-                    <p className="mt-1 text-sm text-[var(--muted)]">{item.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.section>
-
-          {/* ── Explorer Stats & Badges ── */}
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.42, delay: 0.12 }}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
-          >
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Gamification</p>
-                <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Explorer Stats</h2>
-              </div>
-              <span className="text-2xl">🏅</span>
-            </div>
-
-            {gamificationStats ? (
-              <>
-                <XPProgressBar
-                  totalXp={gamificationStats.totalXp}
-                  level={gamificationStats.level}
-                  title={gamificationStats.title}
-                  progress={gamificationStats.progress}
-                  xpForLevel={gamificationStats.xpForLevel}
-                  xpForNext={gamificationStats.xpForNext}
-                />
-                <div className="mt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)] mb-1">Badge Collection</p>
-                  <BadgeShelf earnedBadgeIds={gamificationStats.badges.map((b) => b.badge_id)} />
-                </div>
-              </>
-            ) : (
-              <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-sm font-semibold text-[var(--muted)] text-center">
-                Earn XP by saving places, submitting crowd reports, and suggesting new spots.
-              </div>
-            )}
-          </motion.section>
-
-          {/* ── Explorer Passport & City Stamps ── */}
-          {user && (
-            <motion.section
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.42, delay: 0.14 }}
-            >
-              <ExplorerPassport
-                savedPlaces={rawSavedPlaces}
-                onStampClaimed={() => {
-                  refreshGamificationStats();
-                  window.dispatchEvent(new Event("sheher:refresh-badges"));
-                }}
-              />
-            </motion.section>
-          )}
-
-          {user?.role === "super_admin" && (
-            <motion.section
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.42, delay: 0.15 }}
-              className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Moderation Queue</p>
-                  <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Pending Place Suggestions</h2>
-                  <p className="mt-1 text-sm text-[var(--muted)]">Review suggestions from the community before publishing them live.</p>
-                </div>
-                <button
-                  onClick={() => mutateSuggestions()}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-xs font-black text-teal-300 hover:bg-[var(--panel-strong)] cursor-pointer"
-                >
-                  Refresh Queue
-                </button>
-              </div>
-
-              <div className="mt-5 space-y-4">
-                {loadingSuggestions ? (
-                  <p className="text-sm font-semibold text-[var(--muted)]">Loading suggestions queue...</p>
-                ) : errorSuggestions ? (
-                  <p className="text-sm font-semibold text-rose-300">{errorSuggestions}</p>
-                ) : suggestions.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-6 text-center text-sm font-semibold text-[var(--muted)]">
-                    All clear! No pending place suggestions.
-                  </div>
-                ) : (
-                  suggestions.map((s) => (
-                    <div
-                      key={s.id}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4 flex flex-col gap-4 sm:flex-row sm:items-start justify-between"
-                    >
-                      <div className="space-y-1.5 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded bg-teal-400/10 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-teal-300">
-                            {getCategoryLabel(s.category)}
-                          </span>
-                          <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-slate-300">
-                            {s.priceRange}
-                          </span>
-                          <span className="text-xs text-[var(--muted)] font-bold">
-                            in {formatPlaceArea(s)}
-                          </span>
-                        </div>
-                        <h3 className="text-base font-black text-[var(--foreground)] leading-snug">{s.title}</h3>
-                        <p className="text-sm text-[var(--muted)] font-medium leading-relaxed">{s.description}</p>
-
-                        {/* Meta Fields */}
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1.5 text-xs font-bold text-[var(--muted-strong)]">
-                          {s.hours && (
-                            <span className="flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                              Hours: {s.hours}
-                            </span>
-                          )}
-                          {s.phone && (
-                            <span className="flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                              Phone: {s.phone}
-                            </span>
-                          )}
-                          {s.website && (
-                            <span className="flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                              Website: <a href={s.website} target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:underline">{s.website.replace(/^https?:\/\/(www\.)?/, "")}</a>
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                            Coords: {s.latitude.toFixed(5)}, {s.longitude.toFixed(5)}
-                          </span>
-                        </div>
-
-                        <div className="pt-2 text-xs font-semibold text-[var(--muted)] border-t border-white/5 flex items-center gap-1.5">
-                          Suggested by <span className="font-bold text-[var(--foreground)]">{s.userFullName || s.userEmail}</span> ({s.userEmail}) on {new Date(s.createdAt).toLocaleDateString()}
-                        </div>
                       </div>
 
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 self-end sm:self-start">
+                      <AnimatePresence>
+                        {activeDropdownPlaceId === place.id && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="absolute right-2 top-11 z-30 w-48 rounded-xl border border-[var(--border)] bg-[var(--panel-strong)] p-2 shadow-2xl space-y-1 text-left"
+                          >
+                            <div className="flex items-center justify-between border-b border-white/5 pb-1 px-1 mb-1">
+                              <span className="text-[10px] font-black uppercase text-slate-400">Collections</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveDropdownPlaceId(null);
+                                }}
+                                className="text-slate-400 hover:text-white"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+
+                            {folders.length === 0 ? (
+                              <p className="text-[10px] text-slate-500 font-semibold p-2 text-center">No collections created yet.</p>
+                            ) : (
+                              <div className="max-h-36 overflow-y-auto space-y-0.5">
+                                {folders.map((f) => {
+                                  const inFolder = f.placeIds.includes(place.id);
+                                  return (
+                                    <button
+                                      key={f.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleTogglePlaceInFolder(place.id, f.id, inFolder);
+                                      }}
+                                      className="w-full flex items-center justify-between text-left rounded-md px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition font-semibold"
+                                    >
+                                      <span className="truncate">📁 {f.name}</span>
+                                      {inFolder ? (
+                                        <Check size={12} className="text-teal-400 font-black shrink-0" />
+                                      ) : (
+                                        <Plus size={12} className="text-slate-600 shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowCreateFolderModal(true);
+                                setActiveDropdownPlaceId(null);
+                              }}
+                              className="w-full flex items-center justify-center gap-1 border border-dashed border-teal-500/30 text-teal-300 hover:bg-teal-500/10 rounded-lg py-1.5 text-[10px] font-black transition cursor-pointer mt-1"
+                            >
+                              <Plus size={10} />
+                              New Collection
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )) : (
+                    <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-center text-sm font-semibold text-[var(--muted)] xl:col-span-2">
+                      <Bookmark size={28} className="mx-auto mb-3 text-teal-300" />
+                      <p className="text-base font-black text-[var(--foreground)]">No saved places yet</p>
+                      <p className="mx-auto mt-1 max-w-sm">Start a shortlist from Discover, then group your favorite spots into collections.</p>
+                      <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+                        <Link
+                          href="/discover"
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-[var(--primary-foreground)]"
+                        >
+                          <Compass size={14} />
+                          Explore Places
+                        </Link>
                         <button
                           type="button"
-                          onClick={() => handleModerateSuggestion(s.id, "approved")}
-                          className="flex items-center justify-center gap-1 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3.5 text-xs font-black text-slate-950 transition cursor-pointer"
+                          onClick={() => setShowCreateFolderModal(true)}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-xs font-black text-[var(--foreground)]"
                         >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleModerateSuggestion(s.id, "rejected")}
-                          className="flex items-center justify-center gap-1 h-9 rounded-lg bg-rose-600 hover:bg-rose-500 px-3.5 text-xs font-black text-white transition cursor-pointer"
-                        >
-                          Reject
+                          <Plus size={14} />
+                          Create Collection
                         </button>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </motion.section>
-          )}
+                  )}
+                </div>
+              </motion.section>
 
-        {/* User Suggestion Section */}
-        <div className="mt-6">
-          <h3 className="text-lg font-black text-[var(--foreground)]">Suggest a New Place</h3>
-          <textarea
-            value={newSuggestion}
-            onChange={(e) => setNewSuggestion(e.target.value)}
-            placeholder="Describe the place, location, and any details..."
-            rows={3}
-            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--foreground)] focus:outline-none focus:border-teal-300"
-          />
-          <button
-            onClick={async () => {
-              if (!newSuggestion.trim()) return;
-              setSubmittingSuggestion(true);
-              try {
-                await fetch('/api/suggestions', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ suggestion: newSuggestion.trim() }),
-                });
-                setNewSuggestion('');
-                alert('Suggestion submitted!');
-              } catch (err) {
-                alert('Failed to submit suggestion.');
-              } finally {
-                setSubmittingSuggestion(false);
-              }
-            }}
-            disabled={submittingSuggestion}
-            className="mt-2 inline-flex items-center justify-center rounded-lg bg-teal-400 px-4 py-2 font-black text-white hover:bg-teal-300 disabled:opacity-50"
-          >
-            Submit Suggestion
-          </button>
-        </div>
+              <motion.section
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.42, delay: 0.1 }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Account overview</p>
+                    <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Discovery Board</h2>
+                  </div>
+                  <Sparkles className="text-amber-300" size={24} />
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {[
+                    {
+                      icon: <Bookmark size={17} />,
+                      title: savedPlaces.length > 0 ? `${savedPlaces.length} saved places` : "No saved places yet",
+                      detail:
+                        savedPlaces.length > 0
+                          ? `Your saved list spans ${savedCities.length} ${savedCities.length === 1 ? "city" : "cities"}.`
+                          : "Save a place from Home or Discover and it will appear here.",
+                    },
+                    {
+                      icon: <MapPin size={17} />,
+                      title: `Top saved city: ${topSavedCity}`,
+                      detail:
+                        savedPlaces.length > 0
+                          ? "Use this as your quick shortlist when planning where to go next."
+                          : "Mumbai, Kolhapur, Nashik, Pune, Bangalore, Chennai, and Delhi are now available to explore.",
+                    },
+                    {
+                      icon: <Compass size={17} />,
+                      title: user.role === "super_admin" ? "Super admin access active" : "Explorer account active",
+                      detail:
+                        user.role === "super_admin"
+                          ? "You can manage super admin access through the protected admin role endpoint."
+                          : "You can save places and submit live crowd reports when signed in.",
+                    },
+                  ].map((item) => (
+                    <div key={item.title} className="flex gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--panel)] text-[var(--fresh)]">
+                        {item.icon}
+                      </span>
+                      <div>
+                        <h3 className="font-bold text-[var(--foreground)]">{item.title}</h3>
+                        <p className="mt-1 text-sm text-[var(--muted)]">{item.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.section>
+
+              {/* ── Explorer Stats & Badges ── */}
+              <motion.section
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.42, delay: 0.12 }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
+              >
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Gamification</p>
+                    <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Explorer Stats</h2>
+                  </div>
+                  <span className="text-2xl">🏅</span>
+                </div>
+
+                {gamificationStats ? (
+                  <>
+                    <XPProgressBar
+                      totalXp={gamificationStats.totalXp}
+                      level={gamificationStats.level}
+                      title={gamificationStats.title}
+                      progress={gamificationStats.progress}
+                      xpForLevel={gamificationStats.xpForLevel}
+                      xpForNext={gamificationStats.xpForNext}
+                    />
+                    <div className="mt-5">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)] mb-1">Badge Collection</p>
+                      <BadgeShelf earnedBadgeIds={gamificationStats.badges.map((b) => b.badge_id)} />
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-5 text-sm font-semibold text-[var(--muted)] text-center">
+                    Earn XP by saving places, submitting crowd reports, and suggesting new spots.
+                  </div>
+                )}
+              </motion.section>
+
+              {/* ── Explorer Passport & City Stamps ── */}
+              {user && (
+                <motion.section
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.42, delay: 0.14 }}
+                >
+                  <ExplorerPassport
+                    savedPlaces={rawSavedPlaces}
+                    onStampClaimed={() => {
+                      refreshGamificationStats();
+                      window.dispatchEvent(new Event("sheher:refresh-badges"));
+                    }}
+                  />
+                </motion.section>
+              )}
+
+              {user?.role === "super_admin" && (
+                <motion.section
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.42, delay: 0.15 }}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 sm:p-5"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">Moderation Queue</p>
+                      <h2 className="mt-1 text-xl font-black text-[var(--foreground)] sm:text-2xl">Pending Place Suggestions</h2>
+                      <p className="mt-1 text-sm text-[var(--muted)]">Review suggestions from the community before publishing them live.</p>
+                    </div>
+                    <button
+                      onClick={() => mutateSuggestions()}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-xs font-black text-teal-300 hover:bg-[var(--panel-strong)] cursor-pointer"
+                    >
+                      Refresh Queue
+                    </button>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
+                    {loadingSuggestions ? (
+                      <p className="text-sm font-semibold text-[var(--muted)]">Loading suggestions queue...</p>
+                    ) : errorSuggestions ? (
+                      <p className="text-sm font-semibold text-rose-300">{errorSuggestions}</p>
+                    ) : suggestions.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] p-6 text-center text-sm font-semibold text-[var(--muted)]">
+                        All clear! No pending place suggestions.
+                      </div>
+                    ) : (
+                      suggestions.map((s) => (
+                        <div
+                          key={s.id}
+                          className="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-4 flex flex-col gap-4 sm:flex-row sm:items-start justify-between"
+                        >
+                          <div className="space-y-1.5 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded bg-teal-400/10 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-teal-300">
+                                {getCategoryLabel(s.category)}
+                              </span>
+                              <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-slate-300">
+                                {s.priceRange}
+                              </span>
+                              <span className="text-xs text-[var(--muted)] font-bold">
+                                in {formatPlaceArea(s)}
+                              </span>
+                            </div>
+                            <h3 className="text-base font-black text-[var(--foreground)] leading-snug">{s.title}</h3>
+                            <p className="text-sm text-[var(--muted)] font-medium leading-relaxed">{s.description}</p>
+
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1.5 text-xs font-bold text-[var(--muted-strong)]">
+                              {s.hours && (
+                                <span className="flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                                  Hours: {s.hours}
+                                </span>
+                              )}
+                              {s.phone && (
+                                <span className="flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                                  Phone: {s.phone}
+                                </span>
+                              )}
+                              {s.website && (
+                                <span className="flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                                  Website: <a href={s.website} target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:underline">{s.website.replace(/^https?:\/\/(www\.)?/, "")}</a>
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                                Coords: {s.latitude.toFixed(5)}, {s.longitude.toFixed(5)}
+                              </span>
+                            </div>
+
+                            <div className="pt-2 text-xs font-semibold text-[var(--muted)] border-t border-white/5 flex items-center gap-1.5">
+                              Suggested by <span className="font-bold text-[var(--foreground)]">{s.userFullName || s.userEmail}</span> ({s.userEmail}) on {new Date(s.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end sm:self-start">
+                            <button
+                              type="button"
+                              onClick={() => handleModerateSuggestion(s.id, "approved")}
+                              className="flex items-center justify-center gap-1 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3.5 text-xs font-black text-slate-950 transition cursor-pointer"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleModerateSuggestion(s.id, "rejected")}
+                              className="flex items-center justify-center gap-1 h-9 rounded-lg bg-rose-600 hover:bg-rose-500 px-3.5 text-xs font-black text-white transition cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.section>
+              )}
+
+              {/* User Suggestion Section */}
+              <div className="mt-6">
+                <h3 className="text-lg font-black text-[var(--foreground)]">Suggest a New Place</h3>
+                <textarea
+                  value={newSuggestion}
+                  onChange={(e) => setNewSuggestion(e.target.value)}
+                  placeholder="Describe the place, location, and any details..."
+                  rows={3}
+                  className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--foreground)] focus:outline-none focus:border-teal-300"
+                />
+                <button
+                  onClick={async () => {
+                    if (!newSuggestion.trim()) return;
+                    setSubmittingSuggestion(true);
+                    try {
+                      await fetch('/api/suggestions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ suggestion: newSuggestion.trim() }),
+                      });
+                      setNewSuggestion('');
+                      alert('Suggestion submitted!');
+                    } catch (err) {
+                      alert('Failed to submit suggestion.');
+                    } finally {
+                      setSubmittingSuggestion(false);
+                    }
+                  }}
+                  disabled={submittingSuggestion}
+                  className="mt-2 inline-flex items-center justify-center rounded-lg bg-teal-400 px-4 py-2 font-black text-white hover:bg-teal-300 disabled:opacity-50 cursor-pointer"
+                >
+                  Submit Suggestion
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-6">
+              {/* Hall of fame hero summary */}
+              <div className="rounded-lg border border-[var(--border)] bg-gradient-to-br from-amber-500/5 via-[var(--panel)] to-cyan-500/5 p-5 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-300">
+                      <Trophy size={11} /> Hall of Fame
+                    </span>
+                    <h2 className="mt-2 text-xl font-black text-white">Sheher Explorers</h2>
+                    <p className="mt-1 text-xs text-[var(--muted)] font-semibold">Top city discoverers ranked by XP earned across Indian cities.</p>
+                  </div>
+                  {myLeaderboardEntry && (
+                    <div className="flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5">
+                      <ChevronUp size={14} className="text-cyan-400" />
+                      <span className="text-xs font-black text-cyan-200">
+                        Your Rank: #{myLeaderboardEntry.rank} · {myLeaderboardEntry.totalXp.toLocaleString()} XP
+                      </span>
+                      <Zap size={12} className="text-cyan-400" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                {/* City filter pills */}
+                <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
+                  {CITY_OPTIONS.map((city) => (
+                    <button
+                      key={city}
+                      onClick={() => setCityFilter(city)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
+                        cityFilter === city
+                          ? "bg-teal-400 text-slate-950 shadow-md font-black"
+                          : "border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)] hover:text-white"
+                      }`}
+                    >
+                      {city}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Search */}
+                  <label className="relative flex-1 sm:flex-initial">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={13} />
+                    <input
+                      value={leaderboardSearch}
+                      onChange={(e) => setLeaderboardSearch(e.target.value)}
+                      placeholder="Search explorer..."
+                      className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] pl-8 pr-3 text-xs font-semibold text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-teal-400 sm:w-44"
+                    />
+                  </label>
+
+                  {/* Refresh */}
+                  <button
+                    onClick={() => fetchLeaderboard(true)}
+                    disabled={refreshingLeaderboard}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] transition hover:bg-[var(--panel)] disabled:opacity-50 cursor-pointer"
+                    title="Refresh"
+                  >
+                    <RefreshCw size={14} className={refreshingLeaderboard ? "animate-spin" : ""} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Quests Panel */}
+              {!leaderboardLoading && !leaderboardError && filteredLeaderboard.length > 0 && (
+                <div>
+                  <h3 className="mb-3.5 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[var(--muted)]">
+                    <Zap size={13} className="text-cyan-400" /> Active City Quests in {cityFilter === "All Cities" ? "Pune" : cityFilter}
+                  </h3>
+                  <div className="grid gap-3.5 md:grid-cols-3">
+                    {getCityQuests(cityFilter === "All Cities" ? "Pune" : cityFilter).map((quest, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.07 + 0.05, duration: 0.35 }}
+                        whileHover={{ y: -2 }}
+                        className={`rounded-2xl border p-4 bg-gradient-to-br ${quest.color} flex flex-col justify-between min-h-[148px] shadow-lg`}
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="p-1.5 rounded-lg bg-slate-950/80 border border-slate-800 shrink-0 flex items-center justify-center">
+                              {quest.icon}
+                            </span>
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-cyan-950/40 text-cyan-300 border border-cyan-800/20 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                              +{quest.reward} XP <Zap size={8} className="fill-cyan-300 text-cyan-300" />
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-black text-white">{quest.title}</h4>
+                          <p className="text-[10px] font-bold text-[var(--muted-strong)] leading-relaxed">{quest.desc}</p>
+                        </div>
+                        <a
+                          href={quest.link}
+                          className="mt-2.5 inline-flex w-full items-center justify-center gap-1 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800 py-1.5 text-[10px] font-black text-[var(--foreground)] transition cursor-pointer"
+                        >
+                          {quest.linkText}
+                        </a>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Loading State */}
+              {leaderboardLoading && (
+                <div className="space-y-2.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="h-16 animate-pulse rounded-xl bg-[var(--panel-soft)]" />
+                  ))}
+                </div>
+              )}
+
+              {/* Error */}
+              {!leaderboardLoading && leaderboardError && (
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-6 text-center">
+                  <p className="text-xs font-black text-rose-300">{leaderboardError}</p>
+                  <button
+                    onClick={() => fetchLeaderboard()}
+                    className="mt-3 rounded-lg bg-rose-500 px-4 py-1.5 text-xs font-black text-white transition hover:opacity-90 cursor-pointer"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+
+              {/* Podium — top 3 */}
+              {!leaderboardLoading && !leaderboardError && leaderboardTop3.length >= 1 && (
+                <div className="border-t border-[var(--border)] pt-5">
+                  <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[var(--muted)]">
+                    <Star size={13} className="text-amber-400" /> Top Explorers
+                  </h3>
+                  <div className="no-scrollbar overflow-x-auto pb-1">
+                    <div className="flex min-w-[320px] items-end justify-center gap-2.5 pb-2">
+                      {[
+                        leaderboardTop3.find((e) => e.rank === 2),
+                        leaderboardTop3.find((e) => e.rank === 1),
+                        leaderboardTop3.find((e) => e.rank === 3),
+                      ]
+                        .filter(Boolean)
+                        .map((entry) => (
+                          <PodiumCard key={entry!.rank} entry={entry!} animate={animate} />
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Full List */}
+              {!leaderboardLoading && !leaderboardError && filteredLeaderboard.length > 0 && (
+                <div className="border-t border-[var(--border)] pt-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[var(--muted)]">
+                    <Trophy size={13} className="text-slate-500" /> Full Rankings
+                  </h3>
+                  <div className="space-y-2">
+                    <AnimatePresence>
+                      {filteredLeaderboard.map((entry, i) => (
+                        <RankRow
+                          key={entry.userId}
+                          entry={entry}
+                          isCurrentUser={!!(user && entry.userId === (user as any).id)}
+                          animate={animate}
+                          index={i}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty */}
+              {!leaderboardLoading && !leaderboardError && filteredLeaderboard.length === 0 && (
+                <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-8 text-center">
+                  <Trophy size={36} className="mx-auto mb-3 text-slate-500" />
+                  <h3 className="text-sm font-black text-white">No explorers yet</h3>
+                  <p className="mx-auto mt-1 max-w-xs text-xs text-[var(--muted)] leading-relaxed">
+                    Save places, join hangouts, and submit city updates to put your name on the board.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 

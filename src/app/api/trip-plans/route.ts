@@ -10,33 +10,14 @@ const coordinateSchema = z.object({
   longitude: z.number(),
 });
 
-const stopSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string(),
-  category: z.string(),
-  image: z.string(),
-  rating: z.number(),
-  distance: z.number(),
-  tags: z.array(z.string()),
-  city: z.string(),
-  locality: z.string(),
-  isOpen: z.boolean(),
-  isTrending: z.boolean(),
-  reviewCount: z.number(),
-  priceRange: z.string().optional(),
-  latitude: z.number(),
-  longitude: z.number(),
-});
-
 const postSchema = z.object({
   name: z.string().trim().min(2).max(80),
   source: z.string().trim().min(1).max(120),
   destination: z.string().trim().min(1).max(120),
-  distanceKm: z.number().int().nonnegative().nullable().optional(),
-  durationMinutes: z.number().int().nonnegative().nullable().optional(),
+  distanceKm: z.number().nonnegative().nullable().optional(),
+  durationMinutes: z.number().nonnegative().nullable().optional(),
   routePath: z.array(coordinateSchema).max(1500),
-  stops: z.array(stopSchema).max(80),
+  stops: z.array(z.any()).max(80),
 });
 
 const serializePlan = (row: any) => ({

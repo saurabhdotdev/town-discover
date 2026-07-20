@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, Compass, Home, Map, Menu, Search, Trophy, User, Users, X, BarChart3 } from "lucide-react";
+import { CalendarDays, Compass, Home, IndianRupee, Map, Menu, Search, Trophy, User, Users, X, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -18,17 +18,17 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: <Home size={21} /> },
+  { href: "/plans", label: "Budget", icon: <IndianRupee size={21} /> },
   { href: "/discover", label: "Discover", icon: <Compass size={21} /> },
   { href: "/events", label: "Events", icon: <CalendarDays size={21} /> },
   { href: "/map", label: "Map", icon: <Map size={21} /> },
   { href: "/hangouts", label: "Hangouts", icon: <Users size={21} /> },
-  { href: "/leaderboard", label: "Ranks", icon: <Trophy size={21} /> },
   { href: "/stats", label: "Stats", icon: <BarChart3 size={21} /> },
   { href: "/profile", label: "Profile", icon: <User size={21} /> },
 ];
 
 const mobileTabItems = navItems.filter((item) =>
-  ["/", "/discover", "/events", "/map", "/profile"].includes(item.href)
+  ["/", "/plans", "/discover", "/events", "/profile"].includes(item.href)
 );
 
 export const BottomNavigation = () => {

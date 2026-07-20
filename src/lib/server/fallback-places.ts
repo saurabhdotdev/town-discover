@@ -2,7 +2,7 @@ import { SupportedCityName } from "@/lib/pune-location";
 import { Place } from "@/types";
 import { fetchLiveTownEvents } from "@/lib/town-events";
 import { mergePlaces } from "@/lib/merge-places";
-import { MOCK_PLACES } from "@/data/mock-places";
+import { MOCK_PLACES, enrichTags } from "@/data/mock-places";
 import { getPool } from "@/lib/postgres";
 
 export const getFallbackPlacesForCity = async (city: SupportedCityName): Promise<Place[]> => {
@@ -42,6 +42,7 @@ export const getFallbackPlacesForCity = async (city: SupportedCityName): Promise
         isTrending: false,
         reviewCount: 0,
         distance: 0,
+        tags: enrichTags(row.title, row.category, row.tags || []),
         hours: row.hours ? (typeof row.hours === "string" ? JSON.parse(row.hours) : row.hours) : undefined,
         reviewMood: row.reviewMood ? (typeof row.reviewMood === "string" ? JSON.parse(row.reviewMood) : row.reviewMood) : undefined
       }));

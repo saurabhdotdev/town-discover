@@ -23,6 +23,8 @@ import {
   TripPlan,
   AuthUser,
 } from "../../src/api/client";
+import AppMapView from "../../src/components/MapView";
+
 
 const CITIES = ["Pune", "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolhapur", "Nashik"] as const;
 
@@ -461,6 +463,19 @@ export default function TripsScreen() {
                   )}
                 </Pressable>
               </View>
+              <AppMapView
+                places={previewStops.map(p => ({
+                  id: p.id,
+                  title: p.title,
+                  latitude: p.latitude,
+                  longitude: p.longitude,
+                  locality: p.locality,
+                  category: p.category,
+                  description: p.description
+                }))}
+                routePath={previewStops.map(p => ({ latitude: p.latitude, longitude: p.longitude }))}
+                style={styles.previewMap}
+              />
 
               <Text style={styles.itineraryHeader}>Route Stop Itinerary</Text>
               
@@ -567,6 +582,23 @@ export default function TripsScreen() {
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+              <AppMapView
+                places={(selectedPlanDetails.stops || []).map((s: any) => ({
+                  id: s.id || String(s.placeId || Math.random()),
+                  title: s.title || "Stop",
+                  latitude: Number(s.latitude),
+                  longitude: Number(s.longitude),
+                  locality: s.locality,
+                  category: s.category,
+                  description: s.description,
+                }))}
+                routePath={(selectedPlanDetails.stops || []).map((s: any) => ({
+                  latitude: Number(s.latitude),
+                  longitude: Number(s.longitude)
+                }))}
+                style={styles.previewMap}
+              />
+
               <Text style={styles.itineraryHeader}>Trip Stops sequence</Text>
               
               {selectedPlanDetails.stops?.map((stop: TripPlan["stops"][number], idx: number) => (
@@ -753,6 +785,7 @@ const styles = StyleSheet.create({
   },
   previewTitle: { color: "#f8fafc", fontSize: 15, fontWeight: "900" },
   previewMeta: { color: "#2dd4bf", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  previewMap: { height: 180, width: "100%", borderRadius: 14, marginBottom: 16 },
   savePlanBtn: {
     flexDirection: "row",
     alignItems: "center",

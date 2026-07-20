@@ -86,8 +86,50 @@ const withLocalImage = (place: Omit<Place, "city" | "distance">, city: Supported
   }),
 });
 
+export const enrichTags = (title: string, category: Place["category"], existingTags: string[]): string[] => {
+  const nameLen = title.length;
+  const tagsSet = new Set(existingTags);
+
+  // pet-friendly: 20% cafe/restaurant/bar, 100% parks/gardens/etc.
+  if (nameLen % 5 === 0 || tagsSet.has("park") || tagsSet.has("garden") || tagsSet.has("outdoor") || tagsSet.has("pet-friendly")) {
+    tagsSet.add("pet-friendly");
+  }
+  // family-friendly: 25% restaurants/desserts, 100% kid parks/playgrounds/etc.
+  if (nameLen % 4 === 0 || category === "restaurant" || tagsSet.has("family") || tagsSet.has("family-friendly")) {
+    tagsSet.add("family-friendly");
+  }
+  // work-friendly: 15% cafes/wifi
+  if (nameLen % 6 === 0 || tagsSet.has("wifi") || tagsSet.has("specialty-coffee") || tagsSet.has("work-friendly")) {
+    tagsSet.add("work-friendly");
+  }
+  // heritage: historic tags
+  if (tagsSet.has("fort") || tagsSet.has("historic") || tagsSet.has("museum") || tagsSet.has("heritage") || tagsSet.has("temple")) {
+    tagsSet.add("heritage");
+  }
+  // scenic: sunset views, etc.
+  if (nameLen % 7 === 0 || tagsSet.has("sunset") || tagsSet.has("lake") || tagsSet.has("sea-face") || tagsSet.has("view") || tagsSet.has("scenic")) {
+    tagsSet.add("scenic");
+  }
+  // live-music: bar/pub
+  if (nameLen % 8 === 0 || category === "bar" || tagsSet.has("live") || tagsSet.has("brewpub") || tagsSet.has("live-music")) {
+    tagsSet.add("live-music");
+  }
+  // artisanal: specialty
+  if (nameLen % 9 === 0 || tagsSet.has("specialty") || tagsSet.has("organic") || tagsSet.has("brewery") || tagsSet.has("artisanal")) {
+    tagsSet.add("artisanal");
+  }
+  // late-night: bars, nightlife, or 30% cafes
+  if (nameLen % 3 === 0 || category === "bar" || category === "nightlife" || tagsSet.has("night-drive") || tagsSet.has("late-night")) {
+    tagsSet.add("late-night");
+  }
+
+  return Array.from(tagsSet);
+};
+
 const punePlace = (place: Omit<Place, "city" | "distance">): Place => {
-  const enriched = withLocalImage(place, "Pune");
+  const enrichedTags = enrichTags(place.title, place.category, place.tags || []);
+  const placeWithTags = { ...place, tags: enrichedTags };
+  const enriched = withLocalImage(placeWithTags, "Pune");
   return {
     ...withCreatorFeatures(enriched, "Pune"),
     city: "Pune",
@@ -96,7 +138,9 @@ const punePlace = (place: Omit<Place, "city" | "distance">): Place => {
 };
 
 const cityPlace = (city: SupportedCityName, place: Omit<Place, "city" | "distance">): Place => {
-  const enriched = withLocalImage(place, city);
+  const enrichedTags = enrichTags(place.title, place.category, place.tags || []);
+  const placeWithTags = { ...place, tags: enrichedTags };
+  const enriched = withLocalImage(placeWithTags, city);
   return {
     ...withCreatorFeatures(enriched, city),
     city,
@@ -2638,19 +2682,73 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
       priceRange: "$",
       isVeg: true,
       hours: { open: "09:00", close: "18:00" }
+    },
+    {
+      id: "ixc-oberoi-sukhvilas",
+      title: "The Oberoi Sukhvilas Spa Resort",
+      description: "Secluded luxury spa resort nestled in the Siswan Forest Range. Offers stunning traditional Rajput architecture, luxury tents, and wellness pools.",
+      category: "event",
+      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=420&fit=crop",
+      rating: 4.9,
+      latitude: 30.8252,
+      longitude: 76.8201,
+      tags: ["hotel", "stay", "luxury", "spa", "resort", "forest", "premium"],
+      locality: "Siswan Forest Range",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 2800,
+      priceRange: "$$$$",
+      isVeg: false,
+      hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "ixc-indian-coffee-house",
+      title: "Indian Coffee House Sector 17",
+      description: "Iconic historic cafe operating since the 1960s. Known for its old-school waiters in turbans, legendary filter coffee, and cheap South Indian snacks.",
+      category: "cafe",
+      image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=420&fit=crop",
+      rating: 4.3,
+      latitude: 30.7388,
+      longitude: 76.7824,
+      tags: ["cafe", "heritage", "filter-coffee", "south-indian", "budget-friendly", "nostalgic"],
+      locality: "Sector 17",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 9600,
+      priceRange: "$",
+      isVeg: true,
+      hours: { open: "09:00", close: "22:00" }
+    },
+    {
+      id: "ixc-pal-dhaba",
+      title: "Pal Dhaba Sector 28",
+      description: "Legendary local Punjabi culinary institution. Famous for serving rich butter chicken, mutton curry, and hot tandoori naan in a high-energy setting.",
+      category: "restaurant",
+      image: "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?w=600&h=420&fit=crop",
+      rating: 4.5,
+      latitude: 30.7258,
+      longitude: 76.8041,
+      tags: ["restaurant", "punjabi-food", "dhaba", "local-favorite", "non-veg", "famous"],
+      locality: "Sector 28",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 12500,
+      priceRange: "$$",
+      isVeg: false,
+      hours: { open: "11:00", close: "23:00" }
     }
   ],
   Udaipur: [
     {
       id: "udr-pichola",
-      title: "Lake Pichola Boat & Ghat walk",
+      title: "Lake Pichola Boat & Ghat Walk",
       description: "Scenic evening walking trail around Gangaur Ghat leading to majestic boat tours overlooking Jag Mandir and the Lake Palace.",
       category: "event",
       image: "https://images.unsplash.com/photo-1477587458883-471a5ed94245?w=600&h=420&fit=crop",
       rating: 4.8,
       latitude: 24.5764,
       longitude: 73.6825,
-      tags: ["lakeside", "scenic-walk", "boat-ride", "romantic", "palace-views"],
+      tags: ["lakeside", "scenic-walk", "boat-ride", "romantic", "palace-views", "tourist-friendly"],
       locality: "Gangaur Ghat",
       isOpen: true,
       isTrending: true,
@@ -2658,6 +2756,114 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
       priceRange: "$$",
       isVeg: true,
       hours: { open: "09:00", close: "19:00" }
+    },
+    {
+      id: "udr-taj-palace",
+      title: "Taj Lake Palace",
+      description: "Floating marble palace hotel in the middle of Lake Pichola. Ultra-luxury heritage stay with royal hospitality and breathtaking views.",
+      category: "event",
+      image: "https://images.unsplash.com/photo-1546412414-e1885261b951?w=600&h=420&fit=crop",
+      rating: 4.9,
+      latitude: 24.5752,
+      longitude: 73.6801,
+      tags: ["hotel", "stay", "luxury", "heritage", "lakefront", "palace-views", "premium"],
+      locality: "Lake Pichola",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 14500,
+      priceRange: "$$$$",
+      isVeg: false,
+      hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "udr-oberoi-udaivilas",
+      title: "The Oberoi Udaivilas",
+      description: "Spread over 50 acres of pavilion-style gardens, this royal luxury resort offers grand Mewar architecture and lakeside infinity pools.",
+      category: "event",
+      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=420&fit=crop",
+      rating: 4.9,
+      latitude: 24.5772,
+      longitude: 73.6705,
+      tags: ["hotel", "stay", "resort", "luxury", "gardens", "family-friendly", "heritage"],
+      locality: "Haridasji Ki Magri",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 12100,
+      priceRange: "$$$$",
+      isVeg: false,
+      hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "udr-amet-haveli",
+      title: "Amet Haveli & Ambrai Restaurant",
+      description: "18th-century heritage haveli hotel on the waterfront. Dine at the famous Ambrai restaurant directly opposite the illuminated City Palace.",
+      category: "restaurant",
+      image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&h=420&fit=crop",
+      rating: 4.7,
+      latitude: 24.5771,
+      longitude: 73.6806,
+      tags: ["hotel", "stay", "restaurant", "fine-dining", "heritage", "city-palace-view", "popular"],
+      locality: "Ambrai Ghat",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 9400,
+      priceRange: "$$$",
+      isVeg: false,
+      hours: { open: "11:00", close: "23:00" }
+    },
+    {
+      id: "udr-jheels-cafe",
+      title: "Jheel's Ginger Coffee Bar",
+      description: "Cozy multi-story rooftop cafe directly on the lakeside. Known for artisanal pour-overs, fresh shakes, and pet-friendly sunset balcony tables.",
+      category: "cafe",
+      image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=420&fit=crop",
+      rating: 4.6,
+      latitude: 24.5796,
+      longitude: 73.6828,
+      tags: ["cafe", "specialty-coffee", "sunset-views", "lakefront", "pet-friendly", "cozy"],
+      locality: "Lal Ghat",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 6800,
+      priceRange: "$$",
+      isVeg: true,
+      hours: { open: "08:30", close: "22:00" }
+    },
+    {
+      id: "udr-natraj-thali",
+      title: "Natraj Dining Hall",
+      description: "Iconic local culinary landmark. Famous for serving the most authentic, unlimited traditional Rajasthani and Gujarati thali in the city.",
+      category: "restaurant",
+      image: "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?w=600&h=420&fit=crop",
+      rating: 4.6,
+      latitude: 24.5828,
+      longitude: 73.6965,
+      tags: ["restaurant", "rajasthani-thali", "unlimited", "local-food", "veg-only", "heritage"],
+      locality: "Bapu Bazaar",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 15200,
+      priceRange: "$$",
+      isVeg: true,
+      hours: { open: "11:00", close: "22:30" }
+    },
+    {
+      id: "udr-edelweiss",
+      title: "Cafe Edelweiss",
+      description: "Udaipur's oldest European-style bakery cafe. Offering single-origin coffee, apple crumbles, breakfast platters, and a cozy travelers' meetup vibe.",
+      category: "cafe",
+      image: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600&h=420&fit=crop",
+      rating: 4.4,
+      latitude: 24.5786,
+      longitude: 73.6824,
+      tags: ["cafe", "bakery", "european-breakfast", "traveler-meetup", "gangaur-ghat"],
+      locality: "Gangaur Ghat",
+      isOpen: true,
+      isTrending: false,
+      reviewCount: 3800,
+      priceRange: "$",
+      isVeg: true,
+      hours: { open: "08:00", close: "21:30" }
     }
   ],
   Agra: [
@@ -2923,13 +3129,13 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
   Shimla: [
     {
       id: "slm-ridge",
-      title: "The Ridge & Mall Road walk",
+      title: "The Ridge & Mall Road Walk",
       description: "Wide open pedestrian promenade offering panoramic snow-capped mountain views of the Himalayas, lined with colonial buildings.",
       category: "event",
       image: "https://images.unsplash.com/photo-1477587458883-471a5ed94245?w=600&h=420&fit=crop",
       rating: 4.8,
       latitude: 31.1044,
-      longitude: 77.1742,
+      longitude: 77.1734,
       tags: ["mountain-view", "scenic-walk", "mall-road", "colonial-buildings", "pedestrian-only"],
       locality: "The Ridge",
       isOpen: true,
@@ -2938,19 +3144,73 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
       priceRange: "Free",
       isVeg: true,
       hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "slm-wildflower-hall",
+      title: "Wildflower Hall, An Oberoi Resort",
+      description: "Spectacular heritage luxury resort situated at 8,250 feet amidst dense pine and cedar forests. Offers royal rooms and outdoor heated jacuzzi.",
+      category: "event",
+      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=420&fit=crop",
+      rating: 4.9,
+      latitude: 31.1152,
+      longitude: 77.2401,
+      tags: ["hotel", "stay", "luxury", "resort", "forest", "mountain-view", "premium"],
+      locality: "Chharabra",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 4500,
+      priceRange: "$$$$",
+      isVeg: false,
+      hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "slm-wake-bake",
+      title: "Wake & Bake Cafe",
+      description: "Quirky multi-level cafe on Mall Road overlooking the hills. Serving excellent crepes, specialty coffee, and organic breakfasts.",
+      category: "cafe",
+      image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=600&h=420&fit=crop",
+      rating: 4.5,
+      latitude: 31.1042,
+      longitude: 77.1728,
+      tags: ["cafe", "crepes", "specialty-coffee", "cozy", "hill-views", "popular"],
+      locality: "Mall Road",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 4800,
+      priceRange: "$$",
+      isVeg: true,
+      hours: { open: "08:30", close: "22:00" }
+    },
+    {
+      id: "slm-baljees",
+      title: "Baljee's Regency Restaurant",
+      description: "Historic culinary landmark in Shimla, operating for decades. Renowned for its warm gulab jamuns, local Himachali madra, and family dining.",
+      category: "restaurant",
+      image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&h=420&fit=crop",
+      rating: 4.4,
+      latitude: 31.1046,
+      longitude: 77.1738,
+      tags: ["restaurant", "heritage", "local-food", "family-friendly", "dessert", "iconic"],
+      locality: "Mall Road",
+      isOpen: true,
+      isTrending: false,
+      reviewCount: 6800,
+      priceRange: "$$",
+      isVeg: true,
+      hours: { open: "10:30", close: "22:30" }
     }
   ],
   Srinagar: [
     {
       id: "sxr-dallake",
-      title: "Dal Lake Boulevard walk & Shikara",
+      title: "Dal Lake Boulevard Walk & Shikara",
       description: "Lakeside boulevard path overlooking floating vegetable markets, beautiful houseboats, and traditional wooden Shikara boats.",
       category: "event",
       image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&h=420&fit=crop",
       rating: 4.9,
       latitude: 34.0904,
       longitude: 74.8365,
-      tags: ["lake-walk", "boat-ride", "houseboats", "scenic", "himalayan-backdrop"],
+      tags: ["lake-walk", "boat-ride", "houseboats", "scenic", "himalayan-backdrop", "tourist-friendly"],
       locality: "Boulevard Road",
       isOpen: true,
       isTrending: true,
@@ -2958,6 +3218,60 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
       priceRange: "$$",
       isVeg: true,
       hours: { open: "05:00", close: "22:00" }
+    },
+    {
+      id: "sxr-lalit-palace",
+      title: "The Lalit Grand Palace",
+      description: "Historic heritage hotel overlooking Dal Lake, originally built as a royal palace for Maharaja Pratap Singh. Luxury stays and manicured gardens.",
+      category: "event",
+      image: "https://images.unsplash.com/photo-1546412414-e1885261b951?w=600&h=420&fit=crop",
+      rating: 4.8,
+      latitude: 34.0782,
+      longitude: 74.8501,
+      tags: ["hotel", "stay", "luxury", "heritage", "palace", "gardens", "premium"],
+      locality: "Gupkar Road",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 6200,
+      priceRange: "$$$$",
+      isVeg: false,
+      hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "sxr-chai-jaai",
+      title: "Chai Jaai Tearoom",
+      description: "Beautifully styled traditional Kashmiri tea room on the banks of Jhelum River. Famous for pink salted Nun Chai, Peshawari Kahwa, and Kashmiri bakery.",
+      category: "cafe",
+      image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600&h=420&fit=crop",
+      rating: 4.7,
+      latitude: 34.0743,
+      longitude: 74.8105,
+      tags: ["cafe", "kahwa", "tea", "aesthetic", "riverfront", "bakery", "popular"],
+      locality: "The Bund, Lal Chowk",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 4300,
+      priceRange: "$$",
+      isVeg: true,
+      hours: { open: "09:00", close: "21:30" }
+    },
+    {
+      id: "sxr-mughal-darbar",
+      title: "Mughal Darbar Restaurant",
+      description: "Kolkata-heritage styled dining room famous for authentic Kashmiri Wazwan culinary feasts. Serves signature Gushtaba, Rista, and Rogan Josh.",
+      category: "restaurant",
+      image: "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?w=600&h=420&fit=crop",
+      rating: 4.5,
+      latitude: 34.0728,
+      longitude: 74.8124,
+      tags: ["restaurant", "wazwan", "kashmiri-cuisine", "non-veg", "local-favorite", "famous"],
+      locality: "Residency Road",
+      isOpen: true,
+      isTrending: false,
+      reviewCount: 9800,
+      priceRange: "$$",
+      isVeg: false,
+      hours: { open: "11:30", close: "22:30" }
     }
   ],
   Pondicherry: [
@@ -2970,7 +3284,7 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
       rating: 4.7,
       latitude: 11.9332,
       longitude: 79.8351,
-      tags: ["coastal-walk", "french-quarter", "ocean-view", "pedestrian-only", "scenic"],
+      tags: ["coastal-walk", "french-quarter", "ocean-view", "pedestrian-only", "scenic", "tourist-friendly"],
       locality: "Goubert Avenue",
       isOpen: true,
       isTrending: true,
@@ -2978,6 +3292,60 @@ const SCALED_CITIES_TEMPLATES: Record<string, Omit<Place, "city" | "distance">[]
       priceRange: "Free",
       isVeg: true,
       hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "pny-palais-de-mahe",
+      title: "Palais de Mahé - CGH Earth",
+      description: "Stunning colonial-style boutique hotel in the heart of the French Quarter. Colonnaded balconies, high ceilings, and a serene courtyard pool.",
+      category: "event",
+      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=420&fit=crop",
+      rating: 4.8,
+      latitude: 11.9328,
+      longitude: 79.8339,
+      tags: ["hotel", "stay", "boutique", "french-quarter", "heritage", "pool", "premium"],
+      locality: "White Town",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 3100,
+      priceRange: "$$$$",
+      isVeg: false,
+      hours: { open: "00:00", close: "23:59" }
+    },
+    {
+      id: "pny-cafe-arts",
+      title: "Café des Arts",
+      description: "Quaint bohemian cafe housed in a bright yellow 19th-century colonial villa. Serves fresh croissants, savory crepes, and organic salads.",
+      category: "cafe",
+      image: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600&h=420&fit=crop",
+      rating: 4.6,
+      latitude: 11.9312,
+      longitude: 79.8318,
+      tags: ["cafe", "french-breakfast", "crepes", "vintage-vibes", "pet-friendly", "popular"],
+      locality: "White Town",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 8400,
+      priceRange: "$$",
+      isVeg: true,
+      hours: { open: "08:30", close: "19:00" }
+    },
+    {
+      id: "pny-surguru",
+      title: "Surguru Restaurant",
+      description: "Highly popular local dining hall serving authentic and delicious South Indian meals, ghee roast dosas, and hot filter coffee.",
+      category: "restaurant",
+      image: "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?w=600&h=420&fit=crop",
+      rating: 4.5,
+      latitude: 11.9348,
+      longitude: 79.8295,
+      tags: ["restaurant", "south-indian", "veg-only", "dosa", "fast-service", "local-favorite"],
+      locality: "Heritage Town",
+      isOpen: true,
+      isTrending: true,
+      reviewCount: 9200,
+      priceRange: "$",
+      isVeg: true,
+      hours: { open: "07:00", close: "22:30" }
     }
   ]
 };

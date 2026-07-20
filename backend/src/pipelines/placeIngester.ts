@@ -8,6 +8,42 @@ import dotenv from "dotenv";
 dotenv.config({ path: path.resolve(__dirname, "../../../.env.local") });
 dotenv.config();
 
+const CITY_CENTERS: Record<string, { lat: number; lng: number }> = {
+  pune: { lat: 18.5204, lng: 73.8567 },
+  mumbai: { lat: 19.076, lng: 72.8777 },
+  kolhapur: { lat: 16.705, lng: 74.2433 },
+  nashik: { lat: 19.9975, lng: 73.7898 },
+  bangalore: { lat: 12.9716, lng: 77.5946 },
+  chennai: { lat: 13.0827, lng: 80.2707 },
+  cherryhill: { lat: 40.0155, lng: -74.9310 },
+  delhi: { lat: 28.6139, lng: 77.2090 },
+  hyderabad: { lat: 17.3850, lng: 78.4867 },
+  kolkata: { lat: 22.5726, lng: 88.3639 },
+  ahmedabad: { lat: 23.0225, lng: 72.5714 },
+  jaipur: { lat: 26.9124, lng: 75.7873 },
+  lucknow: { lat: 26.8467, lng: 80.9462 },
+  kochi: { lat: 9.9312, lng: 76.2673 },
+  panaji: { lat: 15.4909, lng: 73.8278 },
+  chandigarh: { lat: 30.7333, lng: 76.7794 },
+  udaipur: { lat: 24.5854, lng: 73.7125 },
+  agra: { lat: 27.1767, lng: 78.0081 },
+  varanasi: { lat: 25.3176, lng: 82.9739 },
+  amritsar: { lat: 31.6340, lng: 74.8723 },
+  surat: { lat: 21.1702, lng: 72.8311 },
+  patna: { lat: 25.5941, lng: 85.1376 },
+  bhubaneswar: { lat: 20.2961, lng: 85.8245 },
+  visakhapatnam: { lat: 17.6868, lng: 83.2185 },
+  indore: { lat: 22.7196, lng: 75.8577 },
+  nagpur: { lat: 21.1458, lng: 79.0882 },
+  guwahati: { lat: 26.1445, lng: 91.7362 },
+  coimbatore: { lat: 11.0168, lng: 76.9558 },
+  mysore: { lat: 12.2958, lng: 76.6394 },
+  dehradun: { lat: 30.3165, lng: 78.0322 },
+  shimla: { lat: 31.1048, lng: 77.1734 },
+  srinagar: { lat: 34.0837, lng: 74.7973 },
+  pondicherry: { lat: 11.9416, lng: 79.8083 },
+};
+
 export interface IngestionResult {
   city: string;
   source: "google" | "osm" | "simulation";
@@ -112,18 +148,8 @@ export class PlaceIngester {
    * Extract from OpenStreetMap Overpass API
    */
   private async extractFromOSM(city: string): Promise<any[]> {
-    // Get city center coordinates from local helper/mapping or default centers
-    const centers: Record<string, { lat: number; lng: number }> = {
-      pune: { lat: 18.5204, lng: 73.8567 },
-      mumbai: { lat: 19.076, lng: 72.8777 },
-      bangalore: { lat: 12.9716, lng: 77.5946 },
-      delhi: { lat: 28.6139, lng: 77.2090 },
-      chennai: { lat: 13.0827, lng: 80.2707 },
-      hyderabad: { lat: 17.3850, lng: 78.4867 },
-    };
-
     const normCity = city.toLowerCase();
-    const center = centers[normCity] || centers.pune;
+    const center = CITY_CENTERS[normCity] || CITY_CENTERS.pune;
 
     const query = `
       [out:json][timeout:25];
@@ -172,6 +198,9 @@ export class PlaceIngester {
   private generateSimulatedPlaces(city: string): any[] {
     console.log(`ℹ️ Simulation: Generating backup mock places for ${city}`);
     const nowStr = new Date().toISOString();
+    const normCity = city.toLowerCase();
+    const center = CITY_CENTERS[normCity] || CITY_CENTERS.pune;
+
     return [
       {
         id: `sim-${city.toLowerCase()}-1`,
@@ -179,8 +208,8 @@ export class PlaceIngester {
         description: `A lovely central culinary hotspot in the heart of ${city}, famous for local dishes and warm vibes.`,
         category: "restaurant",
         rating: 4.6,
-        latitude: 18.5204 + (Math.random() - 0.5) * 0.05,
-        longitude: 73.8567 + (Math.random() - 0.5) * 0.05,
+        latitude: center.lat + (Math.random() - 0.5) * 0.05,
+        longitude: center.lng + (Math.random() - 0.5) * 0.05,
         tags: ["curated", "famous", "dinner"],
         phone: "+91 20 5555 1212",
         website: `https://${city.toLowerCase()}centralbistro.in`,
@@ -192,8 +221,8 @@ export class PlaceIngester {
         description: `An elegant workspace cafe serving premium filter coffee, artisanal cold brew, and fresh croissants.`,
         category: "cafe",
         rating: 4.5,
-        latitude: 18.5204 + (Math.random() - 0.5) * 0.05,
-        longitude: 73.8567 + (Math.random() - 0.5) * 0.05,
+        latitude: center.lat + (Math.random() - 0.5) * 0.05,
+        longitude: center.lng + (Math.random() - 0.5) * 0.05,
         tags: ["work-friendly", "wifi", "espresso"],
         phone: "+91 20 5555 3434",
         website: "https://bluejavacafe.in",
@@ -205,8 +234,8 @@ export class PlaceIngester {
         description: `A classic scenic walking route presenting the beautiful monuments and historic architecture of the old city.`,
         category: "event",
         rating: 4.8,
-        latitude: 18.5204 + (Math.random() - 0.5) * 0.05,
-        longitude: 73.8567 + (Math.random() - 0.5) * 0.05,
+        latitude: center.lat + (Math.random() - 0.5) * 0.05,
+        longitude: center.lng + (Math.random() - 0.5) * 0.05,
         tags: ["heritage", "scenic", "walk"],
         priceRange: "Free",
       },
@@ -216,8 +245,8 @@ export class PlaceIngester {
         description: `The city's trendiest nightlife hotspot featuring craft cocktails, neon lights, and live indie band performances.`,
         category: "nightlife",
         rating: 4.4,
-        latitude: 18.5204 + (Math.random() - 0.5) * 0.05,
-        longitude: 73.8567 + (Math.random() - 0.5) * 0.05,
+        latitude: center.lat + (Math.random() - 0.5) * 0.05,
+        longitude: center.lng + (Math.random() - 0.5) * 0.05,
         tags: ["lounge", "cocktails", "music"],
         phone: "+91 20 5555 8888",
         priceRange: "$$$",

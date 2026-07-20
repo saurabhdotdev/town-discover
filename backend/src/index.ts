@@ -17,8 +17,15 @@ dotenv.config(); // Fallback to backend .env
 import db from "./db";
 import { runDatabaseMigrations } from "./migrations";
 import { authenticateUser, requireUser, AuthenticatedUser } from "./middleware/auth";
-import { apiLimiter, reportPostLimiter } from "./middleware/rateLimiter";
-import { getAllowedOrigins, isAllowedOrigin, requireTrustedOrigin } from "./middleware/security";
+import { apiLimiter, dealLaunchLimiter, reportPostLimiter } from "./middleware/rateLimiter";
+import {
+  getAllowedOrigins,
+  isAllowedOrigin,
+  requireSupportedContentType,
+  requireTrustedOrigin,
+  sanitizeRequestId,
+  securityHeaders,
+} from "./middleware/security";
 import { validateRequest } from "./middleware/validate";
 import { errorHandler } from "./middleware/errors";
 import { requestTimeout } from "./middleware/timeout";
@@ -38,6 +45,9 @@ let isShuttingDown = false;
 const PORT = process.env.PORT || 5000;
 const startedAt = new Date();
 const allowedOrigins = getAllowedOrigins();
+if (process.env.NODE_ENV === "production" && allowedOrigins.size === 0) {
+  console.warn("No trusted CORS origins configured. Set CORS_ORIGINS or FRONTEND_URL before accepting browser traffic.");
+}
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
   if (!origin) {
     callback(null, process.env.NODE_ENV !== "production");
@@ -60,6 +70,7 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST"],
     credentials: true,
   },
+  maxHttpBufferSize: 16 * 1024,
   allowRequest: (request, callback) => {
     const origin = request.headers.origin;
     callback(
@@ -80,7 +91,11 @@ const parseCookies = (cookieHeader: string | undefined): Record<string, string> 
     const name = parts[0]?.trim();
     const value = parts.slice(1).join("=").trim();
     if (name) {
-      cookies[name] = decodeURIComponent(value);
+      try {
+        cookies[name] = decodeURIComponent(value);
+      } catch {
+        cookies[name] = value;
+      }
     }
   });
   return cookies;
@@ -94,15 +109,13 @@ const hashSessionToken = (token: string) => {
 app.use(compression());
 app.use((req: Request, res: Response, next: NextFunction) => {
   const incomingRequestId = req.headers["x-request-id"];
-  const requestId =
-    typeof incomingRequestId === "string" && incomingRequestId.length <= 80
-      ? incomingRequestId
-      : crypto.randomUUID();
+  const requestId = sanitizeRequestId(incomingRequestId) ?? crypto.randomUUID();
 
   res.setHeader("x-request-id", requestId);
   (req as Request & { requestId?: string }).requestId = requestId;
   next();
 });
+app.use(securityHeaders);
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (!isShuttingDown) {
     next();
@@ -116,13 +129,31 @@ app.use(requestLogger);
 app.use(requestTimeout(15000)); // 15-second request timeout limit
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  hsts: process.env.NODE_ENV === "production"
+    ? { maxAge: 15552000, includeSubDomains: true }
+    : false,
+}));
 app.use(
   cors({
     origin: corsOrigin,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+    maxAge: 600,
+    optionsSuccessStatus: 204,
   })
 );
+app.options("*", cors({
+  origin: corsOrigin,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+  maxAge: 600,
+  optionsSuccessStatus: 204,
+}));
+app.use("/api/", requireSupportedContentType);
 app.use(express.json({ limit: "64kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb" })); // Secure urlencoded payload limit
 app.use(cookieParser());
@@ -326,9 +357,9 @@ app.get(
 // POST crowd reports
 app.post(
   "/api/crowd-reports",
-  reportPostLimiter,
   authenticateUser,
   requireUser,
+  reportPostLimiter,
   validateRequest(postCrowdReportSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     const { placeId, crowdLevel, note } = req.body;
@@ -441,7 +472,7 @@ app.post(
       const summary = await getPlaceSummary(placeId);
 
       // Broadcast update
-      io.emit("crowd-update", { placeId, summary, report });
+      io.to(placeId).emit("crowd-update", { placeId, summary, report });
 
       res.status(201).json({ report, summary });
     } catch (error) {
@@ -481,6 +512,7 @@ app.post(
   "/api/deals/launch",
   authenticateUser,
   requireUser,
+  dealLaunchLimiter,
   validateRequest(postLaunchDealSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     const { placeId, placeTitle, discountPercentage, description } = req.body;

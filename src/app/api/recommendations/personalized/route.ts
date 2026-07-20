@@ -14,8 +14,9 @@ export const GET = createApiHandler(
     
     // If guest, use a dummy UUID to trigger the cold-start fallback recommendation logic
     const userId = user?.id ?? "00000000-0000-0000-0000-000000000000";
+    const city = params.get("city") || undefined;
 
-    const recommendations = await getPersonalizedRecommendations(pool, userId, limit);
+    const recommendations = await getPersonalizedRecommendations(pool, userId, limit, city);
 
     return Response.json({
       recommendations,

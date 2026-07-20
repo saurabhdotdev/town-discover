@@ -54,6 +54,7 @@ export interface UserLocation {
   latitude: number;
   longitude: number;
   accuracy: number;
+  heading?: number | null;
 }
 
 export interface DiscoverSection {
