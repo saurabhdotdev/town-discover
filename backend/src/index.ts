@@ -601,8 +601,22 @@ io.use(async (socket, next) => {
   }
 });
 
+interface ActiveExplorer {
+  socketId: string;
+  userId?: string;
+  name: string;
+  lat: number;
+  lng: number;
+  isAnonymous: boolean;
+  lastActive: number;
+}
+
+const activeExplorersByCity = new Map<string, Map<string, ActiveExplorer>>();
+
 // Socket.io connection setup
 io.on("connection", (socket) => {
+  let joinedCity: string | null = null;
+
   socket.on("join-place", (placeId: string) => {
     if (typeof placeId !== "string" || !/^[a-zA-Z0-9:_-]{1,120}$/.test(placeId)) return;
     if (socket.rooms.size >= 51) return;
@@ -612,6 +626,86 @@ io.on("connection", (socket) => {
   socket.on("leave-place", (placeId: string) => {
     if (typeof placeId !== "string" || !/^[a-zA-Z0-9:_-]{1,120}$/.test(placeId)) return;
     socket.leave(placeId);
+  });
+
+  socket.on("join-city-radar", ({ city }: { city: string }) => {
+    if (typeof city !== "string" || city.trim().length === 0) return;
+    const normalizedCity = city.trim().toLowerCase();
+
+    if (joinedCity && joinedCity !== normalizedCity) {
+      socket.leave(`city-radar:${joinedCity}`);
+      const prevCityMap = activeExplorersByCity.get(joinedCity);
+      if (prevCityMap) {
+        prevCityMap.delete(socket.id);
+        io.to(`city-radar:${joinedCity}`).emit("radar-user-disconnected", socket.id);
+      }
+    }
+
+    joinedCity = normalizedCity;
+    socket.join(`city-radar:${normalizedCity}`);
+
+    if (!activeExplorersByCity.has(normalizedCity)) {
+      activeExplorersByCity.set(normalizedCity, new Map());
+    }
+
+    const cityMap = activeExplorersByCity.get(normalizedCity)!;
+    socket.emit("radar-users-sync", Array.from(cityMap.values()));
+  });
+
+  socket.on("report-location", ({ city, lat, lng, isAnonymous, name }: { city: string; lat: number; lng: number; isAnonymous: boolean; name?: string }) => {
+    if (typeof city !== "string" || typeof lat !== "number" || typeof lng !== "number") return;
+    const normalizedCity = city.trim().toLowerCase();
+
+    if (joinedCity !== normalizedCity) {
+      joinedCity = normalizedCity;
+      socket.join(`city-radar:${normalizedCity}`);
+      if (!activeExplorersByCity.has(normalizedCity)) {
+        activeExplorersByCity.set(normalizedCity, new Map());
+      }
+    }
+
+    const cityMap = activeExplorersByCity.get(normalizedCity)!;
+    const explorer: ActiveExplorer = {
+      socketId: socket.id,
+      userId: socket.data.user?.id,
+      name: name || socket.data.user?.fullName || "Explorer",
+      lat,
+      lng,
+      isAnonymous: !!isAnonymous,
+      lastActive: Date.now(),
+    };
+
+    cityMap.set(socket.id, explorer);
+    io.to(`city-radar:${normalizedCity}`).emit("radar-user-updated", explorer);
+  });
+
+  socket.on("send-vibe-signal", ({ city, lat, lng, type, message, label }: { city: string; lat: number; lng: number; type: string; message: string; label: string }) => {
+    if (typeof city !== "string" || typeof lat !== "number" || typeof lng !== "number" || typeof type !== "string" || typeof message !== "string") return;
+    const normalizedCity = city.trim().toLowerCase();
+
+    const signal = {
+      id: `${socket.id}-${Date.now()}`,
+      socketId: socket.id,
+      name: socket.data.user?.fullName || "Explorer",
+      lat,
+      lng,
+      type,
+      message,
+      label: label || "Vibe",
+      createdAt: Date.now(),
+    };
+
+    io.to(`city-radar:${normalizedCity}`).emit("new-vibe-signal", signal);
+  });
+
+  socket.on("disconnect", () => {
+    if (joinedCity) {
+      const cityMap = activeExplorersByCity.get(joinedCity);
+      if (cityMap) {
+        cityMap.delete(socket.id);
+        io.to(`city-radar:${joinedCity}`).emit("radar-user-disconnected", socket.id);
+      }
+    }
   });
 });
 

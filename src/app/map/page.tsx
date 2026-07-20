@@ -20,7 +20,7 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => m
   ssr: false,
   loading: () => <MapSkeleton />
 });
-import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee, Compass, Utensils, Moon, Store, GlassWater, Cake, IceCream, Soup, Heart, Car } from "lucide-react";
+import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee, Compass, Utensils, Moon, Store, GlassWater, Cake, IceCream, Soup, Heart, Car, Radio } from "lucide-react";
 import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow, isVegetarianPlace, API_URL } from "@/lib/utils";
 
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
@@ -355,6 +355,13 @@ export default function MapPage() {
 
   // Flash Deal Notification States
   const [activeFlashDeal, setActiveFlashDeal] = useState<any | null>(null);
+
+  // Real-time Multiplayer Radar States
+  const [radarUsers, setRadarUsers] = useState<any[]>([]);
+  const [vibeSignals, setVibeSignals] = useState<any[]>([]);
+  const [isVibeModalOpen, setIsVibeModalOpen] = useState(false);
+  const [vibeSignalType, setVibeSignalType] = useState("chill");
+  const [vibeSignalMessage, setVibeSignalMessage] = useState("");
 
   // Derived state computations & Live Geolocation simulation
   const [simulateLiveLocation, setSimulateLiveLocation] = useState<boolean>(false);
@@ -996,29 +1003,109 @@ export default function MapPage() {
     }
   }, [selectedWeather, tripStops, simulatedDepartureHour]);
 
-  // Real-time Flash Deal Socket listener - lazy-loaded for performance
+  const socketRef = useRef<any>(null);
+
+  const handleSendVibeSignal = () => {
+    if (!socketRef.current || !activeLocation) return;
+    
+    socketRef.current.emit("send-vibe-signal", {
+      city: activeCity,
+      lat: activeLocation.latitude,
+      lng: activeLocation.longitude,
+      type: vibeSignalType,
+      message: vibeSignalMessage || `Spotted a ${vibeSignalType} vibe here!`,
+      label: vibeSignalType === "party" ? "🔥 Party/Gig" : vibeSignalType === "chill" ? "☕ Cozy Chill" : vibeSignalType === "busy" ? "🚗 Crowded" : "⚠️ Incident"
+    });
+
+    setIsVibeModalOpen(false);
+    setVibeSignalMessage("");
+  };
+
+  // Real-time Flash Deal & Multiplayer Radar Socket listener - lazy-loaded for performance
   useEffect(() => {
     let active = true;
     let socket: any = null;
+    let locationInterval: any = null;
 
     import("socket.io-client").then(({ io }) => {
       if (!active) return;
       socket = io(API_URL, {
         withCredentials: true,
       });
+      socketRef.current = socket;
+
+      // Join the radar room for the current city
+      socket.emit("join-city-radar", { city: activeCity });
 
       socket.on("new-flash-deal", (deal: any) => {
         setActiveFlashDeal(deal);
       });
+
+      // Radar event listeners
+      socket.on("radar-users-sync", (users: any[]) => {
+        setRadarUsers(users.filter(u => u.socketId !== socket.id));
+      });
+
+      socket.on("radar-user-updated", (user: any) => {
+        if (user.socketId === socket.id) return;
+        setRadarUsers(prev => {
+          const index = prev.findIndex(u => u.socketId === user.socketId);
+          if (index !== -1) {
+            const updated = [...prev];
+            updated[index] = user;
+            return updated;
+          }
+          return [...prev, user];
+        });
+      });
+
+      socket.on("radar-user-disconnected", (socketId: string) => {
+        setRadarUsers(prev => prev.filter(u => u.socketId !== socketId));
+      });
+
+      socket.on("new-vibe-signal", (signal: any) => {
+        setVibeSignals(prev => [...prev, signal]);
+        
+        // Auto-fade vibe signals after 20 seconds
+        setTimeout(() => {
+          setVibeSignals(prev => prev.filter(s => s.id !== signal.id));
+        }, 20000);
+      });
+
+      // Broadcast our location immediately upon connection
+      if (activeLocation) {
+        socket.emit("report-location", {
+          city: activeCity,
+          lat: activeLocation.latitude,
+          lng: activeLocation.longitude,
+          isAnonymous: true,
+          name: "Explorer"
+        });
+      }
+
+      // Periodically report our location every 8 seconds
+      locationInterval = setInterval(() => {
+        if (activeLocation && socket.connected) {
+          socket.emit("report-location", {
+            city: activeCity,
+            lat: activeLocation.latitude,
+            lng: activeLocation.longitude,
+            isAnonymous: true,
+            name: "Explorer"
+          });
+        }
+      }, 8000);
     });
 
     return () => {
       active = false;
+      if (locationInterval) clearInterval(locationInterval);
       if (socket) {
         socket.disconnect();
       }
+      socketRef.current = null;
     };
-  }, []);
+  }, [activeCity, activeLocation]);
 
   const handleSwapToIndoorSpots = () => {
     let swappedCount = 0;
@@ -1422,6 +1509,23 @@ export default function MapPage() {
               + Add Spot
             </button>
 
+            <div className="flex items-center gap-2 rounded-full border border-teal-500/20 bg-slate-950/95 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+              </span>
+              <span>{radarUsers.length + 1} live in {activeCity}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsVibeModalOpen(true)}
+              className="flex items-center gap-2 rounded-full border border-teal-500/30 bg-slate-950/90 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md transition-all hover:bg-slate-900 hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <Radio size={12} className="text-teal-400 animate-pulse animate-duration-1000" />
+              Signal Vibe
+            </button>
+
             {locationSource === "browser" && (
               <button
                 type="button"
@@ -1475,6 +1579,8 @@ export default function MapPage() {
             tripStops={tripStops}
             onAddStop={handleAddStopToTrip}
             onRemoveStop={handleDeleteStop}
+            radarUsers={radarUsers}
+            vibeSignals={vibeSignals}
           />
 
           {livePlacesLoading && mode !== "trip" && (
@@ -2703,6 +2809,87 @@ export default function MapPage() {
         defaultCity={activeCity}
         defaultCoords={mapCenter || { latitude: activeLocation.latitude, longitude: activeLocation.longitude }}
       />
+
+      {/* Vibe Signal Broadcast Modal */}
+      {isVibeModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[800] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setIsVibeModalOpen(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15 }}
+            animate={{ scale: 1, y: 0 }}
+            className="w-full max-w-sm rounded-2xl border border-teal-500/20 bg-slate-950/95 p-6 shadow-2xl backdrop-blur-md text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-black tracking-wider uppercase text-teal-400 mb-4 flex items-center gap-2">
+              <Radio size={16} className="animate-pulse" />
+              Broadcast Vibe Signal
+            </h3>
+            
+            <p className="text-xs text-slate-400 mb-4 font-medium leading-relaxed">
+              Signal the local atmosphere at your coordinates for all active explorers in {activeCity}!
+            </p>
+
+            <div className="mb-4">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-2">Vibe Type</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { id: "chill", label: "☕ Chill", activeColor: "border-teal-500/40 bg-teal-950/30 text-teal-400" },
+                  { id: "party", label: "🔥 Party", activeColor: "border-amber-500/40 bg-amber-950/30 text-amber-400" },
+                  { id: "busy", label: "🚗 Busy", activeColor: "border-purple-500/40 bg-purple-950/30 text-purple-400" },
+                  { id: "alert", label: "⚠️ Alert", activeColor: "border-red-500/40 bg-red-950/30 text-red-400" }
+                ].map((item) => {
+                  const isActive = vibeSignalType === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setVibeSignalType(item.id)}
+                      className={cn(
+                        "rounded-lg border px-2 py-2.5 text-xs font-black transition-all cursor-pointer",
+                        isActive ? item.activeColor : "border-slate-800 bg-slate-900/40 text-slate-500 hover:text-slate-350"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-2">Atmosphere Message</label>
+              <input
+                type="text"
+                value={vibeSignalMessage}
+                onChange={(e) => setVibeSignalMessage(e.target.value.slice(0, 80))}
+                placeholder="e.g. Gig started! Coffee is great! Traffic is heavy..."
+                className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-2.5 text-xs font-medium text-slate-100 placeholder:text-slate-650 focus:border-teal-500/50 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-2.5 justify-end">
+              <button
+                type="button"
+                onClick={() => setIsVibeModalOpen(false)}
+                className="rounded-xl border border-slate-800 bg-slate-900/30 px-4 py-2 text-xs font-black tracking-wider uppercase text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendVibeSignal}
+                className="rounded-xl bg-teal-400 px-5 py-2 text-xs font-black tracking-wider uppercase text-slate-950 hover:bg-teal-300 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-teal-500/20"
+              >
+                Broadcast
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Share Itinerary Modal */}
       {isShareModalOpen && tripStats && (

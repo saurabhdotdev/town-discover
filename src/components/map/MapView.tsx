@@ -25,6 +25,8 @@ interface MapProps {
   tripStops?: Place[];
   onAddStop?: (place: Place) => void;
   onRemoveStop?: (stopId: string) => void;
+  radarUsers?: any[];
+  vibeSignals?: any[];
 }
 
 const categoryColor: Record<string, string> = {
@@ -169,6 +171,8 @@ export const MapView: React.FC<MapProps> = ({
   tripStops = [],
   onAddStop,
   onRemoveStop,
+  radarUsers = [],
+  vibeSignals = [],
 }) => {
   const [mapZoom, setMapZoom] = useState(14);
   const [mapStyle, setMapStyle] = useState<"classic" | "satellite">("classic");
@@ -180,6 +184,8 @@ export const MapView: React.FC<MapProps> = ({
   const polylineRef = useRef<Leaflet.Polyline | null>(null);
   const polylinesRef = useRef<Leaflet.Polyline[]>([]);
   const userLocationMarkerRef = useRef<Leaflet.Marker | null>(null);
+  const radarMarkersRef = useRef<Record<string, Leaflet.Marker>>({});
+  const vibeMarkersRef = useRef<Record<string, Leaflet.Marker>>({});
   const lastFlownLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const lastFlownSelectedPlaceRef = useRef<string | null>(null);
   const scrollWheelZoomRef = useRef(scrollWheelZoom);
@@ -404,6 +410,167 @@ export const MapView: React.FC<MapProps> = ({
       });
     }
   }, [userLocation]);
+
+
+  // Synchronize multiplayer active explorers (radar users) on Leaflet map
+  useEffect(() => {
+    const L = leaflet.current;
+    const mapInstance = map.current;
+    if (!mapInstance || !L) return;
+
+    // Clear existing radar markers
+    Object.values(radarMarkersRef.current).forEach((marker) => marker.remove());
+    radarMarkersRef.current = {};
+
+    radarUsers.forEach((user) => {
+      if (!user.lat || !user.lng) return;
+
+      const radarIcon = L.divIcon({
+        className: "custom-radar-marker",
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: `
+          <div style="
+            position: relative;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background-color: #0f172a;
+            border: 2px solid #2dd4bf;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 10px rgba(45, 212, 191, 0.6);
+          ">
+            <span style="
+              position: absolute;
+              inset: -4px;
+              border-radius: 50%;
+              border: 2px solid #2dd4bf;
+              opacity: 0.8;
+              animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+            "></span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 21a6 6 0 0 0-12 0"/>
+              <circle cx="12" cy="10" r="4"/>
+            </svg>
+          </div>
+        `
+      });
+
+      const marker = L.marker([user.lat, user.lng], { icon: radarIcon })
+        .addTo(mapInstance)
+        .bindPopup(`
+          <div style="font-family: system-ui, sans-serif; padding: 4px 8px; font-size: 11px; font-weight: 800; color: #f8fafc; background: #020617; border-radius: 6px; border: 1px solid rgba(45, 212, 191, 0.3);">
+            🟢 ${user.name || "Explorer"} (Online)
+          </div>
+        `, { closeButton: false });
+
+      radarMarkersRef.current[user.socketId] = marker;
+    });
+
+    return () => {
+      Object.values(radarMarkersRef.current).forEach((marker) => marker.remove());
+      radarMarkersRef.current = {};
+    };
+  }, [radarUsers]);
+
+
+  // Synchronize multiplayer vibe signals on Leaflet map
+  useEffect(() => {
+    const L = leaflet.current;
+    const mapInstance = map.current;
+    if (!mapInstance || !L) return;
+
+    // Clear existing vibe markers
+    Object.values(vibeMarkersRef.current).forEach((marker) => marker.remove());
+    vibeMarkersRef.current = {};
+
+    vibeSignals.forEach((signal) => {
+      if (!signal.lat || !signal.lng) return;
+
+      const colors: Record<string, string> = {
+        chill: "#2dd4bf",
+        party: "#f59e0b",
+        busy: "#c084fc",
+        alert: "#ef4444"
+      };
+      const themeColor = colors[signal.type] || "#2dd4bf";
+
+      const vibeIcon = L.divIcon({
+        className: "custom-vibe-signal",
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        html: `
+          <div style="
+            position: relative;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <span style="
+              position: absolute;
+              width: 100%;
+              height: 100%;
+              border-radius: 50%;
+              background-color: ${themeColor};
+              opacity: 0.15;
+              animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+            "></span>
+            <span style="
+              position: absolute;
+              width: 60%;
+              height: 60%;
+              border-radius: 50%;
+              background-color: ${themeColor};
+              opacity: 0.35;
+              animation: ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+            "></span>
+            <div style="
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background-color: ${themeColor};
+              border: 2.5px solid #020617;
+              box-shadow: 0 0 12px ${themeColor};
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            "></div>
+          </div>
+        `
+      });
+
+      const marker = L.marker([signal.lat, signal.lng], { icon: vibeIcon })
+        .addTo(mapInstance)
+        .bindPopup(`
+          <div style="font-family: system-ui, sans-serif; padding: 6px 10px; font-size: 11px; color: #f8fafc; background: #0b0f19; border-radius: 8px; border: 1px solid ${themeColor}40; min-width: 140px;">
+            <div style="font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: ${themeColor}; margin-bottom: 2px;">
+              ${signal.label}
+            </div>
+            <div style="font-weight: 600; font-size: 10px; color: #cbd5e1; margin-bottom: 4px;">
+              ${signal.message}
+            </div>
+            <div style="font-size: 8px; color: #64748b; font-weight: 500;">
+              By ${signal.name || "Explorer"}
+            </div>
+          </div>
+        `, { closeButton: false });
+
+      setTimeout(() => {
+        if (map.current) marker.openPopup();
+      }, 100);
+
+      vibeMarkersRef.current[signal.id] = marker;
+    });
+
+    return () => {
+      Object.values(vibeMarkersRef.current).forEach((marker) => marker.remove());
+      vibeMarkersRef.current = {};
+    };
+  }, [vibeSignals]);
 
 
   useEffect(() => {
