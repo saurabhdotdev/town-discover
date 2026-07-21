@@ -23,6 +23,14 @@ import {
   TripPlan,
   AuthUser,
 } from "../../src/api/client";
+import {
+  cachePlaces,
+  getCachedPlaces,
+  cacheTrips,
+  getCachedTrips,
+} from "../../src/api/cache";
+import AppMapView from "../../src/components/MapView";
+
 
 const CITIES = ["Pune", "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolhapur", "Nashik"] as const;
 
@@ -32,6 +40,7 @@ export default function TripsScreen() {
   
   // Tab selector: New Trip vs Saved Trips
   const [activeTab, setActiveTab] = useState<"builder" | "saved">("builder");
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form states
   const [budget, setBudget] = useState<"1" | "3" | "5">("3");
@@ -83,9 +92,17 @@ export default function TripsScreen() {
     setLoadingPlans(true);
     try {
       const plans = await fetchTripPlans();
-      setSavedPlans((plans as TripPlan[]) || []);
+      const planList = (plans as TripPlan[]) || [];
+      setSavedPlans(planList);
+      setIsOffline(false);
+      void cacheTrips(planList);
     } catch (err) {
-      console.log("Error loading trip plans:", err);
+      console.log("Error loading trip plans, falling back to cache:", err);
+      setIsOffline(true);
+      const cached = await getCachedTrips();
+      if (cached) {
+        setSavedPlans(cached);
+      }
     } finally {
       setLoadingPlans(false);
     }
@@ -99,11 +116,22 @@ export default function TripsScreen() {
         const recs = await fetchMoodRecommendations({ city, mood: "chill" });
         const cleanPlaces = recs.map(r => r.place);
         setPlaces(cleanPlaces);
+        setIsOffline(false);
         if (cleanPlaces.length > 0) {
           setStartPlaceId(cleanPlaces[0].id);
         }
+        void cachePlaces(cleanPlaces);
       } catch (err) {
-        console.log("Failed to load starting spots:", err);
+        console.log("Failed to load starting spots, falling back to cache:", err);
+        setIsOffline(true);
+        const cached = await getCachedPlaces();
+        if (cached) {
+          const cityPlaces = cached.filter((p: any) => p.city?.toLowerCase() === city.toLowerCase());
+          setPlaces(cityPlaces);
+          if (cityPlaces.length > 0) {
+            setStartPlaceId(cityPlaces[0].id);
+          }
+        }
       } finally {
         setLoadingPlaces(false);
       }
@@ -327,6 +355,13 @@ export default function TripsScreen() {
         </Pressable>
       </View>
 
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline" size={13} color="#f59e0b" />
+          <Text style={styles.offlineBannerText}>Offline Mode — Showing Cached Outing Data</Text>
+        </View>
+      )}
+
       {activeTab === "builder" ? (
         // ROUTE GENERATOR SCREEN
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
@@ -461,6 +496,19 @@ export default function TripsScreen() {
                   )}
                 </Pressable>
               </View>
+              <AppMapView
+                places={previewStops.map(p => ({
+                  id: p.id,
+                  title: p.title,
+                  latitude: p.latitude,
+                  longitude: p.longitude,
+                  locality: p.locality,
+                  category: p.category,
+                  description: p.description
+                }))}
+                routePath={previewStops.map(p => ({ latitude: p.latitude, longitude: p.longitude }))}
+                style={styles.previewMap}
+              />
 
               <Text style={styles.itineraryHeader}>Route Stop Itinerary</Text>
               
@@ -567,6 +615,23 @@ export default function TripsScreen() {
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+              <AppMapView
+                places={(selectedPlanDetails.stops || []).map((s: any) => ({
+                  id: s.id || String(s.placeId || Math.random()),
+                  title: s.title || "Stop",
+                  latitude: Number(s.latitude),
+                  longitude: Number(s.longitude),
+                  locality: s.locality,
+                  category: s.category,
+                  description: s.description,
+                }))}
+                routePath={(selectedPlanDetails.stops || []).map((s: any) => ({
+                  latitude: Number(s.latitude),
+                  longitude: Number(s.longitude)
+                }))}
+                style={styles.previewMap}
+              />
+
               <Text style={styles.itineraryHeader}>Trip Stops sequence</Text>
               
               {selectedPlanDetails.stops?.map((stop: TripPlan["stops"][number], idx: number) => (
@@ -753,6 +818,7 @@ const styles = StyleSheet.create({
   },
   previewTitle: { color: "#f8fafc", fontSize: 15, fontWeight: "900" },
   previewMeta: { color: "#2dd4bf", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  previewMap: { height: 180, width: "100%", borderRadius: 14, marginBottom: 16 },
   savePlanBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -834,6 +900,25 @@ const styles = StyleSheet.create({
   modalCloseBtn: { padding: 4 },
   scrollList: {
     paddingBottom: 100,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    marginBottom: 12,
+    marginHorizontal: 4,
+  },
+  offlineBannerText: {
+    color: "#f59e0b",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
 

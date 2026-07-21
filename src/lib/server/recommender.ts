@@ -41,7 +41,8 @@ function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): numbe
 export async function getPersonalizedRecommendations(
   pool: Pool,
   userId: string,
-  limit: number = 6
+  limit: number = 6,
+  city?: string
 ): Promise<PersonalizedRecommendation[]> {
   // 1. Fetch user's saved places & reviews to build their profile
   const { rows: savedRows } = await pool.query<{ placeId: string }>(
@@ -103,14 +104,19 @@ export async function getPersonalizedRecommendations(
   }
 
   // 4. Retrieve candidate places from approved_places database (fallback to MOCK_PLACES)
-  const { rows: dbPlacesRows } = await pool.query<any>(
-    `
+  const queryParams: any[] = [];
+  let querySql = `
     SELECT
       id, title, description, category, image, rating, latitude, longitude, tags, city, locality,
       price_range AS "priceRange", phone, website, hours, review_mood AS "reviewMood"
     FROM approved_places
-    `
-  );
+  `;
+  if (city) {
+    querySql += ` WHERE LOWER(city) = LOWER($1)`;
+    queryParams.push(city);
+  }
+
+  const { rows: dbPlacesRows } = await pool.query<any>(querySql, queryParams);
 
   let candidatePool: Place[] = dbPlacesRows.map((row: any) => ({
     ...row,
@@ -123,7 +129,11 @@ export async function getPersonalizedRecommendations(
   }));
 
   if (candidatePool.length === 0) {
-    candidatePool = MOCK_PLACES;
+    if (city) {
+      candidatePool = MOCK_PLACES.filter((place) => place.city.toLowerCase() === city.toLowerCase());
+    } else {
+      candidatePool = MOCK_PLACES;
+    }
   }
 
   // Exclude places the user already interacted with
@@ -144,7 +154,7 @@ export async function getPersonalizedRecommendations(
     catCounts[p.category] = (catCounts[p.category] || 0) + 1;
   });
 
-  const favoriteCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Pune";
+  const favoriteCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? (city ?? "Pune");
   const favoriteCategory = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
   // Compute recommendation scores for each candidate

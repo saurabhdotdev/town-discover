@@ -7,7 +7,8 @@ export const requestLogger = (
 ) => {
   const start = Date.now();
   const { method, path, ip } = req;
-  const userAgent = req.get("user-agent") || "unknown";
+  const userAgent = (req.get("user-agent") || "unknown").slice(0, 180);
+  const requestId = res.getHeader("x-request-id") || "unknown";
 
   // Capture response finish event to calculate elapsed duration
   res.on("finish", () => {
@@ -25,7 +26,7 @@ export const requestLogger = (
     }
 
     console.log(
-      `[${timestamp}] ${emoji} ${method} ${path} - Status: ${status} | IP: ${ip} | Duration: ${duration}ms | UA: ${userAgent}`
+      `[${timestamp}] ${emoji} ${method} ${path} - Status: ${status} | Request: ${requestId} | IP: ${ip} | Duration: ${duration}ms | UA: ${userAgent}`
     );
   });
 

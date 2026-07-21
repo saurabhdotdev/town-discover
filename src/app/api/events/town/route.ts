@@ -1,14 +1,12 @@
 import { NextRequest } from "next/server";
 import { getAllTownEvents } from "@/data/town-events";
 import { fetchLiveTownEvents } from "@/lib/town-events";
-import { getCityFromQuery } from "@/lib/pune-location";
+import { getCityFromQuery, SUPPORTED_CITY_NAMES } from "@/lib/pune-location";
 import { SupportedCityName } from "@/lib/pune-location";
 import { createApiHandler } from "@/lib/server/api-handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const CITIES: SupportedCityName[] = ["Pune", "Mumbai", "Kolhapur", "Nashik", "Bangalore", "Chennai", "Delhi"];
 
 export const GET = createApiHandler({ auth: "none" }, async (request: NextRequest) => {
   const cityParam = request.nextUrl.searchParams.get("city");
@@ -16,7 +14,7 @@ export const GET = createApiHandler({ auth: "none" }, async (request: NextReques
   const cityFromQuery = getCityFromQuery(query);
   const city = (cityParam as SupportedCityName | null) ?? cityFromQuery;
 
-  const events = city && CITIES.includes(city) ? await fetchLiveTownEvents(city) : getAllTownEvents();
+  const events = city && SUPPORTED_CITY_NAMES.includes(city) ? await fetchLiveTownEvents(city) : getAllTownEvents();
 
   return Response.json({
     city: city ?? "all",

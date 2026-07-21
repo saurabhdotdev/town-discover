@@ -694,38 +694,40 @@ export async function GET(request: NextRequest) {
     let events: LiveEvent[] | null = refresh ? null : await getCache<LiveEvent[]>(cacheKey);
 
     if (!events) {
-      try {
-        console.log(`Scraping BookMyShow events for ${cityParam}...`);
-        const bmsEvents = await scrapeBookMyShowEvents(cityParam);
-        
-        let geminiEvents: LiveEvent[] = [];
-        if (bmsEvents.length > 0) {
-          console.log(`Successfully scraped ${bmsEvents.length} real events. Enriching with Gemini...`);
-          geminiEvents = await enrichScrapedEventsWithGemini(bmsEvents, cityParam, cityCtx);
-        } else {
-          console.log(`No events scraped. Generating mock events with Gemini...`);
-          geminiEvents = await generateEventsWithGemini(cityParam, cityCtx);
-        }
-        
-        const curated = fallbackCuratedEvents(cityParam);
-        
-        // Merge unique ones
-        const combined = [...geminiEvents];
-        curated.forEach((c) => {
-          if (!combined.some(g => g.title.toLowerCase() === c.title.toLowerCase())) {
-            combined.push(c);
+      // Instantly load curated fallback events so the user receives a response under 50ms
+      events = fallbackCuratedEvents(cityParam);
+
+      // Trigger scraping & Gemini enrichment asynchronously in the background
+      const generateInBackground = async () => {
+        try {
+          console.log(`[Background] Scraping events for ${cityParam}...`);
+          const bmsEvents = await scrapeBookMyShowEvents(cityParam);
+          
+          let geminiEvents: LiveEvent[] = [];
+          if (bmsEvents.length > 0) {
+            console.log(`[Background] Scraped ${bmsEvents.length} events. Enriching with Gemini...`);
+            geminiEvents = await enrichScrapedEventsWithGemini(bmsEvents, cityParam, cityCtx);
+          } else {
+            console.log(`[Background] Generating fallback events with Gemini...`);
+            geminiEvents = await generateEventsWithGemini(cityParam, cityCtx);
           }
-        });
-        
-        events = combined;
-        // Cache for 3 hours
-        await setCache(cacheKey, events, 60 * 60 * 3);
-      } catch (geminiError) {
-        console.error("Gemini/Scraper event generation failed, falling back to curated events:", geminiError);
-        events = fallbackCuratedEvents(cityParam);
-        // Cache for 5 minutes when falling back
-        await setCache(cacheKey, events, 60 * 5);
-      }
+          
+          const curated = fallbackCuratedEvents(cityParam);
+          const combined = [...geminiEvents];
+          curated.forEach((c) => {
+            if (!combined.some(g => g.title.toLowerCase() === c.title.toLowerCase())) {
+              combined.push(c);
+            }
+          });
+          
+          await setCache(cacheKey, combined, 60 * 60 * 3);
+          console.log(`[Background] Successfully updated events cache for ${cityParam}.`);
+        } catch (bgErr) {
+          console.warn(`[Background] Event generation failed for ${cityParam}:`, bgErr);
+        }
+      };
+      
+      void generateInBackground();
     }
 
     // Filter by category

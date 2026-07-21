@@ -579,7 +579,7 @@ export default function HangoutsPage() {
                     <Award size={13} className="text-teal-400" /> Earned Badges ({userStats.badges.length})
                   </h4>
                   <a
-                    href="/leaderboard"
+                    href="/profile?tab=leaderboard"
                     className="inline-flex items-center gap-1 text-xs font-black text-teal-400 hover:text-teal-300 hover:underline"
                   >
                     Leaderboard <ChevronRight size={13} />

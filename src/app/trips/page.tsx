@@ -878,9 +878,35 @@ export default function TripsPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="py-16 text-center text-xs font-medium text-[var(--muted)] flex flex-col items-center gap-1.5">
-                    <Info size={16} className="text-[var(--muted-strong)]" />
-                    No matching pool spots.
+                  <div className="py-14 text-center text-xs font-medium text-[var(--muted)] flex flex-col items-center gap-3 px-3">
+                    <div className="grid h-11 w-11 place-items-center rounded-xl border border-teal-500/20 bg-teal-500/10 text-teal-300">
+                      <Info size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-[var(--foreground)]">No spots match this vibe</h3>
+                      <p className="mx-auto mt-1 max-w-56 text-[11px] leading-5 text-[var(--muted)]">
+                        Try all spots, change the city pair, or re-cluster to refresh the route pool.
+                      </p>
+                    </div>
+                    <div className="flex w-full max-w-56 flex-col gap-2">
+                      {selectedVibe !== "all" && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVibe("all")}
+                          className="min-h-9 rounded-lg bg-teal-400 px-3 text-[10px] font-black uppercase tracking-wider text-slate-950"
+                        >
+                          Show All Spots
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => distributePlaces(places, selectedCity, daysCount)}
+                        disabled={places.length === 0}
+                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 text-[10px] font-black uppercase tracking-wider text-[var(--foreground)] disabled:opacity-40"
+                      >
+                        Re-Cluster Route
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1083,9 +1109,18 @@ export default function TripsPage() {
                         <Compass size={22} className="animate-pulse" />
                       </div>
                       <div>
-                        <h3 className="text-xs font-black text-[var(--foreground)]">Itinerary Empty</h3>
-                        <p className="text-[10px] text-[var(--muted)] mt-1">Tap a spot from search to add to Day {activeDay}.</p>
+                        <h3 className="text-sm font-black text-[var(--foreground)]">Day {activeDay} is open</h3>
+                        <p className="mx-auto mt-1 max-w-64 text-[11px] leading-5 text-[var(--muted)]">
+                          Add two or three nearby stops first. You can optimize the order after the day has a route.
+                        </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveMobileTab("pool")}
+                        className="mt-1 inline-flex min-h-9 items-center justify-center rounded-lg bg-teal-400 px-4 text-[10px] font-black uppercase tracking-wider text-slate-950 md:hidden"
+                      >
+                        Find Spots
+                      </button>
                     </div>
                   )}
                 </AnimatePresence>

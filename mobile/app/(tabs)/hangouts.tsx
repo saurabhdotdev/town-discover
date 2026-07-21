@@ -26,6 +26,14 @@ import {
   Place,
   AuthUser,
 } from "../../src/api/client";
+import {
+  cachePlaces,
+  getCachedPlaces,
+  cacheHangouts,
+  getCachedHangouts,
+} from "../../src/api/cache";
+import AppMapView from "../../src/components/MapView";
+
 
 const CITIES = ["Pune", "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolhapur", "Nashik"] as const;
 
@@ -40,6 +48,7 @@ interface Hangout {
   eventDate: string;
   whatsappLink: string;
   placeTitle: string;
+  placeId?: string;
   userId: string;
   userFullName: string;
   createdAt: string;
@@ -58,6 +67,8 @@ export default function HangoutsScreen() {
   const [city, setCity] = useState<(typeof CITIES)[number]>("Pune");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [viewMode, setViewMode] = useState<"meetups" | "shoutbox">("meetups");
+  const [showMap, setShowMap] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   
   // Meetup States
   const [hangouts, setHangouts] = useState<Hangout[]>([]);
@@ -118,8 +129,15 @@ export default function HangoutsScreen() {
     try {
       const list = await fetchHangouts(city);
       setHangouts(list);
+      setIsOffline(false);
+      void cacheHangouts(list);
     } catch (err) {
-      console.log("Error loading hangouts:", err);
+      console.log("Error loading hangouts, falling back to cache:", err);
+      setIsOffline(true);
+      const cached = await getCachedHangouts();
+      if (cached) {
+        setHangouts(cached);
+      }
     } finally {
       if (!silent) setLoadingHangouts(false);
     }
@@ -142,20 +160,35 @@ export default function HangoutsScreen() {
     try {
       const osmPlaces = await fetchOsmPlaces(city);
       setPlaces(osmPlaces);
+      setIsOffline(false);
       if (osmPlaces.length > 0) {
         setFormPlaceId(osmPlaces[0].id);
       }
+      void cachePlaces(osmPlaces);
     } catch (err) {
-      console.log("Error loading places for creator modal:", err);
+      console.log("Error loading places for creator modal, falling back to cache:", err);
+      setIsOffline(true);
+      const cached = await getCachedPlaces();
+      if (cached) {
+        const cityPlaces = cached.filter((p: any) => p.city?.toLowerCase() === city.toLowerCase());
+        setPlaces(cityPlaces);
+        if (cityPlaces.length > 0) {
+          setFormPlaceId(cityPlaces[0].id);
+        }
+      }
     } finally {
       setLoadingPlaces(false);
     }
   }, [city]);
 
   useEffect(() => {
-    const timer = setTimeout(() => { void loadHangouts(); void loadShoutbox(); }, 0);
+    const timer = setTimeout(() => { 
+      void loadHangouts(); 
+      void loadShoutbox(); 
+      void loadPlaces(); 
+    }, 0);
     return () => clearTimeout(timer);
-  }, [loadHangouts, loadShoutbox]);
+  }, [loadHangouts, loadShoutbox, loadPlaces]);
 
   // Poll shoutbox messages every 15 seconds
   useEffect(() => {
@@ -336,6 +369,13 @@ export default function HangoutsScreen() {
         </Pressable>
       </View>
 
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline" size={13} color="#f59e0b" />
+          <Text style={styles.offlineBannerText}>Offline Mode — Showing Cached Meetup Data</Text>
+        </View>
+      )}
+
       {viewMode === "meetups" ? (
         // MEETUPS SECTION
         <View style={{ flex: 1 }}>
@@ -355,10 +395,35 @@ export default function HangoutsScreen() {
               <Ionicons name="add" size={16} color="#020617" />
               <Text style={styles.planBtnText}>Plan</Text>
             </Pressable>
+            <Pressable
+              onPress={() => setShowMap(!showMap)}
+              style={[styles.mapToggleBtn, showMap && styles.mapToggleActive]}
+            >
+              <Ionicons name={showMap ? "list" : "map"} size={16} color={showMap ? "#020617" : "#2dd4bf"} />
+            </Pressable>
           </View>
 
           {loadingHangouts ? (
             <ActivityIndicator color="#2dd4bf" style={{ marginTop: 40 }} />
+          ) : showMap ? (
+            <AppMapView
+              places={filteredHangouts
+                .map((h) => {
+                  const place = places.find((p) => p.id === h.placeId);
+                  if (!place) return null;
+                  return {
+                    id: place.id,
+                    title: `${h.title} (at ${place.title})`,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    locality: place.locality,
+                    category: place.category,
+                    description: h.description,
+                  };
+                })
+                .filter((p): p is any => p !== null)}
+              style={styles.hangoutsMap}
+            />
           ) : filteredHangouts.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="calendar-outline" size={48} color="#475569" />
@@ -690,6 +755,26 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   planBtnText: { color: "#020617", fontSize: 12, fontWeight: "800" },
+  mapToggleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapToggleActive: {
+    backgroundColor: "#2dd4bf",
+    borderColor: "#2dd4bf",
+  },
+  hangoutsMap: {
+    flex: 1,
+    width: "100%",
+    borderRadius: 20,
+    marginBottom: 16,
+  },
 
   // Meetup Cards Feed
   meetupCard: {
@@ -866,5 +951,24 @@ const styles = StyleSheet.create({
   formSubmitText: { color: "#020617", fontSize: 13, fontWeight: "900" },
   scrollList: {
     paddingBottom: 100,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    marginBottom: 12,
+    marginHorizontal: 4,
+  },
+  offlineBannerText: {
+    color: "#f59e0b",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

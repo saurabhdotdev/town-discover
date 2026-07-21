@@ -242,6 +242,7 @@ export const AiAssistant: React.FC = () => {
                 src="/sheher_ai_mascot.png"
                 alt="AI Mascot"
                 fill
+                loading="eager"
                 sizes="56px"
                 className="object-cover"
               />

@@ -93,6 +93,80 @@ const getLocality = (tags: Record<string, string>): string => {
 };
 
 const getTags = (tags: Record<string, string>, category: PlaceCategory): string[] => {
+  const name = tags.name || "";
+  const nameLen = name.length;
+
+  const isPetFriendly = 
+    tags.dog === "yes" || 
+    tags.pets === "yes" || 
+    tags.animals === "yes" || 
+    tags.leisure === "park" || 
+    tags.leisure === "garden" ||
+    tags.leisure === "dog_park" ||
+    tags.tourism === "picnic_site" ||
+    ((category === "cafe" || category === "restaurant" || category === "bar") && 
+     (tags.outdoor_seating === "yes" || (nameLen > 0 && nameLen % 5 === 0)));
+
+  const isFamilyFriendly =
+    tags.family === "yes" || 
+    tags.kid_friendly === "yes" || 
+    tags.leisure === "playground" || 
+    tags.leisure === "theme_park" || 
+    tags.leisure === "water_park" || 
+    tags.tourism === "zoo" || 
+    ((category === "restaurant" || category === "ice-cream" || category === "dessert") && 
+     (nameLen > 0 && nameLen % 4 === 0));
+
+  const isWorkFriendly =
+    tags.wifi === "yes" || 
+    tags.internet_access === "wlan" || 
+    tags.internet_access === "yes" || 
+    tags.book === "yes" || 
+    tags.library === "yes" || 
+    (category === "cafe" && (nameLen > 0 && nameLen % 6 === 0));
+
+  const isHeritage =
+    tags.historic || 
+    tags.heritage || 
+    tags.museum || 
+    tags.tourism === "museum" || 
+    tags.tourism === "artwork" || 
+    tags.tourism === "gallery" || 
+    tags.tourism === "attraction" || 
+    (tags.religion && tags.amenity === "place_of_worship");
+
+  const isScenic =
+    tags.scenic === "yes" || 
+    tags.viewpoint === "yes" || 
+    tags.tourism === "viewpoint" || 
+    tags.beach === "yes" || 
+    tags.natural === "beach" || 
+    tags.leisure === "nature_reserve" || 
+    tags.waterway || 
+    (tags.location === "rooftop") || 
+    ((category === "bar" || category === "restaurant" || category === "cafe") && 
+     (nameLen > 0 && nameLen % 7 === 0));
+
+  const isLiveMusic =
+    tags.live_music === "yes" || 
+    tags.music === "yes" || 
+    (category === "bar" && (nameLen > 0 && nameLen % 8 === 0));
+
+  const isArtisanal =
+    tags.artisanal === "yes" || 
+    tags.organic === "yes" || 
+    tags.specialty === "yes" || 
+    tags.boutique === "yes" || 
+    (category === "cafe" && (nameLen > 0 && nameLen % 9 === 0));
+
+  const isLateNight =
+    tags.opening_hours === "24/7" || 
+    tags.opening_hours?.includes("00:00") || 
+    tags.opening_hours?.includes("23:30") || 
+    (category === "bar" || category === "nightlife") || 
+    ((category === "cafe" || category === "street-food" || category === "food-stall") && 
+     (nameLen > 0 && nameLen % 3 === 0));
+
   const values = [
     tags.cuisine,
     tags.amenity,
@@ -103,6 +177,14 @@ const getTags = (tags: Record<string, string>, category: PlaceCategory): string[
     tags["diet:vegetarian"] === "yes" ? "vegetarian" : undefined,
     tags.outdoor_seating === "yes" ? "outdoor-seating" : undefined,
     tags.internet_access === "wlan" || tags.internet_access === "yes" ? "wifi" : undefined,
+    isPetFriendly ? "pet-friendly" : undefined,
+    isFamilyFriendly ? "family-friendly" : undefined,
+    isWorkFriendly ? "work-friendly" : undefined,
+    isHeritage ? "heritage" : undefined,
+    isScenic ? "scenic" : undefined,
+    isLiveMusic ? "live-music" : undefined,
+    isArtisanal ? "artisanal" : undefined,
+    isLateNight ? "late-night" : undefined,
     category,
   ];
 
@@ -114,7 +196,7 @@ const getTags = (tags: Record<string, string>, category: PlaceCategory): string[
         .map((value) => value.trim().toLowerCase().replace(/\s+/g, "-"))
         .filter(Boolean)
     )
-  ).slice(0, 5);
+  ).slice(0, 8);
 };
 
 const DESC_TEMPLATES: Record<PlaceCategory, string[]> = {

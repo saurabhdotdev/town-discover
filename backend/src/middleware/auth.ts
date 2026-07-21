@@ -3,6 +3,7 @@ import crypto from "crypto";
 import db from "../db";
 
 const authCookieName = "town_discover_session";
+const sessionTokenPattern = /^[a-zA-Z0-9_-]{32,256}$/;
 
 export interface AuthenticatedUser {
   id: string;
@@ -33,6 +34,12 @@ export const authenticateUser = async (
     const token = req.cookies ? req.cookies[authCookieName] : undefined;
     if (!token) {
       req.user = null;
+      return next();
+    }
+
+    if (typeof token !== "string" || !sessionTokenPattern.test(token)) {
+      req.user = null;
+      res.clearCookie(authCookieName);
       return next();
     }
 

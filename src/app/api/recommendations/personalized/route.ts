@@ -14,8 +14,9 @@ export const GET = createApiHandler(
     
     // If guest, use a dummy UUID to trigger the cold-start fallback recommendation logic
     const userId = user?.id ?? "00000000-0000-0000-0000-000000000000";
+    const city = params.get("city") || undefined;
 
-    const cacheKey = `recommendations:personalized:${userId}:${limit}`;
+    const cacheKey = `recommendations:personalized:${userId}:${limit}:${city || 'all'}`;
     try {
       const { getCache, setCache } = await import("@/lib/redis");
       const cached = await getCache<{ recommendations: unknown[]; isPersonalized: boolean }>(cacheKey);
@@ -23,14 +24,14 @@ export const GET = createApiHandler(
         return Response.json({ ...cached, source: "cache" });
       }
 
-      const recommendations = await getPersonalizedRecommendations(pool, userId, limit);
+      const recommendations = await getPersonalizedRecommendations(pool, userId, limit, city);
       const responseData = { recommendations, isPersonalized: !!user };
       await setCache(cacheKey, responseData, 1800); // 30 minutes cache
 
       return Response.json({ ...responseData, source: "database" });
     } catch (err) {
       console.warn("Personalized recommendations caching failed, falling back to direct DB query:", err);
-      const recommendations = await getPersonalizedRecommendations(pool, userId, limit);
+      const recommendations = await getPersonalizedRecommendations(pool, userId, limit, city);
       return Response.json({
         recommendations,
         isPersonalized: !!user,

@@ -1,15 +1,14 @@
 import { NextRequest } from "next/server";
 import { getCategoryFallbackImage, PLACE_IMAGE_URLS, WIKIPEDIA_QUERIES_BY_ID } from "@/lib/place-images";
 import { fetchWikipediaThumbnailWithFallbacks } from "@/lib/wikipedia-image";
-import { SupportedCityName } from "@/lib/pune-location";
+import { SupportedCityName, SUPPORTED_CITY_NAMES } from "@/lib/pune-location";
 import { PlaceCategory } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const parseCity = (value: string | null): SupportedCityName => {
-  const cities: SupportedCityName[] = ["Pune", "Mumbai", "Kolhapur", "Nashik", "Bangalore", "Chennai", "Delhi"];
-  return cities.includes(value as SupportedCityName) ? (value as SupportedCityName) : "Pune";
+  return SUPPORTED_CITY_NAMES.includes(value as SupportedCityName) ? (value as SupportedCityName) : "Pune";
 };
 
 const parseCategory = (value: string | null): PlaceCategory => {

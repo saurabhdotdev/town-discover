@@ -118,6 +118,7 @@ export const useGeolocation = () => {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
+          heading: position.coords.heading,
         };
         handleLocationSuccess(browserLocation);
       },
@@ -148,6 +149,7 @@ export const useGeolocation = () => {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
+            heading: position.coords.heading,
           };
           handleLocationSuccess(browserLocation);
         },

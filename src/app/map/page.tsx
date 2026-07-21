@@ -20,12 +20,12 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => m
   ssr: false,
   loading: () => <MapSkeleton />
 });
-import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee, Compass, Utensils, Moon, Store, GlassWater, Cake, IceCream, Soup, Heart, Car } from "lucide-react";
+import { Clock, Copy, LocateFixed, Map, MapPin, Star, Play, Pause, Square, FastForward, Navigation, ShieldAlert, Save, Share2, Eye, EyeOff, Trash2, GripVertical, ArrowUp, ArrowDown, ChevronRight, X, Sun, CloudRain, Cloud, ThermometerSnowflake, Sparkles, Plane, ShoppingBag, Bed, Coffee, Compass, Utensils, Moon, Store, GlassWater, Cake, IceCream, Soup, Heart, Car, Radio } from "lucide-react";
 import { cn, formatDistance, formatPlaceArea, getCategoryLabel, isOpenNow, isVegetarianPlace, API_URL } from "@/lib/utils";
-import { io } from "socket.io-client";
+
 import { PlaceDetailModal } from "@/components/cards/PlaceDetailModal";
 import { LazyImage } from "@/components/common/LazyImage";
-import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
+import { getCityWeather, filterPlacesByWeather, useCityLiveWeather } from "@/lib/weather";
 
 import { combineLiveAndCuratedPlaces } from "@/lib/combine-places";
 import { CITY_CENTERS } from "@/lib/pune-location";
@@ -263,12 +263,9 @@ function MapContent() {
     requestLocation,
     toggleLiveTracking,
   } = useGeolocation();
-  const activeCity = !hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity;
-  const activeLocation =
-    locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
-  
   const [mapBounds, setMapBounds] = useState<{ south: number; west: number; north: number; east: number } | null>(null);
-
+  const activeCity = !hasChosenCity && locationSource === "browser" ? detectedCity : selectedCity;
+  const weatherState = useCityLiveWeather(activeCity);
   const { places: livePlaces, loading: livePlacesLoading, error: livePlacesError } = useLivePlacesByBounds(
     mapBounds,
     activeCity
@@ -307,6 +304,32 @@ function MapContent() {
   const [tripPlanName, setTripPlanName] = useState<string>("");
   const [savedTripPlans, setSavedTripPlans] = useState<SavedTripPlan[]>([]);
   const [activeTripPlanId, setActiveTripPlanId] = useState<string | null>(null);
+
+  // Automatically adjust default trip source/destination based on selected city context
+  useEffect(() => {
+    if (!activeTripPlanId) {
+      if (activeCity === "Mumbai") {
+        setTripSource("Mumbai");
+        setTripDest("Lonavala");
+      } else if (activeCity === "Bangalore") {
+        setTripSource("Bangalore");
+        setTripDest("Nandi Hills");
+      } else if (activeCity === "Delhi") {
+        setTripSource("Delhi");
+        setTripDest("Gurgaon");
+      } else if (activeCity === "Chennai") {
+        setTripSource("Chennai");
+        setTripDest("Mahabalipuram");
+      } else {
+        setTripSource(activeCity);
+        if (activeCity === "Pune") {
+          setTripDest("Mumbai");
+        } else {
+          setTripDest("Airport");
+        }
+      }
+    }
+  }, [activeCity, activeTripPlanId]);
   const [tripSaveStatus, setTripSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [tripSaveMessage, setTripSaveMessage] = useState("");
   const [vehicleType, setVehicleType] = useState<"car" | "suv" | "lcv">("car");
@@ -334,6 +357,49 @@ function MapContent() {
   // Flash Deal Notification States
   const [activeFlashDeal, setActiveFlashDeal] = useState<any | null>(null);
 
+  // Real-time Multiplayer Radar States
+  const [radarUsers, setRadarUsers] = useState<any[]>([]);
+  const [vibeSignals, setVibeSignals] = useState<any[]>([]);
+  const [isVibeModalOpen, setIsVibeModalOpen] = useState(false);
+  const [vibeSignalType, setVibeSignalType] = useState("chill");
+  const [vibeSignalMessage, setVibeSignalMessage] = useState("");
+
+  // Derived state computations & Live Geolocation simulation
+  const [simulateLiveLocation, setSimulateLiveLocation] = useState<boolean>(false);
+  const [routingProfile, setRoutingProfile] = useState<"driving" | "foot">("driving");
+
+  const currentSimCoord = useMemo(() => {
+    if (!tripRoutePath || !simulationActive) return null;
+    return tripRoutePath[simulationIndex] || null;
+  }, [tripRoutePath, simulationIndex, simulationActive]);
+
+  const currentSimSpeed = useMemo(() => {
+    if (!simulationActive) return 0;
+    const baseSpeed = 80 + Math.sin(simulationIndex / 5) * 5;
+    return Math.round(baseSpeed * (simulationSpeed / 2));
+  }, [simulationActive, simulationIndex, simulationSpeed]);
+
+  const simulationStatsRemaining = useMemo(() => {
+    if (!tripStats || !tripRoutePath || !simulationActive) return null;
+    const fraction = (tripRoutePath.length - 1 - simulationIndex) / (tripRoutePath.length - 1);
+    return {
+      distance: Math.max(0, parseFloat((tripStats.distance * fraction).toFixed(1))),
+      duration: Math.max(0, Math.round(tripStats.duration * fraction)),
+    };
+  }, [tripStats, tripRoutePath, simulationIndex, simulationActive]);
+
+  const activeLocation = useMemo(() => {
+    if (simulateLiveLocation && currentSimCoord) {
+      return {
+        latitude: currentSimCoord.latitude,
+        longitude: currentSimCoord.longitude,
+        accuracy: 10,
+        heading: null
+      };
+    }
+    return locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
+  }, [locationSource, location, activeCity, detectedCity, simulateLiveLocation, currentSimCoord]);
+
   // Load trail from URL parameters (e.g. from AI Chat)
   useEffect(() => {
     const stopsParam = searchParams.get("stops");
@@ -358,7 +424,7 @@ function MapContent() {
 
               // Fetch snapped route from route proxy
               const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
-              const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
+              const routeUrl = `/api/places/route?coords=${coordString}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
               
               // Optimistic straight lines first
               setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
@@ -371,17 +437,17 @@ function MapContent() {
               if (routeRes.ok) {
                 const routeData = await routeRes.json();
                 if (routeData && routeData.routes?.[0]) {
-                  const route = routeData.routes[0];
-                  setTripRoutePath(
-                    route.geometry.coordinates.map(([lng, lat]: [number, number]) => ({
-                      latitude: lat,
-                      longitude: lng,
-                    }))
-                  );
-                  setTripStats({
-                    distance: parseFloat((route.distance / 1000).toFixed(1)),
-                    duration: Math.round(route.duration / 60),
-                  });
+                   const route = routeData.routes[0];
+                   setTripRoutePath(
+                     route.geometry.coordinates.map(([lng, lat]: [number, number]) => ({
+                       latitude: lat,
+                       longitude: lng,
+                     }))
+                   );
+                   setTripStats({
+                     distance: parseFloat((route.distance / 1000).toFixed(1)),
+                     duration: Math.round(route.duration / 60),
+                   });
                 }
               }
             }
@@ -395,7 +461,7 @@ function MapContent() {
 
       resolveStops();
     }
-  }, [searchParams]);
+  }, [searchParams, routingProfile]);
 
   const handlePlanTrip = async (startStr: string, endStr: string) => {
     if (!startStr.trim() || !endStr.trim()) {
@@ -416,7 +482,7 @@ function MapContent() {
         throw new Error("Unable to resolve locations. Try another spelling.");
       }
 
-      const url = `/api/places/route?coords=${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}&mode=driving`;
+      const url = `/api/places/route?coords=${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
       const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
       if (!res.ok) throw new Error("Routing server connection error.");
       
@@ -512,9 +578,9 @@ function MapContent() {
             setTripDest(destName);
             setTripPlanName(trailName ?? `Spontaneous Walk: ${sourceName} to ${destName}`);
             
-            // Build route coordinates using OSRM foot routing
+            // Build route coordinates using OSRM routing
             const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
-            const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
+            const routeUrl = `/api/places/route?coords=${coordString}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
             
             // Optimistic straight lines first
             setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
@@ -661,7 +727,7 @@ function MapContent() {
 
     try {
       const coordString = newStops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-      const url = `/api/places/route?coords=${coordString}&mode=foot`;
+      const url = `/api/places/route?coords=${coordString}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
       
       const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
@@ -786,12 +852,25 @@ function MapContent() {
     if (normalized.includes("pune")) return "PNQ";
     if (normalized.includes("mumbai") || normalized.includes("bombay")) return "BOM";
     if (normalized.includes("bangalore") || normalized.includes("bengaluru")) return "BLR";
-    if (normalized.includes("delhi")) return "DEL";
+    if (normalized.includes("delhi") || normalized.includes("new delhi")) return "DEL";
     if (normalized.includes("chennai") || normalized.includes("madras")) return "MAA";
+    if (normalized.includes("kolkata") || normalized.includes("calcutta")) return "CCU";
+    if (normalized.includes("hyderabad")) return "HYD";
+    if (normalized.includes("jaipur")) return "JAI";
+    if (normalized.includes("udaipur")) return "UDR";
+    if (normalized.includes("srinagar")) return "SXR";
+    if (normalized.includes("goa") || normalized.includes("panaji")) return "GOI";
     if (normalized.includes("kolhapur")) return "KLH";
     if (normalized.includes("nashik")) return "ISK";
-    if (normalized.includes("cherryhill")) return "CHH";
-    return "SHR";
+    if (normalized.includes("pondicherry") || normalized.includes("puducherry")) return "PNY";
+    if (normalized.includes("shimla")) return "SLV";
+    if (normalized.includes("agra")) return "AGR";
+    if (normalized.includes("varanasi")) return "VNS";
+    if (normalized.includes("kochi") || normalized.includes("cochin")) return "COK";
+    // Fallback: use first 3 letters of city uppercased
+    const words = cityName.trim().split(/\s+/);
+    if (words.length >= 2) return (words[0][0] + words[1][0] + (words[2]?.[0] ?? words[0][1])).toUpperCase();
+    return cityName.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "SHR";
   };
 
   const [postcardMessage, setPostcardMessage] = useState<string | null>(null);
@@ -965,10 +1044,9 @@ function MapContent() {
   const hourlyWeatherForecast = useMemo(() => {
     const forecast = [];
     const now = new Date();
-    const city = (activeCity || "Pune") as any;
     for (let i = 0; i < 6; i++) {
       const futureDate = new Date(now.getTime() + i * 60 * 60 * 1000);
-      const weather = getCityWeather(city, futureDate);
+      const weather = weatherState.hourly[i] || weatherState.current;
       forecast.push({
         time: futureDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         hourValue: futureDate.getHours(),
@@ -976,14 +1054,11 @@ function MapContent() {
       });
     }
     return forecast;
-  }, [activeCity]);
+  }, [weatherState]);
 
   const selectedWeather = useMemo(() => {
-    const city = (activeCity || "Pune") as any;
-    const targetDate = new Date();
-    targetDate.setHours(simulatedDepartureHour);
-    return getCityWeather(city, targetDate);
-  }, [activeCity, simulatedDepartureHour]);
+    return weatherState.getWeatherForHour(simulatedDepartureHour);
+  }, [weatherState, simulatedDepartureHour]);
 
   useEffect(() => {
     if (selectedWeather.condition === "Rainy") {
@@ -1003,20 +1078,116 @@ function MapContent() {
     }
   }, [selectedWeather, tripStops, simulatedDepartureHour]);
 
-  // Real-time Flash Deal Socket listener
-  useEffect(() => {
-    const socket = io(API_URL, {
-      withCredentials: true,
+  const socketRef = useRef<any>(null);
+
+  const handleSendVibeSignal = () => {
+    if (!socketRef.current || !activeLocation) return;
+    
+    socketRef.current.emit("send-vibe-signal", {
+      city: activeCity,
+      lat: activeLocation.latitude,
+      lng: activeLocation.longitude,
+      type: vibeSignalType,
+      message: vibeSignalMessage || `Spotted a ${vibeSignalType} vibe here!`,
+      label: vibeSignalType === "party" ? "🔥 Party/Gig" : vibeSignalType === "chill" ? "☕ Cozy Chill" : vibeSignalType === "busy" ? "🚗 Crowded" : "⚠️ Incident"
     });
 
-    socket.on("new-flash-deal", (deal: any) => {
-      setActiveFlashDeal(deal);
+    setIsVibeModalOpen(false);
+    setVibeSignalMessage("");
+  };
+
+  // Real-time Flash Deal & Multiplayer Radar Socket listener - lazy-loaded for performance
+  useEffect(() => {
+    let active = true;
+    let socket: any = null;
+    let locationInterval: any = null;
+
+    import("socket.io-client").then(({ io }) => {
+      if (!active) return;
+      socket = io(API_URL, {
+        withCredentials: true,
+      });
+      socketRef.current = socket;
+
+      // Join the radar room for the current city
+      socket.emit("join-city-radar", { city: activeCity });
+
+      socket.on("new-flash-deal", (deal: any) => {
+        setActiveFlashDeal(deal);
+      });
+
+      // Radar event listeners
+      socket.on("radar-users-sync", (users: any[]) => {
+        setRadarUsers(users.filter(u => u.socketId !== socket.id));
+      });
+
+      socket.on("radar-user-updated", (user: any) => {
+        if (user.socketId === socket.id) return;
+        setRadarUsers(prev => {
+          const index = prev.findIndex(u => u.socketId === user.socketId);
+          if (index !== -1) {
+            const updated = [...prev];
+            updated[index] = user;
+            return updated;
+          }
+          return [...prev, user];
+        });
+      });
+
+      socket.on("radar-user-disconnected", (socketId: string) => {
+        setRadarUsers(prev => prev.filter(u => u.socketId !== socketId));
+      });
+
+      socket.on("new-vibe-signal", (signal: any) => {
+        setVibeSignals(prev => [...prev, signal]);
+        
+        // Auto-fade vibe signals after 20 seconds
+        setTimeout(() => {
+          setVibeSignals(prev => prev.filter(s => s.id !== signal.id));
+        }, 20000);
+      });
+
+      // Broadcast our location immediately upon connection
+      if (activeLocation) {
+        socket.emit("report-location", {
+          city: activeCity,
+          lat: activeLocation.latitude,
+          lng: activeLocation.longitude,
+          isAnonymous: true,
+          name: "Explorer"
+        });
+      }
+
+      // Periodically report our location every 8 seconds
+      locationInterval = setInterval(() => {
+        if (activeLocation && socket.connected) {
+          socket.emit("report-location", {
+            city: activeCity,
+            lat: activeLocation.latitude,
+            lng: activeLocation.longitude,
+            isAnonymous: true,
+            name: "Explorer"
+          });
+        }
+      }, 8000);
     });
 
     return () => {
-      socket.disconnect();
+      active = false;
+      if (locationInterval) clearInterval(locationInterval);
+      if (socket) {
+        socket.disconnect();
+      }
+      socketRef.current = null;
     };
-  }, []);
+  }, [activeCity, activeLocation]);
+
+  const handleQuickSwap = (idx: number, newStop: Place) => {
+    const updated = [...tripStops];
+    updated[idx] = newStop;
+    setTripStops(updated);
+    recalculateRouteForStops(updated);
+  };
 
   const handleSwapToIndoorSpots = () => {
     let swappedCount = 0;
@@ -1118,10 +1289,7 @@ function MapContent() {
     return () => clearTimeout(timer);
   }, [simulationActive, simulationIndex, simulationSpeed, tripRoutePath, simStepSize]);
 
-  const currentSimCoord = useMemo(() => {
-    if (!tripRoutePath || !simulationActive) return null;
-    return tripRoutePath[simulationIndex] || null;
-  }, [tripRoutePath, simulationIndex, simulationActive]);
+  // currentSimCoord is declared at the top of the component
 
   useEffect(() => {
     if (!currentSimCoord || !tripStops.length) {
@@ -1423,6 +1591,23 @@ function MapContent() {
               + Add Spot
             </button>
 
+            <div className="flex items-center gap-2 rounded-full border border-teal-500/20 bg-slate-950/95 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+              </span>
+              <span>{radarUsers.length + 1} live in {activeCity}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsVibeModalOpen(true)}
+              className="flex items-center gap-2 rounded-full border border-teal-500/30 bg-slate-950/90 px-4 py-2.5 text-xs font-black tracking-wider uppercase text-teal-400 shadow-xl backdrop-blur-md transition-all hover:bg-slate-900 hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <Radio size={12} className="text-teal-400 animate-pulse animate-duration-1000" />
+              Signal Vibe
+            </button>
+
             {locationSource === "browser" && (
               <button
                 type="button"
@@ -1473,6 +1658,11 @@ function MapContent() {
             simulationActive={simulationActive}
             simulationCoord={currentSimCoord}
             scrollWheelZoom={true}
+            tripStops={tripStops}
+            onAddStop={handleAddStopToTrip}
+            onRemoveStop={handleDeleteStop}
+            radarUsers={radarUsers}
+            vibeSignals={vibeSignals}
           />
 
           {livePlacesLoading && mode !== "trip" && (
@@ -2064,6 +2254,35 @@ function MapContent() {
                   </div>
                 </div>
 
+                {/* Routing Profile Toggle */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-[var(--muted)] block mb-1">Routing Mode</label>
+                  <div className="flex bg-[var(--input)] border border-[var(--border)] rounded-lg p-0.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => setRoutingProfile("driving")}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                        routingProfile === "driving"
+                          ? "bg-cyan-400 text-slate-950 shadow-md font-black"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      🚗 Drive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoutingProfile("foot")}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                        routingProfile === "foot"
+                          ? "bg-cyan-400 text-slate-950 shadow-md font-black"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      🚶 Walk
+                    </button>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => handlePlanTrip(tripSource, tripDest)}
@@ -2245,6 +2464,50 @@ function MapContent() {
                       </div>
                     </div>
 
+                    {/* Cockpit HUD */}
+                    {simulationActive && (
+                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-950/60 border border-slate-900 p-2.5 text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black uppercase text-cyan-400">Cruise Speed</span>
+                          <span className="text-sm font-black text-white mt-0.5">{currentSimSpeed} km/h</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black uppercase text-cyan-400">GPS Coord</span>
+                          <span className="text-[9px] font-mono text-slate-300 mt-1 truncate">
+                            {currentSimCoord ? `${currentSimCoord.latitude.toFixed(4)}, ${currentSimCoord.longitude.toFixed(4)}` : "Tracking..."}
+                          </span>
+                        </div>
+                        {simulationStatsRemaining && (
+                          <div className="col-span-2 border-t border-slate-900 pt-1.5 mt-1 grid grid-cols-2 gap-2 text-left">
+                            <div>
+                              <span className="text-[8px] font-black uppercase text-slate-400">Distance Left</span>
+                              <div className="text-[10px] font-bold text-white mt-0.5">{simulationStatsRemaining.distance} km</div>
+                            </div>
+                            <div>
+                              <span className="text-[8px] font-black uppercase text-slate-400">Est. Time Left</span>
+                              <div className="text-[10px] font-bold text-white mt-0.5">
+                                {Math.floor(simulationStatsRemaining.duration / 60)}h {simulationStatsRemaining.duration % 60}m
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <div className="col-span-2 border-t border-slate-900 pt-1.5 mt-1 flex items-center justify-between">
+                          <span className="text-[8px] font-black uppercase text-slate-400">Simulate Live GPS</span>
+                          <button
+                            type="button"
+                            onClick={() => setSimulateLiveLocation(!simulateLiveLocation)}
+                            className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border transition-all cursor-pointer ${
+                              simulateLiveLocation
+                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                : "bg-slate-900 border-slate-800 text-slate-400"
+                            }`}
+                          >
+                            {simulateLiveLocation ? "ACTIVE 🟢" : "INACTIVE ⚪"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Progress Bar */}
                     <div className="space-y-1">
                       <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
@@ -2416,6 +2679,38 @@ function MapContent() {
                       >
                         {filteredTripStops.map((stop, idx) => {
                           const isFocused = focusedPlace?.id === stop.id;
+
+                          const scheduledHour = (simulatedDepartureHour + idx * 1.5) % 24;
+                          const formatStopHour = (h: number) => {
+                            const rounded = Math.floor(h);
+                            const mins = Math.round((h % 1) * 60);
+                            const ampm = rounded >= 12 ? "PM" : "AM";
+                            const displayHour = rounded % 12 || 12;
+                            const displayMins = mins < 10 ? `0${mins}` : mins;
+                            return `${displayHour}:${displayMins} ${ampm}`;
+                          };
+                          const timeString = formatStopHour(scheduledHour);
+                          const stopWeather = weatherState.getWeatherForHour(Math.floor(scheduledHour));
+
+                          const isOutdoor = stop.tags.includes("outdoor") || 
+                            stop.tags.includes("viewpoint") || 
+                            stop.tags.includes("scenic") || 
+                            stop.category === "event";
+                          const isRainyStop = stopWeather.condition === "Rainy" && isOutdoor;
+
+                          const findReplacementIndoorSpot = () => {
+                            const candidates = [...curatedPlaces, ...livePlaces].filter(p => 
+                              p.id !== stop.id && 
+                              p.category === "cafe" &&
+                              p.city?.toLowerCase() === activeCity.toLowerCase()
+                            );
+                            if (candidates.length > 0) {
+                              return candidates.sort((a, b) => b.rating - a.rating)[0];
+                            }
+                            return null;
+                          };
+                          const replacement = isRainyStop ? findReplacementIndoorSpot() : null;
+
                           return (
                             <Reorder.Item
                               key={stop.id}
@@ -2443,6 +2738,19 @@ function MapContent() {
                                 >
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                                        <span className="inline-flex items-center gap-1 rounded bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] font-black text-teal-400">
+                                          ⏰ {timeString}
+                                        </span>
+                                        <span className={cn(
+                                          "inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase border",
+                                          stopWeather.condition === "Rainy" 
+                                            ? "bg-amber-950/40 text-amber-400 border-amber-500/20" 
+                                            : "bg-slate-900/40 text-slate-400 border-slate-800"
+                                        )}>
+                                          {stopWeather.condition === "Rainy" ? "🌧️ Rainy" : stopWeather.condition === "Pleasant" ? "🍃 Pleasant" : stopWeather.condition === "Hot" ? "☀️ Hot" : "☕ Cozy"} ({stopWeather.temp}°C)
+                                        </span>
+                                      </div>
                                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
                                         Stop {idx + 1} · {getCategoryLabel(stop.category, stop.tags)}
                                       </p>
@@ -2477,6 +2785,26 @@ function MapContent() {
                                   >
                                     View Detailed Info
                                   </button>
+                                )}
+
+                                {isRainyStop && replacement && (
+                                  <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 flex items-center justify-between gap-3" onClick={e => e.stopPropagation()}>
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-bold text-amber-300">
+                                        Rain expected during this outdoor stop!
+                                      </p>
+                                      <p className="text-[10px] font-black text-slate-350 mt-0.5 truncate">
+                                        Swap with cozy cafe: {replacement.title}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickSwap(idx, replacement)}
+                                      className="shrink-0 rounded bg-amber-400 px-2.5 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300 transition duration-150 cursor-pointer shadow-sm"
+                                    >
+                                      Swap Spot ☕
+                                    </button>
+                                  </div>
                                 )}
                               </div>
 
@@ -2629,223 +2957,328 @@ function MapContent() {
         defaultCoords={mapCenter || { latitude: activeLocation.latitude, longitude: activeLocation.longitude }}
       />
 
+      {/* Vibe Signal Broadcast Modal */}
+      {isVibeModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[800] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setIsVibeModalOpen(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15 }}
+            animate={{ scale: 1, y: 0 }}
+            className="w-full max-w-sm rounded-2xl border border-teal-500/20 bg-slate-950/95 p-6 shadow-2xl backdrop-blur-md text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-black tracking-wider uppercase text-teal-400 mb-4 flex items-center gap-2">
+              <Radio size={16} className="animate-pulse" />
+              Broadcast Vibe Signal
+            </h3>
+            
+            <p className="text-xs text-slate-400 mb-4 font-medium leading-relaxed">
+              Signal the local atmosphere at your coordinates for all active explorers in {activeCity}!
+            </p>
+
+            <div className="mb-4">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-2">Vibe Type</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { id: "chill", label: "☕ Chill", activeColor: "border-teal-500/40 bg-teal-950/30 text-teal-400" },
+                  { id: "party", label: "🔥 Party", activeColor: "border-amber-500/40 bg-amber-950/30 text-amber-400" },
+                  { id: "busy", label: "🚗 Busy", activeColor: "border-purple-500/40 bg-purple-950/30 text-purple-400" },
+                  { id: "alert", label: "⚠️ Alert", activeColor: "border-red-500/40 bg-red-950/30 text-red-400" }
+                ].map((item) => {
+                  const isActive = vibeSignalType === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setVibeSignalType(item.id)}
+                      className={cn(
+                        "rounded-lg border px-2 py-2.5 text-xs font-black transition-all cursor-pointer",
+                        isActive ? item.activeColor : "border-slate-800 bg-slate-900/40 text-slate-500 hover:text-slate-350"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-2">Atmosphere Message</label>
+              <input
+                type="text"
+                value={vibeSignalMessage}
+                onChange={(e) => setVibeSignalMessage(e.target.value.slice(0, 80))}
+                placeholder="e.g. Gig started! Coffee is great! Traffic is heavy..."
+                className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-2.5 text-xs font-medium text-slate-100 placeholder:text-slate-650 focus:border-teal-500/50 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-2.5 justify-end">
+              <button
+                type="button"
+                onClick={() => setIsVibeModalOpen(false)}
+                className="rounded-xl border border-slate-800 bg-slate-900/30 px-4 py-2 text-xs font-black tracking-wider uppercase text-slate-400 hover:bg-slate-900 hover:text-slate-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendVibeSignal}
+                className="rounded-xl bg-teal-400 px-5 py-2 text-xs font-black tracking-wider uppercase text-slate-950 hover:bg-teal-300 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-teal-500/20"
+              >
+                Broadcast
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
       {/* Share Itinerary Modal */}
       {isShareModalOpen && tripStats && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="fixed inset-0 z-[800] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[800] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) { setIsShareModalOpen(false); setCopyShareMessage(""); } }}
         >
           <motion.div
-            initial={{ scale: 0.95, y: 15 }}
-            animate={{ scale: 1, y: 0 }}
-            className="relative w-full max-w-lg rounded-2xl border border-teal-500/30 bg-slate-950 p-6 text-center shadow-2xl z-40 max-h-[90vh] overflow-y-auto no-scrollbar"
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 60, opacity: 0 }}
+            transition={{ type: "spring", damping: 28, stiffness: 300 }}
+            className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-[#080f14] shadow-2xl overflow-hidden"
+            style={{ maxHeight: "92vh" }}
           >
-            <button
-              type="button"
-              onClick={() => {
-                setIsShareModalOpen(false);
-                setCopyShareMessage("");
-              }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white transition cursor-pointer"
-            >
-              <X size={20} />
-            </button>
-
-            <div className="mb-4 flex flex-col items-center">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-500/10 text-teal-400 shadow-inner">
-                <Share2 size={24} className="animate-pulse" />
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-teal-500/15 flex items-center justify-center">
+                  <Share2 size={16} className="text-teal-400" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-teal-400">Share Itinerary</p>
+                  <p className="text-[9px] font-semibold text-slate-500 mt-0.5">{tripPlanName || `${tripStops.length} stop trip`}</p>
+                </div>
               </div>
-              <h3 className="mt-3 text-lg font-black text-white">Share Your Trip Itinerary</h3>
-              <p className="text-xs font-semibold text-slate-400 mt-1">Copy WhatsApp text or get a direct map route link</p>
+              <button
+                type="button"
+                onClick={() => { setIsShareModalOpen(false); setCopyShareMessage(""); }}
+                className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            {/* Boarding Pass Summary Card */}
-            <div className="relative border border-teal-500/25 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 rounded-xl p-5 text-left overflow-hidden mb-5 shadow-inner">
-              {/* Decorative ticket cutout punches */}
-              <div className="absolute left-0 top-[60%] -translate-y-1/2 -translate-x-3 h-6 w-6 rounded-full bg-slate-950 border border-teal-500/20 z-10" />
-              <div className="absolute right-0 top-[60%] -translate-y-1/2 translate-x-3 h-6 w-6 rounded-full bg-slate-950 border border-teal-500/20 z-10" />
+            {/* Scrollable ticket body */}
+            <div className="overflow-y-auto no-scrollbar px-4 pb-6" style={{ maxHeight: "calc(92vh - 72px)" }}>
 
-              {/* TICKET MAIN SECTION */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-300">SHEHER CITY EXPRESS</span>
-                  </div>
-                  <span className="text-[8px] font-black tracking-widest text-slate-500 bg-white/5 px-2 py-0.5 rounded border border-white/10">
-                    BOARDING PASS
-                  </span>
-                </div>
+              {/* ── BOARDING PASS TICKET ── */}
+              {(() => {
+                const cityIATA   = getCityIATA(activeCity);
+                const sourceIATA = getCityIATA(tripSource);
+                const destIATA   = getCityIATA(tripDest);
+                const sameCode   = sourceIATA === destIATA;
+                const fromCode   = sameCode ? cityIATA : sourceIATA;
+                const toCode     = sameCode ? cityIATA : destIATA;
+                const fromLabel  = sameCode
+                  ? (tripStops[0]?.locality || tripStops[0]?.title || activeCity)
+                  : tripSource;
+                const toLabel    = sameCode
+                  ? (tripStops[tripStops.length - 1]?.locality || tripStops[tripStops.length - 1]?.title || activeCity)
+                  : tripDest;
+                const totalHrs   = Math.floor(tripStats.duration / 60);
+                const totalMins  = tripStats.duration % 60;
 
-                {/* Airport style code routing */}
-                <div className="flex items-center justify-between py-1">
-                  <div className="text-left flex flex-col items-start">
-                    <div className="text-3xl font-black text-white tracking-wider">{getCityIATA(tripSource)}</div>
-                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{tripSource}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedAirportCode(getCityIATA(tripSource));
-                        setIsAirportGuideOpen(true);
-                      }}
-                      className="mt-1.5 flex items-center gap-1 text-[8px] font-black uppercase text-teal-400 hover:text-teal-300 transition tracking-wider bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20 cursor-pointer"
-                    >
-                      Explore {getCityIATA(tripSource)} ✈️
-                    </button>
-                  </div>
-                  <div className="flex flex-col items-center flex-1 px-4 relative">
-                    <div className="w-full border-t border-dashed border-teal-500/30 relative">
-                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-950 px-2 text-teal-300 text-xs">
-                        ✈
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right flex flex-col items-end">
-                    <div className="text-3xl font-black text-white tracking-wider">{getCityIATA(tripDest)}</div>
-                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{tripDest}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedAirportCode(getCityIATA(tripDest));
-                        setIsAirportGuideOpen(true);
-                      }}
-                      className="mt-1.5 flex items-center gap-1 text-[8px] font-black uppercase text-amber-400 hover:text-amber-300 transition tracking-wider bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 cursor-pointer"
-                    >
-                      Explore {getCityIATA(tripDest)} ✈️
-                    </button>
-                  </div>
-                </div>
+                return (
+                  <div className="rounded-2xl overflow-hidden shadow-xl border border-white/[0.06] mb-4">
 
-                <div className="grid grid-cols-2 gap-4 border-t border-b border-white/5 py-3 text-xs font-bold text-slate-400">
-                  <div className="space-y-1">
-                    <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Passenger</span>
-                    <div className="text-xs font-black text-white uppercase truncate">
-                      {user?.fullName || "GUEST EXPLORER"}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-right">
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Gate</span>
-                      <div className="text-xs font-black text-white">18A</div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase tracking-wider text-slate-500 font-black">Class</span>
-                      <div className="text-xs font-black text-amber-300">EXPLR</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Perforation divider line */}
-              <div className="border-t border-dashed border-slate-700/60 my-4 relative" />
-
-              {/* TICKET STUB / PITSTOPS SECTION */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Pitstops Stub</span>
-                  <span className="text-[9px] font-black text-teal-300">{tripStops.length} Spots</span>
-                </div>
-                
-                <div className="space-y-1.5 max-h-24 overflow-y-auto no-scrollbar">
-                  {tripStops.map((stop, idx) => (
-                    <div key={stop.id} className="flex items-center justify-between text-[11px] leading-tight">
-                      <div className="flex items-center gap-1.5 truncate pr-4">
-                        <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-teal-400/10 text-teal-300 flex items-center justify-center text-[8px] font-black">
-                          {idx + 1}
-                        </span>
-                        <span className="font-semibold text-slate-200 truncate">{stop.title}</span>
+                    {/* TOP gradient band */}
+                    <div className="bg-gradient-to-r from-teal-900/80 via-slate-900 to-slate-900 px-5 py-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[9px] font-black uppercase tracking-[0.25em] text-teal-300/80">Sheher City Express</span>
+                        <span className="text-[8px] font-black tracking-[0.2em] text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/[0.07]">BOARDING PASS</span>
                       </div>
-                      <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wide shrink-0">
-                        {stop.priceRange || "$$"}
-                      </span>
+
+                      {/* Route section */}
+                      <div className="flex items-center gap-0">
+                        {/* FROM */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-4xl font-black text-white tracking-wider leading-none">{fromCode}</div>
+                          <div className="mt-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide truncate max-w-[110px]">{fromLabel}</div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedAirportCode(fromCode); setIsAirportGuideOpen(true); }}
+                            className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-teal-400 bg-teal-400/10 border border-teal-400/20 px-2 py-1 rounded-lg hover:bg-teal-400/20 transition cursor-pointer"
+                          >
+                            ✈ Explore
+                          </button>
+                        </div>
+
+                        {/* Flight path */}
+                        <div className="flex-1 flex flex-col items-center gap-1.5 px-2">
+                          <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                            {totalHrs > 0 ? `${totalHrs}h ` : ""}{totalMins}m
+                          </div>
+                          <div className="relative w-full flex items-center gap-1">
+                            <div className="h-px flex-1 bg-gradient-to-r from-teal-500/30 to-teal-500/10" />
+                            <div className="text-teal-400 text-base">✈</div>
+                            <div className="h-px flex-1 bg-gradient-to-r from-teal-500/10 to-teal-500/30" />
+                          </div>
+                          <div className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{tripStats.distance} km</div>
+                        </div>
+
+                        {/* TO */}
+                        <div className="flex-1 min-w-0 text-right">
+                          <div className="text-4xl font-black text-white tracking-wider leading-none">{toCode}</div>
+                          <div className="mt-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide truncate max-w-[110px] ml-auto">{toLabel}</div>
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedAirportCode(toCode); setIsAirportGuideOpen(true); }}
+                              className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-teal-400 bg-teal-400/10 border border-teal-400/20 px-2 py-1 rounded-lg hover:bg-teal-400/20 transition cursor-pointer"
+                            >
+                              🗺 Map
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Passenger row */}
+                      <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Passenger</p>
+                          <p className="text-[11px] font-black text-white uppercase mt-0.5 truncate">{user?.fullName || "GUEST"}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Gate</p>
+                          <p className="text-[11px] font-black text-white mt-0.5">18A</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Class</p>
+                          <p className="text-[11px] font-black text-amber-300 mt-0.5">EXPLR</p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+
+                    {/* TEAR STRIP / PERFORATION */}
+                    <div className="relative h-5 bg-[#080f14] flex items-center">
+                      <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-[#080f14] border border-white/[0.06]" />
+                      <div className="flex-1 mx-4 border-t border-dashed border-white/[0.08]" />
+                      <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-[#080f14] border border-white/[0.06]" />
+                    </div>
+
+                    {/* STUB SECTION */}
+                    <div className="bg-slate-900/60 px-5 pt-2 pb-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Pitstop Stub</span>
+                        <span className="text-[9px] font-black text-teal-300 bg-teal-400/10 px-2 py-0.5 rounded-full border border-teal-400/15">{tripStops.length} Stops</span>
+                      </div>
+
+                      <div className="space-y-2 max-h-[136px] overflow-y-auto no-scrollbar">
+                        {tripStops.map((stop, idx) => (
+                          <div key={stop.id} className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="shrink-0 h-5 w-5 rounded-full bg-teal-400/10 border border-teal-400/20 flex items-center justify-center text-[9px] font-black text-teal-300">
+                                {idx + 1}
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-200 truncate">{stop.title}</span>
+                            </div>
+                            <span className="shrink-0 text-[9px] font-bold text-slate-500 uppercase tracking-wide">{stop.priceRange || "$$"}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Stats row */}
+                      <div className="mt-4 pt-3 border-t border-white/[0.06] grid grid-cols-3 gap-2">
+                        <div>
+                          <p className="text-[8px] uppercase text-slate-600 font-black tracking-wider">Distance</p>
+                          <p className="text-xs font-black text-white mt-0.5">{tripStats.distance} km</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[8px] uppercase text-slate-600 font-black tracking-wider">Duration</p>
+                          <p className="text-xs font-black text-white mt-0.5">{totalHrs > 0 ? `${totalHrs}h ` : ""}{totalMins}m</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] uppercase text-slate-600 font-black tracking-wider">Tolls</p>
+                          <p className="text-xs font-black text-amber-300 mt-0.5">₹{estimatedToll}</p>
+                        </div>
+                      </div>
+
+                      {/* Barcode */}
+                      <div className="mt-4 flex flex-col items-center gap-1.5">
+                        <div className="flex items-end justify-center gap-[1.5px] h-8 w-full opacity-30">
+                          {[2,1,3,1,2,1,4,1,2,3,1,2,1,3,2,1,4,1,2,1,3,1,2,4,1,3,1,2,1,4,2,1,3].map((w, i) => (
+                            <div key={i} className="bg-slate-300 shrink-0" style={{ width: `${w}px`, height: `${60 + (i % 3) * 20}%` }} />
+                          ))}
+                        </div>
+                        <span className="text-[8px] tracking-[0.3em] font-mono text-slate-600">
+                          SH‑{Math.round(tripStats.distance * 100)}‑{tripStops.length}X
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── ACTIONS ── */}
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const shareUrl = activeTripPlanId
+                        ? `${window.location.origin}/trip/${activeTripPlanId}`
+                        : `${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(tripStops.map(s => s.id).join(","))}&sourceName=${encodeURIComponent(tripSource)}&destName=${encodeURIComponent(tripDest)}&trailName=${encodeURIComponent(tripPlanName)}`;
+                      await navigator.clipboard.writeText(shareUrl);
+                      setCopyShareMessage("Link copied! Paste it anywhere.");
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-teal-400 py-3.5 text-[11px] font-black uppercase tracking-wider text-slate-950 hover:bg-teal-300 active:scale-[0.98] transition-all duration-150 cursor-pointer shadow-lg shadow-teal-500/20"
+                  >
+                    🔗 Copy Link
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGeneratePostcard}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-500/10 py-3.5 text-[11px] font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/15 active:scale-[0.98] transition-all duration-150 cursor-pointer"
+                  >
+                    📸 Save Card
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-3 text-[10px] font-bold text-slate-400">
-                  <div>
-                    <span className="text-[8px] uppercase text-slate-500 block">Distance</span>
-                    <span className="text-white font-black">{tripStats.distance} km</span>
-                  </div>
-                  <div>
-                    <span className="text-[8px] uppercase text-slate-500 block">Boarding</span>
-                    <span className="text-white font-black">
-                      {Math.floor(tripStats.duration / 60)}h {tripStats.duration % 60}m
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[8px] uppercase text-slate-500 block">Tolls Est</span>
-                    <span className="text-amber-300 font-black">₹{estimatedToll}</span>
-                  </div>
-                </div>
-
-                {/* CSS Barcode stub */}
-                <div className="pt-4 flex flex-col items-center gap-1.5">
-                  <div className="flex items-center justify-center gap-[1px] h-10 w-full bg-white/5 rounded p-1.5 overflow-hidden opacity-60">
-                    {[1,2,1,3,1,2,4,1,2,1,3,2,1,4,1,2,3,1,2,1,4,2,1,2,3,1,2,1,4].map((width, i) => (
-                      <div
-                        key={i}
-                        className="bg-slate-300 h-full shrink-0"
-                        style={{ width: `${width}px` }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[8px] tracking-[0.25em] font-mono text-slate-500 uppercase">
-                    SH-{Math.round(tripStats.distance * 100)}-{tripStops.length}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={async () => {
-                    const shareUrl = activeTripPlanId 
-                      ? `${window.location.origin}/trip/${activeTripPlanId}` 
-                      : `${window.location.origin}/map?mode=trip&stops=${encodeURIComponent(tripStops.map(s => s.id).join(","))}&sourceName=${encodeURIComponent(tripSource)}&destName=${encodeURIComponent(tripDest)}&trailName=${encodeURIComponent(tripPlanName)}`;
-                    await navigator.clipboard.writeText(shareUrl);
-                    setCopyShareMessage("Map route link copied to clipboard!");
+                    const waText = generateWhatsAppShareText();
+                    await navigator.clipboard.writeText(waText);
+                    setCopyShareMessage("WhatsApp text copied! Ready to paste.");
                   }}
-                  className="rounded-xl bg-teal-400 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-teal-350 active:scale-98 transition duration-150 cursor-pointer shadow-lg shadow-teal-500/15"
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 py-3.5 text-[11px] font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/15 active:scale-[0.98] transition-all duration-150 cursor-pointer"
                 >
-                  🔗 Copy Link
+                  💬 Copy for WhatsApp
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleGeneratePostcard}
-                  className="rounded-xl border border-amber-400/40 bg-amber-500/10 py-3 text-xs font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/20 active:scale-98 transition duration-150 cursor-pointer"
-                >
-                  📸 Save Card
-                </button>
+                {(postcardMessage || copyShareMessage) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`text-[11px] font-bold text-center py-2.5 px-4 rounded-xl border ${
+                      postcardMessage
+                        ? "text-amber-300 bg-amber-400/10 border-amber-400/20"
+                        : "text-teal-300 bg-teal-400/10 border-teal-400/20"
+                    }`}
+                  >
+                    {postcardMessage || copyShareMessage}
+                  </motion.div>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={async () => {
-                  const waText = generateWhatsAppShareText();
-                  await navigator.clipboard.writeText(waText);
-                  setCopyShareMessage("WhatsApp formatted text copied! Ready to paste.");
-                }}
-                className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-3 text-xs font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/20 active:scale-98 transition duration-150 cursor-pointer"
-              >
-                💬 Copy for WhatsApp (Emoji Rich)
-              </button>
-
-              {postcardMessage && (
-                <div className="text-xs font-black text-amber-300 bg-amber-400/10 border border-amber-400/20 p-2.5 rounded-lg text-center animate-slide-down">
-                  {postcardMessage}
-                </div>
-              )}
-
-              {copyShareMessage && (
-                <div className="text-xs font-black text-teal-300 bg-teal-400/10 border border-teal-400/20 p-2.5 rounded-lg text-center animate-slide-down">
-                  {copyShareMessage}
-                </div>
-              )}
             </div>
           </motion.div>
         </motion.div>
