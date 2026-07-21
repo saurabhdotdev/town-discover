@@ -315,7 +315,7 @@ function HeroEventCard({
               onNotifyClick(event);
             }}
             disabled={reminderLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60 cursor-pointer"
           >
             {reminderSaved ? <CheckCircle size={16} className="text-emerald-300" /> : <BellRing size={16} className="text-amber-300" />}
             {reminderLoading ? "Saving..." : reminderSaved ? "Reminder Set" : "Notify Me"}
@@ -326,7 +326,7 @@ function HeroEventCard({
               e.stopPropagation();
               onShowOnMap(event);
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] hover:scale-[1.02]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] hover:scale-[1.02] cursor-pointer"
           >
             <MapPin size={16} className="text-rose-400" />
             Show on Map
@@ -337,7 +337,7 @@ function HeroEventCard({
               e.stopPropagation();
               onBookClick(event);
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] hover:shadow-teal-500/30"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] hover:shadow-teal-500/30 cursor-pointer"
           >
             <Ticket size={16} />
             Book Tickets
@@ -454,7 +454,7 @@ function EventCard({
             <button
               type="button"
               onClick={() => onShowOnMap(event)}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)] transition hover:bg-[var(--panel)]"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)] transition hover:bg-[var(--panel)] cursor-pointer"
               aria-label="Show event venue on map"
               title="Show on Map"
             >
@@ -464,7 +464,7 @@ function EventCard({
               type="button"
               onClick={() => onNotifyClick(event)}
               disabled={reminderLoading}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60 cursor-pointer"
               aria-label={reminderSaved ? "Reminder saved" : "Notify me about this event"}
               title={reminderSaved ? "Reminder saved" : "Notify me"}
             >
@@ -473,7 +473,7 @@ function EventCard({
             <button
               type="button"
               onClick={() => onBookClick(event)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-cyan-600 px-3 py-1.5 text-xs font-black text-white transition hover:scale-105 hover:shadow-md hover:shadow-teal-500/20"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-cyan-600 px-3 py-1.5 text-xs font-black text-white transition hover:scale-105 hover:shadow-md hover:shadow-teal-500/20 cursor-pointer"
             >
               <Ticket size={12} />
               Book
@@ -730,7 +730,7 @@ export default function EventsPage() {
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] sm:flex-none"
+                  className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] sm:flex-none cursor-pointer"
                 >
                   <X size={15} />
                   Reset
@@ -740,7 +740,7 @@ export default function EventsPage() {
                 type="button"
                 onClick={handleRefresh}
                 disabled={loading || refreshing}
-                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-50 sm:flex-none"
+                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-50 sm:flex-none cursor-pointer"
               >
                 <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
                 {refreshing ? "Generating..." : "Refresh"}
@@ -858,14 +858,14 @@ export default function EventsPage() {
             <div className="flex w-full max-w-sm flex-col gap-2 sm:flex-row sm:justify-center">
               <button
                 onClick={resetFilters}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-sm font-black text-[var(--foreground)]"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5 text-sm font-black text-[var(--foreground)] cursor-pointer"
               >
                 <Sparkles size={15} />
                 Clear Filters
               </button>
               <button
                 onClick={handleRefresh}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-black text-[var(--primary-foreground)]"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-black text-[var(--primary-foreground)] cursor-pointer"
               >
                 <RefreshCw size={15} />
                 Generate Events
@@ -940,7 +940,7 @@ export default function EventsPage() {
                   <button
                     onClick={handleRefresh}
                     disabled={refreshing}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
                   >
                     <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
                     {refreshing ? "Generating fresh events..." : "Discover More Events"}
