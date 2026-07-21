@@ -36,6 +36,7 @@ import { useLivePlaces } from "@/hooks/useLivePlaces";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { Place, PlaceCategory } from "@/types";
+import type { LiveEvent } from "@/app/api/events/live/route";
 import { formatDistance, getCategoryLabel, isVegetarianPlace } from "@/lib/utils";
 import { CITY_CENTERS, getCityFromQuery, stripCityFromQuery } from "@/lib/pune-location";
 import { useCitySelection } from "@/hooks/useCitySelection";
