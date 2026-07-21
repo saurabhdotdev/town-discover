@@ -26,6 +26,7 @@ import { DiscoverySection } from "@/components/cards/DiscoverySection";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
 import { LocationPermissionCard } from "@/components/common/LocationPermissionCard";
 import { MoodPicker } from "@/components/common/MoodPicker";
+import { WanderlustDrop } from "@/components/common/WanderlustDrop";
 import { getPlacesWithDistance } from "@/data/mock-places";
 import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { getCityWeather, filterPlacesByWeather } from "@/lib/weather";
@@ -410,12 +411,12 @@ export default function Home() {
 
       if (isWidget) {
         const coordString = stops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-        const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+        const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
         let distanceKm = 0;
         let durationMinutes = 0;
 
         try {
-          const res = await fetch(osrmUrl);
+          const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
           if (res.ok) {
             const data = await res.json();
             if (data.code === "Ok" && data.routes?.[0]) {
@@ -444,12 +445,12 @@ export default function Home() {
       if (user) {
         const routePathCoords: { latitude: number; longitude: number }[] = [];
         const coordString = stops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-        const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordString}?overview=full&geometries=geojson`;
+        const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
         let distanceKm = 0;
         let durationMinutes = 0;
 
         try {
-          const res = await fetch(osrmUrl);
+          const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
           if (res.ok) {
             const data = await res.json();
             if (data.code === "Ok" && data.routes?.[0]) {
@@ -513,6 +514,427 @@ export default function Home() {
     }
   };
 
+
+  const handleWidgetGenerateTrail = async () => {
+    if (allPlaces.length === 0) {
+      alert("No places available in this city to plan a trail.");
+      return;
+    }
+
+    let startPlace: Place | null = null;
+    if (widgetStartMode === "geo") {
+      if (location) {
+        let minD = Infinity;
+        allPlaces.forEach((p) => {
+          const d = Math.hypot(p.latitude - location.latitude, p.longitude - location.longitude);
+          if (d < minD) {
+            minD = d;
+            startPlace = p;
+          }
+        });
+      }
+      if (!startPlace) {
+        // fallback to random
+        startPlace = allPlaces[Math.floor(Math.random() * allPlaces.length)];
+      }
+    } else if (widgetStartMode === "place") {
+      startPlace = allPlaces.find((p) => p.id === widgetStartPlaceId) || null;
+      if (!startPlace) {
+        startPlace = allPlaces[0];
+      }
+    } else {
+      // random popular spot
+      const trending = allPlaces.filter((p) => p.isTrending || p.rating >= 4.5);
+      const pool = trending.length > 0 ? trending : allPlaces;
+      startPlace = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    if (!startPlace) {
+      alert("Please select a starting spot first!");
+      return;
+    }
+
+    await handleGenerateTrail(startPlace, widgetTimeBudget, widgetTheme, true);
+  };
+
+  useEffect(() => {
+    if (allPlaces.length > 0 && !widgetStartPlaceId) {
+      setWidgetStartPlaceId(allPlaces[0].id);
+    }
+  }, [allPlaces, widgetStartPlaceId]);
+
+  const filteredAutocompletePlaces = useMemo(() => {
+    if (!widgetSearchQuery.trim()) {
+      return allPlaces.slice(0, 10);
+    }
+    return allPlaces.filter((p) =>
+      p.title.toLowerCase().includes(widgetSearchQuery.toLowerCase()) ||
+      p.locality.toLowerCase().includes(widgetSearchQuery.toLowerCase())
+    ).slice(0, 10);
+  }, [allPlaces, widgetSearchQuery]);
+
+  const handleLaunchPreviewTrail = async () => {
+    if (!widgetPreviewStops || widgetPreviewStops.length === 0) return;
+    
+    setWidgetGenerating(true);
+    const stops = widgetPreviewStops;
+    const trailName = widgetPreviewName;
+
+    try {
+      if (user) {
+        const routePathCoords: { latitude: number; longitude: number }[] = [];
+        const coordString = stops.map((s) => `${s.longitude},${s.latitude}`).join(";");
+        const routeUrl = `/api/places/route?coords=${coordString}&mode=foot`;
+        let distanceKm = widgetPreviewStats?.distance ?? 0;
+        let durationMinutes = widgetPreviewStats?.duration ?? 0;
+
+        try {
+          const res = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.code === "Ok" && data.routes?.[0]) {
+              const route = data.routes[0];
+              distanceKm = parseFloat((route.distance / 1000).toFixed(1));
+              durationMinutes = Math.round(route.duration / 60);
+              route.geometry.coordinates.forEach(([lng, lat]: [number, number]) => {
+                routePathCoords.push({ latitude: lat, longitude: lng });
+              });
+            }
+          }
+        } catch (err) {
+          console.warn("OSRM routing failed, falling back to direct paths", err);
+        }
+
+        if (routePathCoords.length === 0) {
+          stops.forEach((s) => {
+            routePathCoords.push({ latitude: s.latitude, longitude: s.longitude });
+          });
+        }
+
+        const payload = {
+          name: trailName,
+          source: stops[0].locality || stops[0].city,
+          destination: stops[stops.length - 1].locality || stops[0].city,
+          distanceKm,
+          durationMinutes,
+          routePath: routePathCoords,
+          stops,
+        };
+
+        const saveRes = await fetch("/api/trip-plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (saveRes.ok) {
+          const data = await saveRes.json();
+          if (data.plan?.id) {
+            router.push(`/trip/${data.plan.id}`);
+            return;
+          }
+        }
+      }
+
+      const stopIds = stops.map((s) => s.id).join(",");
+      router.push(`/map?mode=trip&stops=${encodeURIComponent(stopIds)}&sourceName=${encodeURIComponent(stops[0].title)}&destName=${encodeURIComponent(stops[stops.length - 1].title)}&trailName=${encodeURIComponent(trailName)}`);
+    } catch (err) {
+      console.error("Failed to launch preview trail:", err);
+      alert("Error opening map. Opening standard map view instead.");
+      router.push("/map");
+    } finally {
+      setWidgetGenerating(false);
+    }
+  };
+
+  const uniqueLocalities = useMemo(() => {
+    const set = new Set<string>();
+    allPlaces.forEach((p) => {
+      if (p.locality) set.add(p.locality);
+    });
+    return Array.from(set).sort();
+  }, [allPlaces]);
+
+  useEffect(() => {
+    if (uniqueLocalities.length > 0 && !selectedLocality) {
+      setSelectedLocality(uniqueLocalities[0]);
+    }
+  }, [uniqueLocalities, selectedLocality]);
+
+  useEffect(() => {
+    if (uniqueLocalities.length > 0) {
+      setSelectedLocality(uniqueLocalities[0]);
+    }
+    setWidgetPreviewStops(null);
+    setWidgetPreviewStats(null);
+    setAreaPlanStops(null);
+  }, [activeCity, uniqueLocalities]);
+
+  const handleGenerateAreaPlan = () => {
+    if (!selectedLocality) return;
+
+    const localitySpots = allPlaces.filter(
+      (p) => p.locality.toLowerCase() === selectedLocality.toLowerCase()
+    );
+
+    let candidateSpots = [...localitySpots];
+    if (candidateSpots.length < 3) {
+      const centroidLat = localitySpots[0]?.latitude ?? allPlaces[0]?.latitude ?? 0;
+      const centroidLng = localitySpots[0]?.longitude ?? allPlaces[0]?.longitude ?? 0;
+      const otherSpots = allPlaces.filter((p) => {
+        if (p.locality.toLowerCase() === selectedLocality.toLowerCase()) return false;
+        const d = Math.hypot(p.latitude - centroidLat, p.longitude - centroidLng);
+        return d <= 0.05;
+      });
+      candidateSpots = [...candidateSpots, ...otherSpots];
+    }
+
+    if (candidateSpots.length === 0) {
+      alert("No spots available near this area to build a plan.");
+      return;
+    }
+
+    const freeSpots = candidateSpots.filter((p) => p.priceRange === "Free" || p.tags.includes("free"));
+    const paidSpots = candidateSpots.filter((p) => p.priceRange !== "Free" && !p.tags.includes("free"));
+
+    const targetCount = areaTimeBudget === "1" ? 2 : areaTimeBudget === "5" ? 4 : 3;
+    const planStops: Place[] = [];
+
+    const sortedFree = [...freeSpots].sort((a, b) => b.rating - a.rating);
+    const sortedPaid = [...paidSpots].sort((a, b) => b.rating - a.rating);
+
+    for (let i = 0; i < targetCount; i++) {
+      if (i % 2 === 0) {
+        if (sortedFree.length > 0) {
+          planStops.push(sortedFree.shift()!);
+        } else if (sortedPaid.length > 0) {
+          planStops.push(sortedPaid.shift()!);
+        }
+      } else {
+        if (sortedPaid.length > 0) {
+          planStops.push(sortedPaid.shift()!);
+        } else if (sortedFree.length > 0) {
+          planStops.push(sortedFree.shift()!);
+        }
+      }
+    }
+
+    if (planStops.length === 0) {
+      alert("Unable to generate plan. Please try another area.");
+      return;
+    }
+
+    let minCost = 0;
+    let maxCost = 0;
+    planStops.forEach((p) => {
+      if (p.priceRange === "$$") {
+        minCost += 200;
+        maxCost += 500;
+      } else if (p.priceRange === "$$$") {
+        minCost += 500;
+        maxCost += 1200;
+      } else if (p.priceRange === "$") {
+        minCost += 50;
+        maxCost += 150;
+      }
+    });
+
+    const budgetText = minCost === 0 ? "Free Entrance Only" : `₹${minCost} - ₹${maxCost} per person`;
+    setAreaPlanStops(planStops);
+    setAreaPlanBudgetEstimate(budgetText);
+  };
+
+  const handleLaunchAreaPlan = () => {
+    if (!areaPlanStops || areaPlanStops.length === 0) return;
+    const stopIds = areaPlanStops.map((s) => s.id).join(",");
+    const trailName = `${selectedLocality} ${areaTimeBudget === "1" ? "1-Hour" : areaTimeBudget === "5" ? "5-Hour" : "3-Hour"} Plan`;
+    router.push(`/map?mode=trip&stops=${encodeURIComponent(stopIds)}&sourceName=${encodeURIComponent(areaPlanStops[0].title)}&destName=${encodeURIComponent(areaPlanStops[areaPlanStops.length - 1].title)}&trailName=${encodeURIComponent(trailName)}`);
+  };
+
+  const handleGenerateLocalOuting = async () => {
+    if (allPlaces.length === 0) {
+      alert("No places available in this city to plan an outing.");
+      return;
+    }
+    setOutingGenerating(true);
+    setOutingStops(null);
+    setLiveEventSuggestions([]);
+    setHangoutSuggestions([]);
+
+    try {
+      const targetCount = outingTimeOfDay === "full" ? 4 : 3;
+
+      const cityPlaces = allPlaces.filter(
+        (p) => p.city.toLowerCase() === activeCity.toLowerCase()
+      );
+
+      if (cityPlaces.length === 0) {
+        alert("No places found for the active city.");
+        setOutingGenerating(false);
+        return;
+      }
+
+      let filterFn = (p: Place) => true;
+      if (outingVibe === "food") {
+        filterFn = (p: Place) => ["restaurant", "food-stall", "street-food", "dessert", "ice-cream"].includes(p.category);
+      } else if (outingVibe === "cafe") {
+        filterFn = (p: Place) => ["cafe", "dessert", "ice-cream"].includes(p.category);
+      } else if (outingVibe === "culture") {
+        filterFn = (p: Place) => p.tags.some(t => ["cultural", "heritage", "museum", "scenic", "nature", "park", "tourist-friendly"].includes(t.toLowerCase())) || p.category === "event";
+      } else if (outingVibe === "nightlife") {
+        filterFn = (p: Place) => ["bar", "nightlife"].includes(p.category) || p.tags.some(t => ["night-drive", "late-night"].includes(t.toLowerCase()));
+      }
+
+      let candidates = cityPlaces.filter(filterFn);
+      if (candidates.length < targetCount) {
+        candidates = [...cityPlaces];
+      }
+
+      if (outingType === "family") {
+        const familyFriendly = candidates.filter(p => p.tags.some(t => ["family-friendly", "family", "kids", "kids-friendly"].includes(t.toLowerCase())));
+        if (familyFriendly.length >= targetCount) candidates = familyFriendly;
+      } else if (outingType === "date") {
+        const romantic = candidates.filter(p => p.rating >= 4.4 || p.tags.some(t => ["romantic", "cozy", "scenic", "view"].includes(t.toLowerCase())));
+        if (romantic.length >= targetCount) candidates = romantic;
+      } else if (outingType === "friends") {
+        const groupSpots = candidates.filter(p => p.tags.some(t => ["group", "friends", "casual", "hangout"].includes(t.toLowerCase())));
+        if (groupSpots.length >= targetCount) candidates = groupSpots;
+      }
+
+      candidates.sort(() => 0.5 - Math.random());
+
+      const chosenStops: Place[] = [];
+      const usedCategories = new Set<string>();
+
+      for (const p of candidates) {
+        if (chosenStops.length >= targetCount) break;
+        if (candidates.length >= targetCount * 2 && usedCategories.has(p.category)) {
+          continue;
+        }
+        chosenStops.push(p);
+        usedCategories.add(p.category);
+      }
+
+      if (chosenStops.length < targetCount) {
+        const remaining = candidates.filter(p => !chosenStops.some(s => s.id === p.id));
+        for (const p of remaining) {
+          if (chosenStops.length >= targetCount) break;
+          chosenStops.push(p);
+        }
+      }
+
+      chosenStops.sort((a, b) => {
+        const score = (category: string) => {
+          if (["cafe", "dessert"].includes(category)) return 1;
+          if (["event", "street-food", "food-stall"].includes(category)) return 2;
+          if (["restaurant"].includes(category)) return 3;
+          if (["bar", "nightlife"].includes(category)) return 4;
+          return 5;
+        };
+        return score(a.category) - score(b.category);
+      });
+
+      const typeLabel = outingType === "friends" ? "Friends Outing" : outingType === "date" ? "Date Night Outing" : outingType === "family" ? "Family Outing" : "Solo Outing";
+      const vibeLabel = outingVibe === "food" ? "Foodie Trail" : outingVibe === "cafe" ? "Cafe Hop" : outingVibe === "culture" ? "Heritage & Arts" : "Nightlife Crawl";
+      const name = `${vibeLabel} for a ${typeLabel} (${outingTimeOfDay === "full" ? "Full Day" : outingTimeOfDay === "morning" ? "Day Out" : "Evening Out"})`;
+      setOutingStops(chosenStops);
+      setOutingPreviewName(name);
+
+      try {
+        const eventsRes = await fetch(`/api/events/live?city=${encodeURIComponent(activeCity)}`);
+        if (eventsRes.ok) {
+          const eventsData = await eventsRes.json();
+          const eventsList: LiveEvent[] = eventsData.events ?? [];
+          const matchedEvents = eventsList.filter(evt => {
+            if (outingTimeOfDay === "evening") {
+              const hour = parseInt(evt.time.split(":")[0]);
+              if (isNaN(hour) || hour < 16) return false;
+            }
+            if (outingVibe === "nightlife") {
+              return ["music", "nightlife", "comedy"].includes(evt.category);
+            }
+            if (outingVibe === "culture") {
+              return ["cultural", "theatre", "workshop"].includes(evt.category);
+            }
+            return true;
+          });
+          setLiveEventSuggestions(matchedEvents.slice(0, 2));
+        }
+
+        const hangoutsRes = await fetch(`/api/hangouts?city=${encodeURIComponent(activeCity)}`);
+        if (hangoutsRes.ok) {
+          const hangoutsData = await hangoutsRes.json();
+          const hangoutsList = hangoutsData.hangouts ?? [];
+          const stopsLocalities = chosenStops.map(s => s.locality.toLowerCase());
+          const matchedHangouts = hangoutsList.filter((h: any) => {
+            return stopsLocalities.some(loc => h.placeTitle.toLowerCase().includes(loc) || h.description.toLowerCase().includes(loc));
+          });
+          setHangoutSuggestions(matchedHangouts.slice(0, 2));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch live suggestions for outing planner:", err);
+      }
+
+    } catch (e) {
+      console.error(e);
+      alert("Something went wrong generating the outing.");
+    } finally {
+      setOutingGenerating(false);
+    }
+  };
+
+  const handleLaunchOuting = () => {
+    if (!outingStops || outingStops.length === 0) return;
+    const stopIds = outingStops.map((s) => s.id).join(",");
+    router.push(`/map?mode=trip&stops=${encodeURIComponent(stopIds)}&sourceName=${encodeURIComponent(outingStops[0].title)}&destName=${encodeURIComponent(outingStops[outingStops.length - 1].title)}&trailName=${encodeURIComponent(outingPreviewName)}`);
+  };
+
+  const handleSaveOuting = async () => {
+    if (!outingStops || outingStops.length === 0) return;
+    if (!user) {
+      alert("Please log in to save your outings!");
+      router.push("/profile");
+      return;
+    }
+
+    try {
+      const routePathCoords: { latitude: number; longitude: number }[] = [];
+      outingStops.forEach((s) => {
+        routePathCoords.push({ latitude: s.latitude, longitude: s.longitude });
+      });
+
+      const payload = {
+        name: outingPreviewName,
+        source: outingStops[0].locality || activeCity,
+        destination: outingStops[outingStops.length - 1].locality || activeCity,
+        distanceKm: outingTimeOfDay === "full" ? 6 : 3,
+        durationMinutes: outingTimeOfDay === "full" ? 180 : 90,
+        routePath: routePathCoords,
+        stops: outingStops,
+      };
+
+      const saveRes = await fetch("/api/trip-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (saveRes.ok) {
+        const data = await saveRes.json();
+        if (data.plan?.id) {
+          alert("🎉 Outing successfully saved to your profile!");
+          router.push(`/trip/${data.plan.id}`);
+        } else {
+          alert("Saved, but failed to retrieve itinerary ID.");
+        }
+      } else {
+        alert("Failed to save outing plan.");
+      }
+    } catch (error) {
+      console.error("Failed to save outing:", error);
+      alert("Error saving your outing.");
+    }
+  };
   const normalizedQuery = stripCityFromQuery(query).toLowerCase();
   const filteredPlaces = filterAndRankPlaces(allPlaces, {
     query: normalizedQuery,
@@ -594,18 +1016,26 @@ export default function Home() {
                 placeholder={`Search cafes, food, events in ${activeCity}…`}
                 onSelectPlace={(place) => setSelectedPlace(place)}
               />
-              <button
-                type="button"
-                onClick={() => setVegOnly(!vegOnly)}
-                className={`inline-flex h-9 w-fit shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 font-black transition text-xs border ${
-                  vegOnly
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                    : "border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
-                }`}
-              >
-                <span className={`h-2 w-2 rounded-full border transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-650"}`} />
-                Pure Veg Only
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVegOnly(!vegOnly)}
+                  className={`inline-flex h-9 w-fit shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 font-black transition text-xs border ${
+                    vegOnly
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                      : "border-[var(--border)] bg-[var(--panel-soft)] text-[var(--muted-strong)] hover:bg-[var(--panel)]"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full border transition-all duration-300 ${vegOnly ? "bg-emerald-400 border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-500 border-slate-650"}`} />
+                  Pure Veg Only
+                </button>
+
+                <WanderlustDrop
+                  places={allPlaces}
+                  userLocation={locationSource === "browser" && location ? { latitude: location.latitude, longitude: location.longitude } : null}
+                  cityName={activeCity}
+                />
+              </div>
             </div>
 
             <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">

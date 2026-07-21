@@ -99,14 +99,15 @@ export const GET = createApiHandler({ auth: "none" }, async (request: NextReques
     throw new BadRequestError("Radius must be between 1 and 2000 meters");
   }
 
-  const cacheKey = `surroundings:lat:${lat.toFixed(4)}:lng:${lng.toFixed(4)}:rad:${radius}`;
+  // toFixed(3) ≈ 110m — same place always hits the same cache key (was toFixed(4) = 11m)
+  const cacheKey = `surroundings:lat:${lat.toFixed(3)}:lng:${lng.toFixed(3)}:rad:${radius}`;
 
   try {
     const cachedData = await getCache<any[]>(cacheKey);
     if (cachedData) {
       return Response.json(
         { surroundings: cachedData },
-        { status: 200, headers: { "Cache-Control": "public, max-age=60" } }
+        { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1800" } }
       );
     }
   } catch (err) {
@@ -199,10 +200,10 @@ export const GET = createApiHandler({ auth: "none" }, async (request: NextReques
     .sort((a: any, b: any) => a.distance - b.distance);
 
   try {
-    await setCache(cacheKey, surroundings, 600); // 10 minutes cache
+    await setCache(cacheKey, surroundings, 1800); // 30 minutes
   } catch (err) {
     console.error("Cache write failed:", err);
   }
 
-  return Response.json({ surroundings }, { status: 200, headers: { "Cache-Control": "public, max-age=60" } });
+  return Response.json({ surroundings }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1800" } });
 });

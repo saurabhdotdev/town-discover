@@ -4,7 +4,7 @@ import { getTopMoodRecommendations, inferMoodProfile, MoodAxis, rankPlacesByMood
 import { mergePlaces } from "@/lib/merge-places";
 import { fetchLivePlaces } from "@/lib/live-places";
 import { CITY_CENTERS, getCityFromQuery, getNearestSupportedCity } from "@/lib/pune-location";
-import { UserLocation } from "@/types";
+import { UserLocation, Place } from "@/types";
 import { createApiHandler } from "@/lib/server/api-handler";
 
 export const runtime = "nodejs";
@@ -50,9 +50,15 @@ export const GET = createApiHandler({ auth: "none" }, async (request: NextReques
 
   let places = await getFallbackPlacesForCity(city);
   try {
-    const live = await fetchLivePlaces(location, request.signal, 5000);
-    if (live.length > 0) places = mergePlaces(live, places);
-  } catch (e) {
+    const { getCache, setCache } = await import("@/lib/redis");
+    const cacheKey = `places:osm:coords:${location.latitude.toFixed(2)}:${location.longitude.toFixed(2)}`;
+    let live = await getCache<Place[]>(cacheKey);
+    if (!live) {
+      live = await fetchLivePlaces(location, request.signal, 5000);
+      await setCache(cacheKey, live, 3600); // cache for 1 hour
+    }
+    if (live && live.length > 0) places = mergePlaces(live, places);
+  } catch {
     // fallback already loaded
   }
 

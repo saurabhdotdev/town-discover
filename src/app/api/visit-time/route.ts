@@ -46,8 +46,8 @@ export const GET = createApiHandler({ auth: "none" }, async (request: NextReques
     [placeId]
   );
 
-  return Response.json({
-    placeId,
-    signals: rows,
-  });
+  return Response.json(
+    { placeId, signals: rows },
+    { headers: { "Cache-Control": "public, max-age=600, stale-while-revalidate=3600" } }
+  );
 });

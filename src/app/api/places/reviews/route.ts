@@ -58,10 +58,13 @@ export const GET = createApiHandler(
     const averageRating = parseFloat(Number(statsRows[0]?.averageRating ?? 0).toFixed(1));
     const reviewCount = parseInt(statsRows[0]?.reviewCount ?? 0, 10);
 
-    return Response.json({
-      reviews,
-      summary: { averageRating, reviewCount },
-    }, { status: 200 });
+    return Response.json(
+      { reviews, summary: { averageRating, reviewCount } },
+      {
+        status: 200,
+        headers: { "Cache-Control": "public, max-age=120, stale-while-revalidate=600" },
+      }
+    );
   }
 );
 

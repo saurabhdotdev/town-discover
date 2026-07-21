@@ -16,11 +16,26 @@ export const GET = createApiHandler(
     const userId = user?.id ?? "00000000-0000-0000-0000-000000000000";
     const city = params.get("city") || undefined;
 
-    const recommendations = await getPersonalizedRecommendations(pool, userId, limit, city);
+    const cacheKey = `recommendations:personalized:${userId}:${limit}:${city || 'all'}`;
+    try {
+      const { getCache, setCache } = await import("@/lib/redis");
+      const cached = await getCache<{ recommendations: unknown[]; isPersonalized: boolean }>(cacheKey);
+      if (cached) {
+        return Response.json({ ...cached, source: "cache" });
+      }
 
-    return Response.json({
-      recommendations,
-      isPersonalized: !!user,
-    });
+      const recommendations = await getPersonalizedRecommendations(pool, userId, limit, city);
+      const responseData = { recommendations, isPersonalized: !!user };
+      await setCache(cacheKey, responseData, 1800); // 30 minutes cache
+
+      return Response.json({ ...responseData, source: "database" });
+    } catch (err) {
+      console.warn("Personalized recommendations caching failed, falling back to direct DB query:", err);
+      const recommendations = await getPersonalizedRecommendations(pool, userId, limit, city);
+      return Response.json({
+        recommendations,
+        isPersonalized: !!user,
+      });
+    }
   }
 );

@@ -26,6 +26,11 @@ const parseCategory = (value: string | null): PlaceCategory => {
   return categories.includes(value as PlaceCategory) ? (value as PlaceCategory) : "event";
 };
 
+// 1 day browser cache + 7 day stale-while-revalidate at CDN edge
+const IMAGE_CACHE_HEADERS = {
+  "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+};
+
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const placeId = params.get("placeId") ?? "";
@@ -34,7 +39,10 @@ export async function GET(request: NextRequest) {
   const category = parseCategory(params.get("category"));
 
   if (placeId && PLACE_IMAGE_URLS[placeId]) {
-    return Response.json({ image: PLACE_IMAGE_URLS[placeId], source: "curated" });
+    return Response.json(
+      { image: PLACE_IMAGE_URLS[placeId], source: "curated" },
+      { headers: IMAGE_CACHE_HEADERS }
+    );
   }
 
   const wikiTitles = [
@@ -45,11 +53,14 @@ export async function GET(request: NextRequest) {
 
   const wikiImage = await fetchWikipediaThumbnailWithFallbacks(wikiTitles);
   if (wikiImage) {
-    return Response.json({ image: wikiImage, source: "wikipedia" });
+    return Response.json(
+      { image: wikiImage, source: "wikipedia" },
+      { headers: IMAGE_CACHE_HEADERS }
+    );
   }
 
-  return Response.json({
-    image: getCategoryFallbackImage(city, category, title),
-    source: "category-fallback",
-  });
+  return Response.json(
+    { image: getCategoryFallbackImage(city, category, title), source: "category-fallback" },
+    { headers: IMAGE_CACHE_HEADERS }
+  );
 }

@@ -18,6 +18,33 @@ export const metadata: Metadata = {
     "Discover events, cafes, food spots, bars, and trending places across Pune, Mumbai, Kolhapur, Nashik, Bangalore, Chennai, and Delhi.",
   icons: {
     icon: "/favicon.ico",
+    apple: "/sheher_logo.png",
+  },
+  manifest: "/manifest.json",
+  metadataBase: new URL("https://sheher-city.vercel.app"),
+  openGraph: {
+    title: "Sheher | Indian City Discovery",
+    description:
+      "Discover cafes, food spots, bars, hidden gems and trending places across Indian cities. Real-time crowd signals, community hangouts and trip planning.",
+    url: "https://sheher-city.vercel.app",
+    siteName: "Sheher",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Sheher — Discover your city's best kept secrets",
+      },
+    ],
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sheher | Indian City Discovery",
+    description:
+      "Discover cafes, food spots, bars, hidden gems and trending places across Indian cities.",
+    images: ["/og-image.png"],
   },
 };
 
@@ -37,6 +64,11 @@ export default function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth" className="dark h-full antialiased" suppressHydrationWarning>
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Sheher" />
+        <link rel="apple-touch-icon" href="/sheher_logo.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {

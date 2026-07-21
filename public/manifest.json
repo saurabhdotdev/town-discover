@@ -1,0 +1,49 @@
+{
+  "name": "Sheher — Indian City Discovery",
+  "short_name": "Sheher",
+  "description": "Discover cafes, food spots, bars, hidden gems and trending places across Indian cities.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080b0f",
+  "theme_color": "#080b0f",
+  "orientation": "portrait-primary",
+  "categories": ["lifestyle", "travel", "food"],
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/sheher_logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/sheher_logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Explore Map",
+      "short_name": "Map",
+      "description": "Open the discovery map",
+      "url": "/map",
+      "icons": [{ "src": "/sheher_logo.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Hangouts",
+      "short_name": "Hangouts",
+      "description": "Community meetups near you",
+      "url": "/hangouts",
+      "icons": [{ "src": "/sheher_logo.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png"
+    }
+  ]
+}

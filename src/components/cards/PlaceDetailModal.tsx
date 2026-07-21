@@ -5,13 +5,13 @@ import Image from "next/image";
 import { LazyImage } from "@/components/common/LazyImage";
 
 import { Clock, Download, ExternalLink, ImageIcon, MapPin, Navigation, Share2, Sparkles, Star, Train, Users, X, UtensilsCrossed, ChevronLeft, TrendingUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CrowdLevel, CrowdSummary, Place } from "@/types";
 import { API_URL, formatDistance, formatHours, formatPlaceArea, formatTime, getCategoryLabel, getInitials, isOpenNow } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getCategoryFallbackImage } from "@/lib/place-images";
 import { SupportedCityName } from "@/lib/pune-location";
-import { io } from "socket.io-client";
+import { useCrowdSocket } from "@/hooks/useCrowdSocket";
 import { getMetroAccess } from "@/lib/geo";
 import { getVisitTimeProfile } from "@/lib/visit-time-model";
 import { PostcardCustomizer } from "@/components/common/PostcardCustomizer";
@@ -381,29 +381,14 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({ place, onClo
     return () => controller.abort();
   }, [activePlace]);
 
-  useEffect(() => {
-    if (!activePlace) return;
-
-    const socket = io(API_URL, {
-      withCredentials: true,
-    });
-
-    socket.emit("join-place", activePlace.id);
-
-    socket.on("crowd-update", (data: { placeId: string; summary: CrowdSummary }) => {
-      if (data.placeId === activePlace.id) {
-        setCrowdSummary(data.summary);
-        if (data.summary.crowdLevel) {
-          setSelectedCrowdLevel(data.summary.crowdLevel);
-        }
-      }
-    });
-
-    return () => {
-      socket.emit("leave-place", activePlace.id);
-      socket.disconnect();
-    };
-  }, [activePlace]);
+  const handleModalCrowdUpdate = useCallback(
+    (summary: CrowdSummary) => {
+      setCrowdSummary(summary);
+      if (summary.crowdLevel) setSelectedCrowdLevel(summary.crowdLevel);
+    },
+    []
+  );
+  useCrowdSocket(activePlace?.id ?? "", handleModalCrowdUpdate);
 
   // Dynamic nearby places scan logic (750m bounding box)
   useEffect(() => {

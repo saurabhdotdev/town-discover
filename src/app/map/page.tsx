@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { motion, Reorder } from "framer-motion";
 import { Header } from "@/components/common/Header";
 import { CitySwitcher } from "@/components/common/CitySwitcher";
@@ -14,7 +14,7 @@ import { getFallbackPlacesForCity } from "@/lib/client/fallback-places";
 import { useSavedPlaces } from "@/hooks/useSavedPlaces";
 import { Place } from "@/types";
 import { MapSkeleton } from "@/components/common/Skeleton";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((mod) => mod.MapView), {
   ssr: false,
@@ -201,7 +201,7 @@ const AIRPORT_GUIDES: Record<string, AirportGuide> = {
   }
 };
 
-export default function MapPage() {
+function MapContent() {
   const [mapWidth, setMapWidth] = useState(65); // default 65% width
   const [isDragging, setIsDragging] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -247,6 +247,7 @@ export default function MapPage() {
 
   const { user, setAuthRequiredMessage } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { selectedCity, hasChosenCity, chooseCity, preferDetectedCity } = useCitySelection();
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -399,6 +400,69 @@ export default function MapPage() {
     return locationSource === "browser" && location && activeCity === detectedCity ? location : CITY_CENTERS[activeCity];
   }, [locationSource, location, activeCity, detectedCity, simulateLiveLocation, currentSimCoord]);
 
+  // Load trail from URL parameters (e.g. from AI Chat)
+  useEffect(() => {
+    const stopsParam = searchParams.get("stops");
+    if (stopsParam) {
+      const sourceName = searchParams.get("sourceName") || "Start";
+      const destName = searchParams.get("destName") || "End";
+      const trailName = searchParams.get("trailName") || "Spontaneous Walk";
+
+      const resolveStops = async () => {
+        setTripLoading(true);
+        try {
+          const res = await fetch(`/api/places/resolve?ids=${encodeURIComponent(stopsParam)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.places && Array.isArray(data.places) && data.places.length > 0) {
+              const stops = data.places as Place[];
+              setTripStops(stops);
+              setTripSource(sourceName);
+              setTripDest(destName);
+              setTripPlanName(trailName);
+              setMode("trip");
+
+              // Fetch snapped route from route proxy
+              const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
+              const routeUrl = `/api/places/route?coords=${coordString}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
+              
+              // Optimistic straight lines first
+              setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
+              setTripStats({
+                distance: parseFloat((stops.length * 0.7).toFixed(1)),
+                duration: stops.length * 10
+              });
+
+              const routeRes = await fetch(routeUrl, { signal: AbortSignal.timeout(3000) });
+              if (routeRes.ok) {
+                const routeData = await routeRes.json();
+                if (routeData && routeData.routes?.[0]) {
+                   const route = routeData.routes[0];
+                   setTripRoutePath(
+                     route.geometry.coordinates.map(([lng, lat]: [number, number]) => ({
+                       latitude: lat,
+                       longitude: lng,
+                     }))
+                   );
+                   setTripStats({
+                     distance: parseFloat((route.distance / 1000).toFixed(1)),
+                     duration: Math.round(route.duration / 60),
+                   });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to load trail from URL params:", err);
+        } finally {
+          setTripLoading(false);
+        }
+      };
+
+      resolveStops();
+    }
+  }, [searchParams, routingProfile]);
+
   const handlePlanTrip = async (startStr: string, endStr: string) => {
     if (!startStr.trim() || !endStr.trim()) {
       setTripError("Please fill in starting point and destination.");
@@ -418,9 +482,9 @@ export default function MapPage() {
         throw new Error("Unable to resolve locations. Try another spelling.");
       }
 
-      const url = `https://router.project-osrm.org/route/v1/${routingProfile === "driving" ? "driving" : "foot"}/${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("OSRM routing server connection error.");
+      const url = `/api/places/route?coords=${startCoord.longitude},${startCoord.latitude};${endCoord.longitude},${endCoord.latitude}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
+      if (!res.ok) throw new Error("Routing server connection error.");
       
       const data = await res.json();
       if (data.code !== "Ok" || !data.routes?.[0]?.geometry?.coordinates) {
@@ -487,8 +551,6 @@ export default function MapPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const searchParams = new URLSearchParams(window.location.search);
     const planId = searchParams.get("tripPlan");
     const stopsParam = searchParams.get("stops");
 
@@ -518,9 +580,16 @@ export default function MapPage() {
             
             // Build route coordinates using OSRM routing
             const coordString = stops.map((s: Place) => `${s.longitude},${s.latitude}`).join(";");
-            const osrmUrl = `https://router.project-osrm.org/route/v1/${routingProfile === "driving" ? "driving" : "foot"}/${coordString}?overview=full&geometries=geojson`;
+            const routeUrl = `/api/places/route?coords=${coordString}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
             
-            fetch(osrmUrl)
+            // Optimistic straight lines first
+            setTripRoutePath(stops.map((s: Place) => ({ latitude: s.latitude, longitude: s.longitude })));
+            setTripStats({
+              distance: parseFloat((stops.length * 0.7).toFixed(1)),
+              duration: stops.length * 10
+            });
+
+            fetch(routeUrl, { signal: AbortSignal.timeout(3000) })
               .then((res) => (res.ok ? res.json() : null))
               .then((routeData) => {
                 if (routeData && routeData.routes?.[0]) {
@@ -595,8 +664,7 @@ export default function MapPage() {
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, activeCity]);
 
   const saveTripPlan = async () => {
     if (!user) {
@@ -650,11 +718,18 @@ export default function MapPage() {
     }
     
     setTripLoading(true);
+    // Draw optimistic straight line route instantly
+    setTripRoutePath(newStops.map((s) => ({ latitude: s.latitude, longitude: s.longitude })));
+    setTripStats({
+      distance: parseFloat((newStops.length * 0.7).toFixed(1)),
+      duration: newStops.length * 10
+    });
+
     try {
       const coordString = newStops.map((s) => `${s.longitude},${s.latitude}`).join(";");
-      const osrmUrl = `https://router.project-osrm.org/route/v1/${routingProfile === "driving" ? "driving" : "foot"}/${coordString}?overview=full&geometries=geojson`;
+      const url = `/api/places/route?coords=${coordString}&mode=${routingProfile === "driving" ? "driving" : "foot"}`;
       
-      const res = await fetch(osrmUrl);
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         const routeData = await res.json();
         if (routeData && routeData.routes?.[0]) {
@@ -3389,5 +3464,13 @@ export default function MapPage() {
         </motion.div>
       )}
     </>
+  );
+}
+
+export default function MapPage() {
+  return (
+    <Suspense fallback={<MapSkeleton />}>
+      <MapContent />
+    </Suspense>
   );
 }
