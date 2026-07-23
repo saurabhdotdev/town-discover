@@ -743,15 +743,18 @@ export default function EventsPage() {
                 className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-4 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-50 sm:flex-none cursor-pointer"
               >
                 <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
-                {refreshing ? "Generating..." : "Refresh"}
+                {refreshing ? "Fetching..." : "Refresh"}
               </button>
             </div>
           </div>
 
           {generatedAt && (
-            <p className="mt-2 text-[10px] text-[var(--muted)] font-semibold">
-              <Sparkles size={9} className="inline mr-1 text-teal-400" />
-              AI-generated events for {selectedCity} · Updated {new Date(generatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            <p className="mt-2 text-[10px] text-[var(--muted)] font-semibold flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Real live events for {selectedCity} · Updated {new Date(generatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
             </p>
           )}
         </div>
@@ -868,7 +871,7 @@ export default function EventsPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-black text-[var(--primary-foreground)] cursor-pointer"
               >
                 <RefreshCw size={15} />
-                Generate Events
+                Fetch Live Events
               </button>
             </div>
           </motion.div>
