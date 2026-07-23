@@ -132,19 +132,19 @@ function formatScrapedEventsDirectly(
       category = "theatre";
     }
 
-    const area = cityCtx.areas[idx % cityCtx.areas.length];
-    const venue = cityCtx.venues[idx % cityCtx.venues.length];
-    const targetDate = new Date(today.getTime() + (idx + 1) * 24 * 60 * 60 * 1000);
+    const area = item.locality || cityCtx.areas[idx % cityCtx.areas.length];
+    const venue = item.venue || cityCtx.venues[idx % cityCtx.venues.length];
+    const eventDate = item.date || new Date(today.getTime() + (idx + 1) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     
     return {
       id: item.id || `bms-${idx}`,
       title: item.title,
-      description: `Official live event '${item.title}' in ${city}. Book tickets online via BookMyShow.`,
+      description: `Official live event '${item.title}' in ${city}. Book tickets online.`,
       category,
       venue,
       locality: area,
       city,
-      date: targetDate.toISOString().split("T")[0],
+      date: eventDate,
       time: "18:00",
       endTime: "21:00",
       price: {
@@ -169,6 +169,9 @@ interface ScrapedBmsEvent {
   image: string;
   bookingUrl: string;
   id: string;
+  venue?: string;
+  locality?: string;
+  date?: string;
 }
 
 const CITY_SLUG_MAP: Record<string, string[]> = {
@@ -307,7 +310,10 @@ async function scrapeAllEvents(city: string): Promise<ScrapedBmsEvent[]> {
                 title: eventTitle,
                 image: imageUrl,
                 bookingUrl: eventUrl,
-                id: `ae-${slugify(eventTitle)}`
+                id: `ae-${slugify(eventTitle)}`,
+                venue: item.location?.name || `${city} Venue`,
+                locality: item.location?.address?.addressLocality || city,
+                date: item.startDate ? item.startDate.split("T")[0] : undefined,
               });
             }
           }
@@ -359,8 +365,8 @@ Schema for each event:
   "title": "must be the exact 'title' from the scraped event",
   "description": "a 2-3 sentence engaging description of the event based on its title",
   "category": one of ["music", "comedy", "food-festival", "workshop", "sports", "cultural", "nightlife", "theatre", "tech"] (deduced from the title),
-  "venue": "realistic venue in ${city} from this list: ${cityCtx.venues.join(", ")}, or deduced from the title",
-  "locality": "realistic area/locality in ${city} from this list: ${cityCtx.areas.join(", ")}, or deduced from the title/venue",
+  "venue": "use the exact 'venue' from the scraped event if present, otherwise a realistic venue in ${city} from: ${cityCtx.venues.join(", ")}, or deduced from the title",
+  "locality": "use the exact 'locality' from the scraped event if present, otherwise a realistic area in ${city} from: ${cityCtx.areas.join(", ")}, or deduced from the title/venue",
   "city": "${city}",
   "date": "YYYY-MM-DD (between ${todayStr} and ${in30Days})",
   "time": "HH:MM in 24h format",
@@ -462,7 +468,7 @@ export async function GET(request: NextRequest) {
       return withHeaders(Response.json({ error: "Unsupported event category." }, { status: 400 }), rateLimitHeaders);
     }
 
-    const cacheKey = `live-events:${cityParam.toLowerCase()}:v5`;
+    const cacheKey = `live-events:${cityParam.toLowerCase()}:v6`;
 
     let events: LiveEvent[] | null = refresh ? null : await getCache<LiveEvent[]>(cacheKey);
 
