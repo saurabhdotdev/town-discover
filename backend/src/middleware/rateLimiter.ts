@@ -1,17 +1,17 @@
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
 import { Request } from "express";
 
 const getClientKey = (req: Request) => {
   const userId = req.user?.id;
   if (userId) return `user:${userId}`;
-  return ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? "unknown");
+  return req.ip ?? req.socket.remoteAddress ?? "unknown";
 };
 
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 150, // Limit each IP to 150 requests per 15 minutes
   keyGenerator: getClientKey,
-  skip: (req) => req.path === "/health",
+  skip: (req: Request) => req.path === "/health",
   standardHeaders: true,
   legacyHeaders: false,
   message: {
