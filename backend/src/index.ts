@@ -793,23 +793,28 @@ const connectWithRetry = async (retries = 5, delayMs = 3000): Promise<void> => {
 let server: ReturnType<typeof httpServer.listen> | null = null;
 
 const startServer = async () => {
-  // Ensure DB connection is established with retry logic
-  await connectWithRetry();
-  
-  await runDatabaseMigrations(db.pool);
-  startCleanupInterval();
+  // Try establishing DB connection with retry logic (non-fatal if DB is initializing)
+  try {
+    await connectWithRetry();
+    await runDatabaseMigrations(db.pool);
+    startCleanupInterval();
 
-  // Start 60-second database keep-alive ping loop
-  keepAliveInterval = setInterval(async () => {
-    try {
-      await db.query("SELECT 1");
-    } catch (err) {
-      console.warn("⚠️ [DB Keep-Alive] Failed to ping database:", err);
-    }
-  }, 60000);
+    // Start 60-second database keep-alive ping loop
+    keepAliveInterval = setInterval(async () => {
+      try {
+        await db.query("SELECT 1");
+      } catch (err) {
+        console.warn("⚠️ [DB Keep-Alive] Failed to ping database:", err);
+      }
+    }, 60000);
+  } catch (dbErr: any) {
+    console.warn("⚠️ [DB Startup Warning] Could not connect to database on startup:", dbErr?.message || dbErr);
+    console.warn("⚠️ [DB Startup Warning] Backend will start HTTP server for health checks while retrying DB.");
+  }
 
-  server = httpServer.listen(PORT, () => {
-    console.log(`🚀 Sheher API Server running on port ${PORT}`);
+  const portNum = Number(PORT) || 5000;
+  server = httpServer.listen(portNum, "0.0.0.0", () => {
+    console.log(`🚀 Sheher API Server running on 0.0.0.0:${portNum}`);
     console.log(`📡 Real-time Socket.io active`);
   });
 };
