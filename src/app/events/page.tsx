@@ -303,9 +303,9 @@ function HeroEventCard({
           </div>
         </div>
 
-        <div className="flex flex-row flex-wrap md:flex-col gap-2 w-full md:w-auto shrink-0">
-          <div className="rounded-xl bg-[var(--panel-soft)] border border-[var(--border)] px-4 py-3 text-center min-w-[120px]">
-            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--muted)]">Price</p>
+        <div className="grid grid-cols-2 sm:flex sm:flex-row md:flex-col gap-2 w-full md:w-auto shrink-0">
+          <div className="col-span-2 sm:col-span-1 rounded-xl bg-[var(--panel-soft)]/90 backdrop-blur-md border border-[var(--border)] px-4 py-2.5 text-center min-w-[120px]">
+            <p className="text-[9px] font-black uppercase tracking-widest text-[var(--muted)]">Price</p>
             <p className="mt-0.5 text-base font-black text-[var(--foreground)]">{formatPrice(event.price)}</p>
           </div>
           <button
@@ -315,10 +315,10 @@ function HeroEventCard({
               onNotifyClick(event);
             }}
             disabled={reminderLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60 cursor-pointer"
+            className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2.5 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] disabled:opacity-60 cursor-pointer"
           >
-            {reminderSaved ? <CheckCircle size={16} className="text-emerald-300" /> : <BellRing size={16} className="text-amber-300" />}
-            {reminderLoading ? "Saving..." : reminderSaved ? "Reminder Set" : "Notify Me"}
+            {reminderSaved ? <CheckCircle size={15} className="text-emerald-300" /> : <BellRing size={15} className="text-amber-300" />}
+            {reminderLoading ? "Saving..." : reminderSaved ? "Saved" : "Notify Me"}
           </button>
           <button
             type="button"
@@ -326,10 +326,10 @@ function HeroEventCard({
               e.stopPropagation();
               onShowOnMap(event);
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-5 py-3 text-sm font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] hover:scale-[1.02] cursor-pointer"
+            className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2.5 text-xs font-black text-[var(--foreground)] transition hover:bg-[var(--panel)] hover:scale-[1.02] cursor-pointer"
           >
-            <MapPin size={16} className="text-rose-400" />
-            Show on Map
+            <MapPin size={15} className="text-rose-400" />
+            Show Map
           </button>
           <button
             type="button"
@@ -337,10 +337,10 @@ function HeroEventCard({
               e.stopPropagation();
               onBookClick(event);
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] hover:shadow-teal-500/30 cursor-pointer"
+            className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-500/20 transition hover:scale-[1.02] hover:shadow-teal-500/30 cursor-pointer"
           >
             <Ticket size={16} />
-            Book Tickets
+            Book Tickets Online
           </button>
         </div>
       </div>
@@ -658,7 +658,7 @@ export default function EventsPage() {
   const freeCount = events.filter((e) => e.price.isFree).length;
 
   return (
-    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden pb-24 md:pb-8">
       <Header
         eyebrow="Live Events"
         title="What's Happening"
@@ -761,7 +761,7 @@ export default function EventsPage() {
 
         {/* Stats pills */}
         {!loading && events.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-5">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 mb-4 flex-nowrap">
             {[
               { label: "Total Events", value: events.length, color: "bg-teal-500/10 text-teal-200 border-teal-500/20" },
               { label: "Showing", value: filtered.length, color: "bg-cyan-500/10 text-cyan-200 border-cyan-500/20" },
@@ -769,7 +769,7 @@ export default function EventsPage() {
               { label: "This Weekend", value: thisWeekendCount, color: "bg-violet-500/10 text-violet-200 border-violet-500/20" },
               { label: "Free Entry", value: freeCount, color: "bg-emerald-500/10 text-emerald-200 border-emerald-500/20" },
             ].map((stat) => (
-              <span key={stat.label} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${stat.color}`}>
+              <span key={stat.label} className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${stat.color}`}>
                 <span className="font-black text-sm">{stat.value}</span>
                 {stat.label}
               </span>

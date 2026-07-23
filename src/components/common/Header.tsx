@@ -27,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header
       className={cn(
-        "relative z-40 border-b border-[var(--border)] bg-[var(--background)] md:sticky md:top-16 md:backdrop-blur-xl",
+        "relative z-40 border-b border-[var(--border)] bg-[var(--background)] mt-14 md:mt-0 md:sticky md:top-16 md:backdrop-blur-xl",
         compact ? "py-1.5 md:py-2" : "",
         className
       )}
