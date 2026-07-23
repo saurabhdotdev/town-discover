@@ -39,6 +39,7 @@ function generateScaledCityPlaces(city: SupportedCityName, countNeeded: number):
         rating: Math.round((4.3 + (idIdx % 6) * 0.1) * 10) / 10,
         latitude: center.latitude + latOffset,
         longitude: center.longitude + lngOffset,
+        distance: 0,
         tags: [catConfig.category, "popular", "curated", city.toLowerCase()],
         city,
         locality: `${city} Central`,
