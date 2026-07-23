@@ -24,19 +24,21 @@ export const useLivePlaces = (location: UserLocation | null, query = "") => {
       query,
     });
 
-    const cacheKey = `sheher:places:${params.toString()}`;
+    const cacheKey = `sheher:places:v3:${params.toString()}`;
     const cachedData = typeof window !== "undefined" ? sessionStorage.getItem(cacheKey) : null;
     
     if (cachedData) {
       try {
         const parsed = JSON.parse(cachedData) as PlacesResponse;
-        setPlaces(parsed.places ?? []);
-        setLoading(false);
-        setError(null);
-        if (parsed.source === "fallback") {
-          setError(parsed.warning ?? "Live OpenStreetMap places could not be loaded.");
+        if (parsed.places && parsed.places.length >= 20) {
+          setPlaces(parsed.places ?? []);
+          setLoading(false);
+          setError(null);
+          if (parsed.source === "fallback") {
+            setError(parsed.warning ?? "Live OpenStreetMap places could not be loaded.");
+          }
+          return;
         }
-        return;
       } catch {
         // Fall back to fetching if JSON parsing fails
       }
