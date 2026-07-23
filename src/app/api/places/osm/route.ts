@@ -198,25 +198,25 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const fallbackPlaces = await getFallbackPlacesForCity(city);
+
   try {
     const { getCache, setCache } = await import("@/lib/redis");
-    const cacheKey = `places:osm:coords:${location.latitude.toFixed(2)}:${location.longitude.toFixed(2)}`;
+    const cacheKey = `places:osm:v2:coords:${location.latitude.toFixed(2)}:${location.longitude.toFixed(2)}`;
     let livePlaces = await getCache<Place[]>(cacheKey);
     if (!livePlaces) {
-      livePlaces = await fetchLivePlaces(location, request.signal);
-      await setCache(cacheKey, livePlaces, 3600); // Cache for 1 hour
+      livePlaces = await withTimeout(fetchLivePlaces(location, request.signal), 2000);
+      await setCache(cacheKey, livePlaces, 86400); // Cache for 24 hours
     }
-    const places = mergePlaces([...approvedPlaces, ...livePlaces], townEvents);
-    return Response.json({ places, city, source: "osm", eventsMerged: townEvents.length }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } });
-  } catch (error) {
-    const fallbackPlaces = await getFallbackPlacesForCity(city);
+    const places = mergePlaces([...approvedPlaces, ...fallbackPlaces, ...livePlaces], townEvents);
+    return Response.json({ places, city, source: "osm", eventsMerged: townEvents.length }, { status: 200, headers: { "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400" } });
+  } catch (_error) {
     const places = mergePlaces([...approvedPlaces, ...fallbackPlaces], townEvents);
     return Response.json({
       places,
       city,
-      source: "fallback",
+      source: "fallback-fast",
       eventsMerged: townEvents.length,
-      warning: error instanceof Error ? error.message : "OpenStreetMap places could not be loaded.",
-    }, { status: 200, headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } });
+    }, { status: 200, headers: { "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400" } });
   }
 }

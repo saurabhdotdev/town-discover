@@ -362,20 +362,16 @@ const overpassEndpoints = [
 async function fetchOverpassWithTimeout(
   query: string,
   signal?: AbortSignal,
-  timeoutMs = 15000
+  timeoutMs = 2500
 ): Promise<Response> {
-  let lastError: any = null;
-
-  for (const endpoint of overpassEndpoints) {
+  const fetchSingleEndpoint = async (endpoint: string): Promise<Response> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    // Link the parent signal if provided
     let onAbort: (() => void) | null = null;
     if (signal) {
-      if (signal.aborted) {
-        controller.abort();
-      } else {
+      if (signal.aborted) controller.abort();
+      else {
         onAbort = () => controller.abort();
         signal.addEventListener("abort", onAbort);
       }
@@ -387,29 +383,24 @@ async function fetchOverpassWithTimeout(
         body: `data=${encodeURIComponent(query)}`,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "User-Agent": "Sheher/1.0 contact:town-discover.vercel.app",
+          "User-Agent": "Sheher/1.0",
         },
         signal: controller.signal,
       });
 
-      if (response.ok) {
-        return response;
-      }
-      lastError = new Error(`HTTP ${response.status} from ${endpoint}`);
-    } catch (err: any) {
-      if (signal?.aborted) {
-        throw new Error("Live request was cancelled.");
-      }
-      lastError = err;
+      if (response.ok) return response;
+      throw new Error(`HTTP ${response.status} from ${endpoint}`);
     } finally {
       clearTimeout(timeoutId);
-      if (onAbort && signal) {
-        signal.removeEventListener("abort", onAbort);
-      }
+      if (onAbort && signal) signal.removeEventListener("abort", onAbort);
     }
-  }
+  };
 
-  throw lastError || new Error("All Overpass endpoints failed to respond.");
+  try {
+    return await Promise.any(overpassEndpoints.slice(0, 2).map((ep) => fetchSingleEndpoint(ep)));
+  } catch (err: any) {
+    throw new Error("Overpass endpoints timed out or were unreachable.");
+  }
 }
 
 export async function fetchLivePlaces(
