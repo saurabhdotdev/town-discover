@@ -301,8 +301,28 @@ async function scrapeAllEvents(city: string): Promise<ScrapedBmsEvent[]> {
           const list = Array.isArray(json) ? json : [json];
           for (const item of list) {
             if (item["@type"] === "Event" && item.name) {
-              const slugify = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
               const eventTitle = item.name.trim();
+              const eventTitleLower = eventTitle.toLowerCase();
+              const targetCityLower = city.toLowerCase();
+
+              // Exclude cross-city tour events (e.g. "Papon Live - Pune" when selected city is Mumbai)
+              const majorCities = ["pune", "mumbai", "delhi", "bangalore", "bengaluru", "chennai", "kolkata", "hyderabad", "jaipur", "indore", "ujjain", "goa", "surat", "ahmedabad", "nashik", "kolhapur"];
+              const isOtherCityEvent = majorCities.some((otherCity) => {
+                if (otherCity === targetCityLower) return false;
+                if (targetCityLower === "mumbai" && (otherCity === "pune" || otherCity === "delhi")) {
+                  return eventTitleLower.includes(`- ${otherCity}`) || eventTitleLower.includes(`in ${otherCity}`);
+                }
+                return (
+                  eventTitleLower.endsWith(`- ${otherCity}`) ||
+                  eventTitleLower.includes(`- ${otherCity} `) ||
+                  eventTitleLower.endsWith(`in ${otherCity}`) ||
+                  eventTitleLower.includes(`in ${otherCity} `)
+                );
+              });
+
+              if (isOtherCityEvent) continue;
+
+              const slugify = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
               const eventUrl = item.url || url;
               const imageUrl = typeof item.image === "string" ? item.image : (item.image?.url || "");
 
@@ -468,7 +488,7 @@ export async function GET(request: NextRequest) {
       return withHeaders(Response.json({ error: "Unsupported event category." }, { status: 400 }), rateLimitHeaders);
     }
 
-    const cacheKey = `live-events:${cityParam.toLowerCase()}:v6`;
+    const cacheKey = `live-events:${cityParam.toLowerCase()}:v7`;
 
     let events: LiveEvent[] | null = refresh ? null : await getCache<LiveEvent[]>(cacheKey);
 
