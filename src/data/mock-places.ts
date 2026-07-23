@@ -3357,6 +3357,60 @@ Object.entries(SCALED_CITIES_TEMPLATES).forEach(([city, templates]) => {
   });
 });
 
+const DYNAMIC_CATEGORIES: { category: Place["category"]; prefix: string[]; desc: string; price: string }[] = [
+  { category: "cafe", prefix: ["Artisanal Roastery", "Botanical Cafe", "The Coffee Studio", "Heritage Bean", "Rooftop Brew Lab", "Urban Espresso Bar", "The Bookish Cafe", "Social Roasters"], desc: "Cozy specialty coffee hub with artisanal brews, fresh bakes, and peaceful vibes.", price: "$$" },
+  { category: "restaurant", prefix: ["Royal Thali Dining", "The Grand Kitchen", "Spice Route Grill", "Coastal Seafood House", "Tandoor & Charcoal", "Olive Garden Bistro", "Urban Gourmet Table", "Heritage Flavors"], desc: "Highly-rated dining venue known for authentic regional specialties and warm hospitality.", price: "$$$" },
+  { category: "bar", prefix: ["Skyline Rooftop Lounge", "The Vault Taproom", "High Spirits Bar", "The Craft Brewery", "Sunset Cocktail Bar", "Urban Pub & Kitchen"], desc: "Lively local bar featuring craft brews, signature mixes, and high-energy evening tracks.", price: "$$$" },
+  { category: "food-stall", prefix: ["Central Chat Corner", "Iconic Dosa Junction", "Famous Roll Counter", "Pav Bhaji Express", "Crispy Samosa House", "Kulfi & Falooda Depot"], desc: "Bustling local street counter serving iconic, hot, and authentic city flavors.", price: "$" },
+  { category: "dessert", prefix: ["Artisanal Bakery & Cakes", "The Chocolate Room", "Pastry & Confectionery", "Waffle & Pancake House", "Sweet Tooth Corner"], desc: "Delightful dessert destination for fresh cakes, pastries, and sweet cravings.", price: "$$" },
+  { category: "ice-cream", prefix: ["Creamy Scoops Parlor", "Gelato Craft House", "Fruit & Sundae Depot", "Artisanal Ice Creams"], desc: "Beloved ice cream parlor offering rich, handcrafted scoops and frozen delights.", price: "$" },
+  { category: "event", prefix: ["Heritage Fort & Gardens", "City Cultural Museum", "Botanical Lake & Park", "Town Hall Art Center", "Central Promenade Walk", "Grand Heritage Palace"], desc: "Prominent city landmark and peaceful outdoor retreat, perfect for sightseeing and strolls.", price: "$" },
+  { category: "nightlife", prefix: ["Club Velocity", "The Underground Beat", "Echo Nightclub", "Pulse Disco & Bar"], desc: "High-energy evening club with stellar DJ sets, dance floor, and night vibes.", price: "$$$$" },
+];
+
+(Object.keys(CITY_CENTERS) as SupportedCityName[]).forEach((city) => {
+  const existingCount = MOCK_PLACES.filter((p) => p.city.toLowerCase() === city.toLowerCase()).length;
+  if (existingCount < 60) {
+    const center = CITY_CENTERS[city] || PUNE_CENTER;
+    let idIdx = 1;
+    for (let loop = 0; loop < 10; loop++) {
+      for (const catConfig of DYNAMIC_CATEGORIES) {
+        const currentCount = MOCK_PLACES.filter((p) => p.city.toLowerCase() === city.toLowerCase()).length;
+        if (currentCount >= 60) break;
+
+        const prefixName = catConfig.prefix[idIdx % catConfig.prefix.length];
+        const name = `${prefixName} · ${city} #${Math.floor(idIdx / catConfig.prefix.length) + 1}`;
+        const latOffset = Math.sin(idIdx * 1.7) * 0.035;
+        const lngOffset = Math.cos(idIdx * 2.3) * 0.035;
+        const placeId = `scaled-${city.toLowerCase()}-${catConfig.category}-${idIdx}`;
+
+        MOCK_PLACES.push({
+          id: placeId,
+          title: name,
+          description: `${catConfig.desc} Located in the heart of ${city}.`,
+          category: catConfig.category,
+          image: resolvePlaceImage({ id: placeId, title: name, category: catConfig.category, city }),
+          rating: Math.round((4.3 + (idIdx % 6) * 0.1) * 10) / 10,
+          latitude: center.latitude + latOffset,
+          longitude: center.longitude + lngOffset,
+          distance: 0,
+          tags: [catConfig.category, "popular", "curated", city.toLowerCase()],
+          city,
+          locality: `${city} Central`,
+          isOpen: true,
+          isTrending: idIdx % 3 === 0,
+          reviewCount: 250 + (idIdx * 73) % 4500,
+          priceRange: catConfig.price,
+          isVeg: catConfig.category === "dessert" || catConfig.category === "ice-cream" || idIdx % 2 === 0,
+          hours: { open: "09:00", close: "23:00" },
+        });
+
+        idIdx++;
+      }
+    }
+  }
+});
+
 
 export const getPlacesByCategory = (category: string): Place[] => {
   return MOCK_PLACES.filter((place) => place.category === category);
