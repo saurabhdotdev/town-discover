@@ -86,8 +86,8 @@ const CATEGORY_IMAGES: Record<string, string> = {
   tech: "https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=600&h=420&fit=crop",
 };
 
-const liveEventsRateLimit = { max: 30, windowMs: 60_000 };
-const refreshEventsRateLimit = { max: 2, windowMs: 10 * 60_000 };
+const liveEventsRateLimit = { max: 60, windowMs: 60_000 };
+const refreshEventsRateLimit = { max: 30, windowMs: 60_000 };
 const allowedCategories = new Set(["all", ...Object.keys(CATEGORY_IMAGES)]);
 
 const withHeaders = (response: Response, headers: Record<string, string>) => {
@@ -108,299 +108,60 @@ function getEventImage(category: string): string {
   return CATEGORY_IMAGES[category] ?? "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&h=420&fit=crop";
 }
 
-function generateLocalFallbackEvents(city: SupportedCityName): LiveEvent[] {
-  let cityCtx = CITY_CONTEXT[city];
-  if (!cityCtx) {
-    const center = CITY_CENTERS[city];
-    if (center) {
-      cityCtx = {
-        venues: [
-          `Grand Theater ${city}`,
-          `${city} Convention Centre`,
-          "Town Hall Arena",
-          "The Pavillion Cafe",
-          "Open Air Amphitheatre",
-          "Royal Club",
-          "Chamber of Commerce Hall",
-          "District Sports Complex"
-        ],
-        areas: [
-          "Downtown",
-          "Mall Road",
-          "Civil Lines",
-          "High Street",
-          "Sector 4",
-          "Kala Nagar",
-          "Lakefront",
-          "Station Road"
-        ],
-        lat: center.latitude,
-        lng: center.longitude,
-      };
-    } else {
-      return [];
-    }
-  }
-
-  const categories: LiveEvent["category"][] = [
-    "music", "music", "nightlife", "nightlife",
-    "comedy", "comedy",
-    "food-festival", "food-festival",
-    "workshop", "workshop",
-    "sports",
-    "cultural", "cultural",
-    "theatre",
-    "tech"
-  ];
-
-  const eventTemplates: Record<LiveEvent["category"], { titles: string[]; descriptions: string[] }> = {
-    music: {
-      titles: [
-        "Acoustic Sunset Sessions",
-        "Indie Rock Night Live",
-        "Electronic Music Showcase",
-        "Classical Jugalbandi Concert"
-      ],
-      descriptions: [
-        "Experience an evening of soulful acoustic melodies and soft lighting. Perfect for a relaxed vibe.",
-        "Catch the city's finest independent rock acts performing their latest tracks live on stage.",
-        "A high-energy night featuring local DJs spinning progressive house and techno beats.",
-        "A beautiful fusion of Hindustani and Carnatic classical music by seasoned artists."
-      ]
-    },
-    nightlife: {
-      titles: [
-        "Neon Dance Party",
-        "Retro Disco Night",
-        "Skyline Lounge Mixer",
-        "Late Night Club Bash"
-      ],
-      descriptions: [
-        "Dance the night away under vibrant neon lights with exclusive signature mocktails/cocktails.",
-        "Travel back in time with classic disco hits, groovy dance moves, and retro outfits.",
-        "Unwind with panoramic city views, smooth lounge music, and a premium curated menu.",
-        "An energetic club night with pulsating basslines, visual lasers, and a packed dance floor."
-      ]
-    },
-    comedy: {
-      titles: [
-        "Stand-up Comedy Open Mic",
-        "Weekend Comedy Special",
-        "Improv Comedy Showdown"
-      ],
-      descriptions: [
-        "Watch local comedians try out their newest material. Laughter guaranteed (or at least attempted!).",
-        "A curated lineup of the region's best stand-up comics delivering their headline sets.",
-        "Completely unscripted and hilarious improv games based entirely on audience suggestions."
-      ]
-    },
-    "food-festival": {
-      titles: [
-        "Street Food Carnival",
-        "Dessert & Pastry Fest",
-        "Barbecue & Grills Night"
-      ],
-      descriptions: [
-        "Indulge in authentic local street foods, spicy chaats, and fusion snacks from top vendors.",
-        "Satisfy your sweet tooth with artisanal chocolates, fresh pastries, and creative ice creams.",
-        "Enjoy flame-grilled delicacies, slow-cooked meats, and grilled veggies in an outdoor setting."
-      ]
-    },
-    workshop: {
-      titles: [
-        "Beginner's Pottery Workshop",
-        "Canvas Painting Masterclass",
-        "Artisanal Coffee Brewing"
-      ],
-      descriptions: [
-        "Get your hands dirty and learn the basics of wheel throwing and clay shaping.",
-        "Unleash your inner artist on a blank canvas with step-by-step guidance from an expert painter.",
-        "Discover the secrets behind pour-overs, aeropress, and milk steaming for the perfect cup."
-      ]
-    },
-    sports: {
-      titles: [
-        "Weekend Morning Cyclothon",
-        "Charity 5K Trail Run",
-        "Under-the-Lights Football Turf Tournament"
-      ],
-      descriptions: [
-        "A scenic group cycling ride along quiet morning roads. All fitness levels welcome.",
-        "A scenic 5K run through wooded trails to promote health, wellness, and local community.",
-        "Fast-paced 5-on-5 football tournament under bright turf floodlights. Register your team."
-      ]
-    },
-    cultural: {
-      titles: [
-        "Heritage Photography Walk",
-        "Folk Dance & Art Exhibition",
-        "Poetry & Spoken Word Slam"
-      ],
-      descriptions: [
-        "Explore historic alleyways and monuments while learning architectural photography tips.",
-        "Celebrate local traditions with dynamic folk dance performances and handloom crafts bazaar.",
-        "A powerful evening of original poetry, storytelling, and acoustic musical interludes."
-      ]
-    },
-    theatre: {
-      titles: [
-        "Classic Hindi Drama Play",
-        "Interactive Murder Mystery Theatre",
-        "Experimental Solo Act Showcase"
-      ],
-      descriptions: [
-        "A gripping theatrical production exploring timeless human relationships and social dynamics.",
-        "Put your detective hat on and help solve a crime as the drama unfolds around your table.",
-        "Intimate solo performances pushing the boundaries of traditional storytelling and stage presence."
-      ]
-    },
-    tech: {
-      titles: [
-        "AI & Future of Web Tech Talk",
-        "Hackathon & Prototyping Meetup",
-        "Product Design Panel Discussion"
-      ],
-      descriptions: [
-        "Connect with local developers to discuss AI agents, Next.js advances, and engineering trends.",
-        "An intense day of coding, designing, and pitching new software solutions in teams.",
-        "Learn from industry leads about user experience, UI architecture, and product growth loops."
-      ]
-    }
-  };
-
+function formatScrapedEventsDirectly(
+  scrapedEvents: ScrapedBmsEvent[],
+  city: string,
+  cityCtx: typeof CITY_CONTEXT[string]
+): LiveEvent[] {
   const today = new Date();
   
-  return categories.map((cat, idx) => {
-    const templates = eventTemplates[cat];
-    const title = templates.titles[idx % templates.titles.length];
-    const description = templates.descriptions[idx % templates.descriptions.length];
-    
+  return scrapedEvents.map((item, idx) => {
+    const titleLower = item.title.toLowerCase();
+    let category: LiveEvent["category"] = "cultural";
+    if (titleLower.includes("comedy") || titleLower.includes("standup") || titleLower.includes("stand up") || titleLower.includes("show")) {
+      category = "comedy";
+    } else if (titleLower.includes("music") || titleLower.includes("concert") || titleLower.includes("live") || titleLower.includes("fest") || titleLower.includes("tour") || titleLower.includes("sunburn") || titleLower.includes("bhajan")) {
+      category = "music";
+    } else if (titleLower.includes("food") || titleLower.includes("carnival") || titleLower.includes("eat")) {
+      category = "food-festival";
+    } else if (titleLower.includes("workshop") || titleLower.includes("class") || titleLower.includes("learn") || titleLower.includes("masterclass")) {
+      category = "workshop";
+    } else if (titleLower.includes("sports") || titleLower.includes("marathon") || titleLower.includes("run") || titleLower.includes("circus") || titleLower.includes("jurassic")) {
+      category = "sports";
+    } else if (titleLower.includes("theatre") || titleLower.includes("drama") || titleLower.includes("play")) {
+      category = "theatre";
+    }
+
     const area = cityCtx.areas[idx % cityCtx.areas.length];
     const venue = cityCtx.venues[idx % cityCtx.venues.length];
-    
-    const dateOffset = idx + 1;
-    const targetDate = new Date(today.getTime() + dateOffset * 24 * 60 * 60 * 1000);
-    const dateStr = targetDate.toISOString().split("T")[0];
-    
-    const hour = 10 + (idx * 3) % 12;
-    const timeStr = `${hour.toString().padStart(2, "0")}:30`;
-    const endTimeStr = `${(hour + 2).toString().padStart(2, "0")}:30`;
-    
-    const isFree = idx % 5 === 0;
-    const minPrice = isFree ? 0 : 250 + (idx * 150) % 2000;
-    const maxPrice = isFree ? 0 : minPrice + 200 + (idx * 100) % 1000;
-    
-    const rating = Math.round((4.0 + (idx * 0.13) % 0.9) * 10) / 10;
+    const targetDate = new Date(today.getTime() + (idx + 1) * 24 * 60 * 60 * 1000);
     
     return {
-      id: `local-evt-${city.toLowerCase()}-${cat}-${idx}`,
-      title: `${city} ${title}`,
-      description,
-      category: cat,
+      id: item.id || `bms-${idx}`,
+      title: item.title,
+      description: `Official live event '${item.title}' in ${city}. Book tickets online via BookMyShow.`,
+      category,
       venue,
       locality: area,
       city,
-      date: dateStr,
-      time: timeStr,
-      endTime: endTimeStr,
+      date: targetDate.toISOString().split("T")[0],
+      time: "18:00",
+      endTime: "21:00",
       price: {
-        min: minPrice,
-        max: maxPrice,
-        currency: "INR" as const,
-        isFree,
+        min: 499,
+        max: 1999,
+        currency: "INR",
+        isFree: false,
       },
-      image: getEventImage(cat),
-      tags: [cat, "local", "community", isFree ? "free" : "paid"],
-      rating,
+      image: item.image || getEventImage(category),
+      tags: [category, "live", city.toLowerCase()],
+      rating: 4.5,
       isTrending: idx < 3,
-      latitude: cityCtx.lat + (Math.sin(idx) * 0.03),
-      longitude: cityCtx.lng + (Math.cos(idx) * 0.03),
+      bookingUrl: item.bookingUrl,
+      latitude: cityCtx.lat + (Math.sin(idx + 1) * 0.02),
+      longitude: cityCtx.lng + (Math.cos(idx + 1) * 0.02),
     };
   });
-}
-
-function fallbackCuratedEvents(city: string): LiveEvent[] {
-  // Generate programmatic mock events for testing
-  const localGenerated = generateLocalFallbackEvents(city as SupportedCityName);
-
-  const curated = getTownEventsForCity(city);
-  const mappedCurated: LiveEvent[] = curated.map((place): LiveEvent => {
-    let category: LiveEvent["category"] = "cultural";
-    const tagsLower = place.tags.map(t => t.toLowerCase());
-    
-    if (tagsLower.some(t => ["music", "concert", "gig", "band"].includes(t))) {
-      category = "music";
-    } else if (tagsLower.some(t => ["comedy", "standup", "stand-up"].includes(t))) {
-      category = "comedy";
-    } else if (tagsLower.some(t => ["food", "fest", "foodie", "snack", "street-food"].includes(t))) {
-      category = "food-festival";
-    } else if (tagsLower.some(t => ["workshop", "class", "art", "learn"].includes(t))) {
-      category = "workshop";
-    } else if (tagsLower.some(t => ["nightlife", "party", "club", "bar"].includes(t))) {
-      category = "nightlife";
-    } else if (tagsLower.some(t => ["sports", "game", "cycling", "run"].includes(t))) {
-      category = "sports";
-    }
-
-    let minPrice = 0;
-    let maxPrice = 0;
-    if (place.priceRange === "$$") {
-      minPrice = 290; maxPrice = 490;
-    } else if (place.priceRange === "$$$") {
-      minPrice = 990; maxPrice = 1490;
-    } else if (place.priceRange === "$$$$") {
-      minPrice = 1990; maxPrice = 3990;
-    }
-
-    const isFree = place.tags.includes("free") || minPrice === 0;
-
-    const today = new Date();
-    let dateStr = today.toISOString().split("T")[0];
-    if (place.tags.includes("weekend")) {
-      const day = today.getDay();
-      const diff = day === 0 ? 0 : 6 - day;
-      const sat = new Date(today.getTime() + diff * 24 * 60 * 60 * 1000);
-      dateStr = sat.toISOString().split("T")[0];
-    } else if (!place.tags.includes("tonight")) {
-      const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-      dateStr = tomorrow.toISOString().split("T")[0];
-    }
-
-    return {
-      id: place.id,
-      title: place.title,
-      description: place.description,
-      category,
-      venue: place.locality + " Event Venue",
-      locality: place.locality,
-      city: place.city,
-      date: dateStr,
-      time: place.hours?.open || "18:00",
-      endTime: place.hours?.close || "21:00",
-      price: {
-        min: minPrice,
-        max: maxPrice,
-        currency: "INR" as const,
-        isFree,
-      },
-      image: place.image,
-      tags: place.tags,
-      rating: place.rating,
-      isTrending: place.isTrending,
-      latitude: place.latitude,
-      longitude: place.longitude,
-    };
-  });
-
-  // Combine them, ensuring curated takes precedence and removing duplicates by title
-  const combined = [...mappedCurated];
-  localGenerated.forEach((evt) => {
-    if (!combined.some(c => c.title.toLowerCase() === evt.title.toLowerCase())) {
-      combined.push(evt);
-    }
-  });
-
-  return combined;
 }
 
 interface ScrapedBmsEvent {
@@ -410,6 +171,20 @@ interface ScrapedBmsEvent {
   id: string;
 }
 
+const CITY_SLUG_MAP: Record<string, string[]> = {
+  pune: ["pune-in", "pune", "pimpri-chinchwad"],
+  delhi: ["new-delhi", "delhi-ncr", "delhi"],
+  bangalore: ["bangalore", "bengaluru"],
+  mumbai: ["mumbai"],
+  indore: ["indore"],
+  ujjain: ["ujjain"],
+  kolhapur: ["kolhapur"],
+  nashik: ["nashik"],
+  jaipur: ["jaipur"],
+  ahmedabad: ["ahmedabad"],
+  goa: ["goa"],
+};
+
 function getBookMyShowRegion(city: string): string {
   const normCity = city.toLowerCase();
   if (normCity === "mumbai") return "mumbai";
@@ -418,6 +193,7 @@ function getBookMyShowRegion(city: string): string {
   if (normCity === "chennai") return "chennai";
   if (normCity === "kolhapur") return "kolhapur";
   if (normCity === "nashik") return "nashik";
+  if (normCity === "pune") return "pune";
   return normCity;
 }
 
@@ -431,8 +207,9 @@ async function scrapeBookMyShowEvents(city: string): Promise<ScrapedBmsEvent[]> 
       redirect: "follow",
       signal: AbortSignal.timeout(8000),
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; SheherEvents/1.0)",
-        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
       },
     });
 
@@ -484,6 +261,78 @@ async function scrapeBookMyShowEvents(city: string): Promise<ScrapedBmsEvent[]> 
     console.error(`Fetching BookMyShow events failed for ${city}:`, err);
     return [];
   }
+}
+
+async function scrapeAllEvents(city: string): Promise<ScrapedBmsEvent[]> {
+  const normCity = city.toLowerCase().trim();
+  const slugs = CITY_SLUG_MAP[normCity] ?? [
+    `${normCity}-in`,
+    normCity.replace(/[^a-z0-9]+/g, "-"),
+  ];
+
+  for (const slug of slugs) {
+    const url = `https://allevents.in/${slug}/all`;
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        redirect: "follow",
+        signal: AbortSignal.timeout(8000),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      if (!response.ok) continue;
+      const html = await response.text();
+      if (!html || html.length < 1000 || html.includes("404 Error Page")) continue;
+
+      const jsonLdRegex = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi;
+      let match;
+      const scrapedEvents: ScrapedBmsEvent[] = [];
+
+      while ((match = jsonLdRegex.exec(html)) !== null) {
+        try {
+          const json = JSON.parse(match[1]);
+          const list = Array.isArray(json) ? json : [json];
+          for (const item of list) {
+            if (item["@type"] === "Event" && item.name) {
+              const slugify = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+              const eventTitle = item.name.trim();
+              const eventUrl = item.url || url;
+              const imageUrl = typeof item.image === "string" ? item.image : (item.image?.url || "");
+
+              scrapedEvents.push({
+                title: eventTitle,
+                image: imageUrl,
+                bookingUrl: eventUrl,
+                id: `ae-${slugify(eventTitle)}`
+              });
+            }
+          }
+        } catch (_e) {}
+      }
+
+      if (scrapedEvents.length > 0) {
+        return scrapedEvents;
+      }
+    } catch (_err) {
+      // Continue to next slug
+    }
+  }
+
+  return [];
+}
+
+async function scrapeLiveEvents(city: string): Promise<ScrapedBmsEvent[]> {
+  const bmsEvents = await scrapeBookMyShowEvents(city);
+  if (bmsEvents.length > 0) return bmsEvents;
+
+  const aeEvents = await scrapeAllEvents(city);
+  if (aeEvents.length > 0) return aeEvents;
+
+  return [];
 }
 
 async function enrichScrapedEventsWithGemini(
@@ -561,83 +410,7 @@ Return ONLY the JSON array containing the enriched events, no markdown blocks, n
   return events;
 }
 
-async function generateEventsWithGemini(city: string, cityCtx: typeof CITY_CONTEXT[string]): Promise<LiveEvent[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Gemini API key not configured");
 
-  const today = new Date();
-  const todayStr = today.toISOString().split("T")[0];
-  const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-  const prompt = `Generate a realistic list of 12 upcoming events happening in ${city}, India between ${todayStr} and ${in30Days}.
-
-Use these real venues from ${city}: ${cityCtx.venues.join(", ")}
-Use these real areas/localities: ${cityCtx.areas.join(", ")}
-
-Return a JSON array. Each event must have:
-{
-  "id": "evt-<city-lowercase>-<slug>",
-  "title": "event title",
-  "description": "2-3 sentence engaging description of the event",
-  "category": one of ["music", "comedy", "food-festival", "workshop", "sports", "cultural", "nightlife", "theatre", "tech"],
-  "venue": "venue name from the list above",
-  "locality": "area/locality from the list above",
-  "city": "${city}",
-  "date": "YYYY-MM-DD (between ${todayStr} and ${in30Days})",
-  "time": "HH:MM in 24h format",
-  "endTime": "HH:MM in 24h format",
-  "price": {
-    "min": number (₹ amount, 0 if free),
-    "max": number (₹ amount),
-    "currency": "INR",
-    "isFree": boolean
-  },
-  "tags": ["tag1", "tag2", "tag3"],
-  "rating": number between 4.0-4.9,
-  "isTrending": boolean (true for ~3 events),
-  "artists": ["artist/performer name"] (optional, for music/comedy/theatre),
-  "latitude": number (realistic coords near ${cityCtx.lat} ± 0.04),
-  "longitude": number (realistic coords near ${cityCtx.lng} ± 0.04)
-}
-
-Mix categories: 3 music/nightlife, 2 comedy, 2 food-festival, 2 workshops, 1 theatre, 1 cultural, 1 tech/sports.
-Include artists for music shows (local + upcoming Indian artists like Prateek Kuhad, The Local Train, Ritviz, Nucleya, etc.).
-Make events feel real and immersive — real ticket prices (₹299-₹3999), realistic timings (evenings, weekends), genuine descriptions.
-Return ONLY the JSON array, no explanation.`;
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.2,
-        maxOutputTokens: 8192,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini error ${response.status}: ${err}`);
-  }
-
-  const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
-  
-  let events: LiveEvent[] = JSON.parse(cleanJsonText(rawText));
-
-  // Post-process: assign images based on category
-  events = events.map((evt) => ({
-    ...evt,
-    image: getEventImage(evt.category),
-  }));
-
-  return events;
-}
 
 export async function GET(request: NextRequest) {
   let rateLimitHeaders: Record<string, string> = {};
@@ -689,45 +462,30 @@ export async function GET(request: NextRequest) {
       return withHeaders(Response.json({ error: "Unsupported event category." }, { status: 400 }), rateLimitHeaders);
     }
 
-    const cacheKey = `live-events:${cityParam.toLowerCase()}:v2`;
+    const cacheKey = `live-events:${cityParam.toLowerCase()}:v5`;
 
     let events: LiveEvent[] | null = refresh ? null : await getCache<LiveEvent[]>(cacheKey);
 
     if (!events) {
-      // Instantly load curated fallback events so the user receives a response under 50ms
-      events = fallbackCuratedEvents(cityParam);
+      console.log(`[Events API] Fetching real live events for ${cityParam}...`);
+      const liveEvents = await scrapeLiveEvents(cityParam);
 
-      // Trigger scraping & Gemini enrichment asynchronously in the background
-      const generateInBackground = async () => {
+      if (liveEvents.length > 0) {
         try {
-          console.log(`[Background] Scraping events for ${cityParam}...`);
-          const bmsEvents = await scrapeBookMyShowEvents(cityParam);
-          
-          let geminiEvents: LiveEvent[] = [];
-          if (bmsEvents.length > 0) {
-            console.log(`[Background] Scraped ${bmsEvents.length} events. Enriching with Gemini...`);
-            geminiEvents = await enrichScrapedEventsWithGemini(bmsEvents, cityParam, cityCtx);
-          } else {
-            console.log(`[Background] Generating fallback events with Gemini...`);
-            geminiEvents = await generateEventsWithGemini(cityParam, cityCtx);
-          }
-          
-          const curated = fallbackCuratedEvents(cityParam);
-          const combined = [...geminiEvents];
-          curated.forEach((c) => {
-            if (!combined.some(g => g.title.toLowerCase() === c.title.toLowerCase())) {
-              combined.push(c);
-            }
-          });
-          
-          await setCache(cacheKey, combined, 60 * 60 * 3);
-          console.log(`[Background] Successfully updated events cache for ${cityParam}.`);
-        } catch (bgErr) {
-          console.warn(`[Background] Event generation failed for ${cityParam}:`, bgErr);
+          console.log(`[Events API] Scraped ${liveEvents.length} real live events for ${cityParam}. Enriching with Gemini...`);
+          events = await enrichScrapedEventsWithGemini(liveEvents, cityParam, cityCtx);
+        } catch (enrichErr) {
+          console.warn(`[Events API] Gemini enrichment failed for ${cityParam}, using direct scraped event formatting:`, enrichErr);
+          events = formatScrapedEventsDirectly(liveEvents, cityParam, cityCtx);
         }
-      };
-      
-      void generateInBackground();
+      } else {
+        console.log(`[Events API] No live events found for ${cityParam}.`);
+        events = [];
+      }
+
+      // Cache real events (or empty list for 10 mins if 0 events found)
+      const ttl = events.length > 0 ? 60 * 60 * 3 : 60 * 10;
+      await setCache(cacheKey, events, ttl);
     }
 
     // Filter by category
