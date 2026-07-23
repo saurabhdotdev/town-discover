@@ -1,4 +1,4 @@
-import { z } from "zod/v3";
+import { z } from "zod";
 
 const placeIdRegex = /^[a-zA-Z0-9:_-]{1,120}$/;
 
